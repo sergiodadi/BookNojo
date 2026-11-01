@@ -22,6 +22,8 @@ const prevBtn = document.getElementById('prev');
 const nextBtn = document.getElementById('next');
 const statsBtn = document.getElementById('statsBtn');
 const statsPaneEl = document.getElementById('statsPane');
+const addBtn = document.getElementById('addBtn');
+const addPaneEl = document.getElementById('addPane');
 
 const PAGE_SIZE = 60;
 const collator = new Intl.Collator('fr', {sensitivity: 'base'});
@@ -68,7 +70,12 @@ const state = {
   page: 1,
   items: [],
   activeId: null,
+  panel: 'library', // 'library' | 'stats' | 'add'
 };
+
+// Multi-value chip fields for the "add a book" form live outside `state` so
+// they survive switching to another panel and back without being reset.
+const addFormState = { authors: [], genres: [], subjects: [] };
 
 function renderTabs() {
   tabsEl.innerHTML = '';
@@ -98,7 +105,7 @@ function switchCollection(name) {
   renderTabs();
   refreshGroupPanel();
   recompute();
-  if (document.body.classList.contains('show-stats')) renderStats();
+  if (state.panel === 'stats') renderStats();
 }
 
 function letterOf(value) {
@@ -429,7 +436,7 @@ function moveSelection(delta) {
   }
 }
 document.addEventListener('keydown', (e) => {
-  if (e.target === searchEl || document.body.classList.contains('show-stats')) return;
+  if (e.target === searchEl || state.panel !== 'library') return;
   if (e.key === 'ArrowDown') { e.preventDefault(); moveSelection(1); }
   else if (e.key === 'ArrowUp') { e.preventDefault(); moveSelection(-1); }
 });
@@ -503,12 +510,217 @@ function renderStats() {
     </div>`;
 }
 
+// --- Panel switcher: exactly one of library / stats / add is visible ---
+function setPanel(panel) {
+  state.panel = panel;
+  document.body.classList.toggle('panel-stats', panel === 'stats');
+  document.body.classList.toggle('panel-add', panel === 'add');
+  statsBtn.classList.toggle('active', panel === 'stats');
+  statsBtn.textContent = panel === 'stats' ? '📚 Collection' : '📊 Statistiques';
+  addBtn.classList.toggle('active', panel === 'add');
+  addBtn.textContent = panel === 'add' ? '📚 Collection' : '➕ Ajouter un livre';
+  if (panel === 'stats') renderStats();
+  if (panel === 'add') renderAddForm();
+}
+
 statsBtn.addEventListener('click', () => {
-  const showing = document.body.classList.toggle('show-stats');
-  statsBtn.classList.toggle('active', showing);
-  statsBtn.textContent = showing ? '📚 Collection' : '📊 Statistiques';
-  if (showing) renderStats();
+  setPanel(state.panel === 'stats' ? 'library' : 'stats');
 });
+addBtn.addEventListener('click', () => {
+  setPanel(state.panel === 'add' ? 'library' : 'add');
+});
+
+// --- "Add a book" form: pure client-side, step 1 of the add-a-book plan.
+// It never talks to a server or the database — submitting it only
+// downloads a new_book.json, which bc_add then reads (read-only) to
+// resolve each lookup field against the existing collection. See
+// MANUAL.md § 7. ---
+function distinctFieldValues(getter) {
+  const set = new Set();
+  for (const b of allBooks) {
+    for (const v of getter(b)) {
+      if (v) set.add(v);
+    }
+  }
+  return [...set].sort(collator.compare);
+}
+
+function setupChipField(inputId, chipsId, arr) {
+  const input = document.getElementById(inputId);
+  const chipsEl = document.getElementById(chipsId);
+  function renderChips() {
+    chipsEl.innerHTML = '';
+    arr.forEach((val, i) => {
+      const chip = document.createElement('span');
+      chip.className = 'chip';
+      const t = document.createElement('span');
+      t.textContent = val;
+      const x = document.createElement('span');
+      x.className = 'chip-x';
+      x.textContent = '✕';
+      x.title = 'Retirer';
+      x.addEventListener('click', () => {
+        arr.splice(i, 1);
+        renderChips();
+      });
+      chip.appendChild(t);
+      chip.appendChild(x);
+      chipsEl.appendChild(chip);
+    });
+  }
+  input.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const v = input.value.trim();
+    if (v && !arr.includes(v)) {
+      arr.push(v);
+      input.value = '';
+      renderChips();
+    }
+  });
+  renderChips();
+}
+
+function renderAddForm() {
+  const collOptions = collections
+    .map(c => `<option value="${escapeHtml(c)}"${c === state.collection ? ' selected' : ''}>${escapeHtml(c)}</option>`)
+    .join('');
+
+  addPaneEl.innerHTML = `
+    <div class="add-wrap">
+      <h2>Ajouter un livre (préparation — étape 1)</h2>
+      <p class="add-hint">Ce formulaire ne modifie aucune donnée existante : il génère un
+        fichier <code>new_book.json</code> à télécharger, à passer ensuite à
+        <code>bc_add</code> pour vérifier ce qui existe déjà avant toute écriture réelle.</p>
+      <form id="addForm">
+        <div class="add-grid">
+          <label>Titre *<input name="title" required></label>
+          <label>Sous-titre<input name="subtitle"></label>
+          <label>ISBN<input name="isbn"></label>
+          <label>Nombre de pages<input name="number_of_pages" type="number" min="0"></label>
+          <label>Année<input name="publication_year" placeholder="yyyy" maxlength="4"></label>
+          <label>Mois<input name="publication_month" placeholder="mm" maxlength="2"></label>
+          <label>Jour<input name="publication_day" placeholder="dd" maxlength="2"></label>
+          <label>Éditeur<input name="publisher" list="dl-publisher"></label>
+          <label>Format<input name="format" list="dl-format"></label>
+          <label>Langue<input name="language" list="dl-language"></label>
+          <label>Pays<input name="country" list="dl-country"></label>
+          <label>Emplacement<input name="location" list="dl-location"></label>
+          <label>Quantité<input name="quantity" type="number" min="1" value="1"></label>
+          <label>Sous-collection *<select name="collection" required>${collOptions}</select></label>
+        </div>
+
+        <div class="add-list-field">
+          <span class="label">Auteurs</span>
+          <div id="authorsChips" class="chip-input"></div>
+          <input id="authorInput" list="dl-author" placeholder="Nom, puis Entrée">
+        </div>
+        <div class="add-list-field">
+          <span class="label">Genres</span>
+          <div id="genresChips" class="chip-input"></div>
+          <input id="genreInput" list="dl-genre" placeholder="Genre, puis Entrée">
+        </div>
+        <div class="add-list-field">
+          <span class="label">Sujets</span>
+          <div id="subjectsChips" class="chip-input"></div>
+          <input id="subjectInput" list="dl-subject" placeholder="Sujet, puis Entrée">
+        </div>
+
+        <datalist id="dl-publisher"></datalist>
+        <datalist id="dl-format"></datalist>
+        <datalist id="dl-language"></datalist>
+        <datalist id="dl-country"></datalist>
+        <datalist id="dl-location"></datalist>
+        <datalist id="dl-author"></datalist>
+        <datalist id="dl-genre"></datalist>
+        <datalist id="dl-subject"></datalist>
+
+        <div class="add-actions">
+          <button type="submit" class="primary">⬇️ Générer new_book.json</button>
+          <span id="addMsg"></span>
+        </div>
+      </form>
+    </div>`;
+
+  const fillDatalist = (id, values) => {
+    document.getElementById(id).innerHTML = values.map(v => `<option value="${escapeHtml(v)}">`).join('');
+  };
+  // Suggestions drawn from values already used somewhere in the loaded
+  // collection(s) — helps match existing spelling exactly, which is what
+  // bc_add's case-insensitive resolution needs to "reuse" rather than
+  // "create" a lookup value.
+  fillDatalist('dl-publisher', distinctFieldValues(b => [b.publisher]));
+  fillDatalist('dl-format', distinctFieldValues(b => [b.format]));
+  fillDatalist('dl-language', distinctFieldValues(b => [b.language]));
+  fillDatalist('dl-country', distinctFieldValues(b => [b.country]));
+  fillDatalist('dl-location', distinctFieldValues(b => [b.location]));
+  fillDatalist('dl-author', distinctFieldValues(b => b.authors || []));
+  fillDatalist('dl-genre', distinctFieldValues(b => b.genres || []));
+  fillDatalist('dl-subject', distinctFieldValues(b => b.subjects || []));
+
+  setupChipField('authorInput', 'authorsChips', addFormState.authors);
+  setupChipField('genreInput', 'genresChips', addFormState.genres);
+  setupChipField('subjectInput', 'subjectsChips', addFormState.subjects);
+
+  document.getElementById('addForm').addEventListener('submit', onAddFormSubmit);
+}
+
+function onAddFormSubmit(e) {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const str = (name) => {
+    const v = (fd.get(name) || '').toString().trim();
+    return v ? v : null;
+  };
+  const num = (name) => {
+    const v = str(name);
+    return v ? parseInt(v, 10) : null;
+  };
+  const msgEl = document.getElementById('addMsg');
+
+  const title = str('title');
+  const collectionName = str('collection');
+  if (!title) {
+    msgEl.textContent = 'Le titre est obligatoire.';
+    return;
+  }
+  if (!collectionName) {
+    msgEl.textContent = 'La sous-collection est obligatoire.';
+    return;
+  }
+
+  // Field names match bc_add's NewBookInput exactly (src/bin/bc_add.rs).
+  const book = {
+    title,
+    subtitle: str('subtitle'),
+    isbn: str('isbn'),
+    authors: [...addFormState.authors],
+    publisher: str('publisher'),
+    format: str('format'),
+    language: str('language'),
+    country: str('country'),
+    number_of_pages: num('number_of_pages'),
+    publication_year: str('publication_year'),
+    publication_month: str('publication_month'),
+    publication_day: str('publication_day'),
+    genres: [...addFormState.genres],
+    subjects: [...addFormState.subjects],
+    location: str('location'),
+    quantity: num('quantity') || 1,
+    collection: collectionName,
+  };
+
+  const blob = new Blob([JSON.stringify(book, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'new_book.json';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  msgEl.textContent = 'new_book.json téléchargé — passe-le à bc_add pour le vérifier.';
+}
 
 // --- Draggable splitters (left/right panes, and top/bottom right panes) ---
 const MIN_GROUPS_W = 160, MAX_GROUPS_W = 480;

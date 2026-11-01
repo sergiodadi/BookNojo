@@ -119,6 +119,19 @@ chaque valeur de type liste (auteur, éditeur, genre, format, langue, pays,
 sujet, emplacement), si elle existe déjà dans la collection ou si elle
 serait créée.
 
+### Produire ce JSON : le formulaire dans la page HTML
+
+Pas besoin d'écrire le JSON à la main : la page générée par
+`--html` (§ 5) a un bouton **➕ Ajouter un livre** dans l'en-tête. Le
+formulaire reprend les champs ci-dessus, avec auto-complétion sur les
+valeurs déjà utilisées dans la collection (pour que l'orthographe
+corresponde exactement et que `bc_add` reconnaisse bien une valeur
+existante). Il **ne contacte aucun serveur et n'écrit rien** : cliquer sur
+"Générer new_book.json" télécharge simplement le fichier, à passer ensuite
+à `bc_add` comme décrit ci-dessous.
+
+### Ou à la main
+
 ```bash
 ./target/release/bc_add \
   --db testdata/MyCollection.bkcp \

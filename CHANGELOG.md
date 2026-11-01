@@ -4,6 +4,12 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.17.0] - 2026-11-01
+
+### Added
+- Formulaire **« Ajouter un livre »** dans la page HTML générée (bouton dans l'en-tête, à côté de Statistiques) : reprend les champs de l'onglet Main de Book Collector, avec auto-complétion basée sur les valeurs déjà présentes dans la collection chargée (éditeur, genres, auteurs, format, langue, pays, emplacement, sujets). Purement côté client — ne contacte aucun serveur, ne touche à aucune donnée : le bouton « Générer new_book.json » télécharge simplement le fichier, à passer ensuite à `bc_add` (§ 7 du manuel).
+- Panneaux Statistiques / Ajouter un livre / Collection généralisés sous un seul commutateur (`state.panel`), plutôt que des bascules indépendantes.
+
 ## [0.16.0] - 2026-11-01
 
 ### Added

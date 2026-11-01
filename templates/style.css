@@ -18,6 +18,7 @@
   header {
     display: flex;
     align-items: center;
+    gap: 8px;
     padding: 10px 16px;
     background: #ececef;
     border-bottom: 1px solid var(--border);
@@ -33,7 +34,7 @@
     color: var(--text);
     font-variant-numeric: tabular-nums;
   }
-  #statsBtn {
+  #statsBtn, #addBtn {
     border: 1px solid var(--border);
     background: white;
     border-radius: 6px;
@@ -41,7 +42,7 @@
     font-size: 12px;
     cursor: pointer;
   }
-  #statsBtn.active { background: var(--accent); color: white; border-color: var(--accent); }
+  #statsBtn.active, #addBtn.active { background: var(--accent); color: white; border-color: var(--accent); }
   #tabs {
     display: flex;
     gap: 6px;
@@ -329,8 +330,8 @@
 
   /* Aggregated statistics panel, toggled in place of <main>. */
   #statsPane { display: none; flex: 1; overflow-y: auto; background: var(--panel-bg); padding: 24px; }
-  body.show-stats main { display: none; }
-  body.show-stats #statsPane { display: block; }
+  body.panel-stats main { display: none; }
+  body.panel-stats #statsPane { display: block; }
   .stats-wrap { max-width: 920px; margin: 0 auto; }
   .stats-wrap h2 { font-size: 17px; margin: 0 0 14px; }
   .stat-summary {
@@ -355,3 +356,64 @@
   .stat-row .bar { display: block; background: var(--accent); height: 100%; }
   .stat-row .val { width: 38px; text-align: right; color: var(--muted); font-size: 11px; flex-shrink: 0; }
   .stat-empty { font-size: 12px; color: var(--muted); }
+
+  /* "Add a book" panel — a pure client-side form; it only ever produces a
+     new_book.json download, it never talks to a server or touches the
+     database itself (see bc_add, step 1 of the add-a-book plan). */
+  #addPane { display: none; flex: 1; overflow-y: auto; background: var(--panel-bg); padding: 24px; }
+  body.panel-add main { display: none; }
+  body.panel-add #addPane { display: block; }
+  .add-wrap {
+    max-width: 760px;
+    margin: 0 auto;
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px;
+  }
+  .add-wrap h2 { font-size: 17px; margin: 0 0 8px; }
+  .add-hint { font-size: 12.5px; color: var(--muted); margin-bottom: 18px; line-height: 1.5; }
+  .add-hint code { background: #f0f0f2; padding: 1px 5px; border-radius: 4px; }
+  .add-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px 16px; margin-bottom: 16px; }
+  .add-grid label, .add-list-field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    font-size: 12px;
+    color: var(--muted);
+  }
+  .add-grid input, .add-grid select, .add-list-field input {
+    font-size: 13px;
+    color: var(--text);
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: white;
+    font-family: inherit;
+  }
+  .add-list-field { margin-bottom: 14px; }
+  .chip-input { display: flex; flex-wrap: wrap; gap: 6px; min-height: 14px; }
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #eef2fb;
+    border: 1px solid #c9d8f5;
+    border-radius: 999px;
+    padding: 3px 9px;
+    font-size: 12px;
+    color: var(--text);
+  }
+  .chip-x { cursor: pointer; color: var(--muted); }
+  .chip-x:hover { color: #c0392b; }
+  .add-actions { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+  .add-actions #addMsg { font-size: 12px; color: var(--muted); }
+  button.primary {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-size: 13px;
+    cursor: pointer;
+  }
