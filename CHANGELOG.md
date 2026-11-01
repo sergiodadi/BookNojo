@@ -4,6 +4,22 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.21.0] - 2026-11-01
+
+### Added
+- **`bc_add resolve`/`plan`** (étape 5) couvrent maintenant les onglets Détails, Personnel, Crédits & Personnages, Contenus, Intrigue/Notes et Liens de la fenêtre "Add Book" (Couvertures exclue — gestion de fichiers, hors périmètre) :
+  - Détails : édition, imprimeur, série, volume, type de papier, dimensions, Dewey, LCCN, dédicace, 1ère édition, tirage, abrégé, durée audio, titre/sous-titre/éditeur/pays/langue/date de publication originaux.
+  - Personnel : état, propriétaire, magasin, valeur actuelle, prix d'achat/de couverture, date d'achat, rare, lu, nombre de lectures, date de lecture, note.
+  - Intrigue & Notes : résumé (plot) et notes — colonnes directes de `ZCOLLECTIBLE`.
+  - Crédits & Personnages : nouvelles tables `ZCREATOR`/`ZCHARACTER` (même motif flyweight que les auteurs) — le rôle d'un crédit (`ZROLEID`) n'est pas résolu (mapping nom↔identifiant non trouvé en base).
+  - Contenus : `ZSTORY` (plusieurs histoires dans un livre), chacune avec ses propres auteurs via `ZAUTHOR.ZSTORY`.
+  - Liens : `ZLINK` + compagnon `ZITEMDELEGATE`, motif confirmé sur les 832 liens réels déjà présents dans la collection de test.
+- `PersonKind` généralise `LookupKind` pour les champs "personne" (auteurs, crédits, personnages, propriétaire) ; `plan_person_fk`/`plan_person_list` factorisent la création de nouvelles personnes (le code d'auteur, jusque-là en ligne, utilise désormais ces mêmes helpers).
+
+### Verified
+- Testé de bout en bout sur `testdata-rw/` avec un livre d'exemple exerçant TOUS les nouveaux champs : `resolve` → `plan` → `guard` → `commit`, `PRAGMA integrity_check` = `ok`, chaque nouvelle table (`ZCREATOR`, `ZCHARACTER`, `ZSTORY`, `ZLINK`) contient exactement la ligne attendue, les jointures (crédit, personnage avec alias, contenu avec son propre auteur) se résolvent correctement en SQL. Book Collector rouvre le fichier sans alerte de corruption et affiche le bon compteur de livres.
+- Non vérifié visuellement dans l'app elle-même (navigation par liste non fiable via automatisation d'accessibilité sur cette fenêtre, même limite déjà rencontrée à l'étape 4) : la fiche n'a pas pu être inspectée onglet par onglet dans l'interface. Les tables `ZCREATOR`/`ZCHARACTER`/`ZSTORY` étant vides dans la collection de test, leur plan SQL est construit par analogie (voir le détail "non couvert" affiché par `bc_add plan`), pas recoupé avec des lignes réelles préexistantes.
+
 ## [0.20.0] - 2026-11-01
 
 ### Added

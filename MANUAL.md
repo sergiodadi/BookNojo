@@ -103,7 +103,7 @@ tests, le projet garde une copie en lecture seule dans `testdata/` :
 cargo test --release       # lance les tests unitaires
 ```
 
-## 7. (Expérimental) Préparer l'ajout d'un livre — étapes 1 à 4 sur 6
+## 7. (Expérimental) Préparer l'ajout d'un livre — étapes 1 à 5 sur 6
 
 > ⚠️ En cours de construction, par étapes. `bc_add resolve`, `plan` et
 > `guard` ne font **aucune écriture** (base ouverte en lecture seule).
@@ -227,6 +227,62 @@ corruption. La fiche du nouveau livre n'apparaît pas encore dans la
 **recherche texte** de l'application — normal, `ZSEARCHSTRING` fait partie
 des champs "non couverts" listés par `plan` (§ Étape 2) ; elle reste en
 revanche consultable en parcourant/triant la liste.
+
+### Étape 5 — les autres onglets de "Add Book"
+
+`resolve` et `plan` couvrent maintenant, en plus de l'onglet Main (§
+Étape 1), tous les champs de la fenêtre "Add Book" qui correspondent à une
+colonne ou une relation connue — sauf Couvertures (gestion de fichiers,
+hors périmètre de `bc_add`). Tous ces champs sont optionnels dans le JSON
+d'entrée ; seuls ceux fournis sont pris en compte.
+
+- **Détails** : `edition`, `printed_by`, `series`, `volume`, `paper_type`
+  (listes, comme `publisher`/`format`...), `height`, `width`, `dewey`,
+  `lccn`, `dedication` (texte libre), `first_edition`, `printing`,
+  `abridged`, `audio_length_minutes`, `original_title`,
+  `original_subtitle`, `original_publisher`, `original_country`,
+  `original_language`, `original_publication_year/month/day`.
+- **Personnel** : `condition`, `owner` (personne), `store`,
+  `current_value`, `purchase_price`, `cover_price`,
+  `purchase_year/month/day`, `rare`, `read_it`, `read_times`,
+  `read_year/month/day`, `my_rating`.
+- **Intrigue & Notes** : `plot`, `notes`.
+- **Crédits & Personnages** : `credits` (liste de noms — le rôle de
+  chaque crédit n'est pas encore capturé, voir ci-dessous) et
+  `characters` (liste de `{"name": ..., "alias": ...}`).
+- **Contenus** : `contents`, liste de
+  `{"title": ..., "subtitle": ..., "number_of_pages": ..., "authors": [...]}`
+  — plusieurs histoires/nouvelles dans un même livre, chacune avec ses
+  propres auteurs.
+- **Liens** : `links`, liste de `{"url": ..., "description": ...}`.
+
+Exemple minimal pour ces nouveaux champs (à ajouter au JSON de l'étape 1) :
+
+```json
+{
+  "...": "... champs de l'onglet Main ...",
+  "plot": "Résumé de l'histoire.",
+  "notes": "Exemplaire dédicacé.",
+  "condition": "Mint",
+  "credits": ["Nom du traducteur"],
+  "characters": [{ "name": "Nom du personnage", "alias": "Surnom" }],
+  "contents": [{ "title": "Titre de la nouvelle", "authors": ["Nom de l'auteur"] }],
+  "links": [{ "url": "https://...", "description": "Description du lien" }]
+}
+```
+
+Limites connues de cette étape (affichées aussi par `bc_add plan`) :
+- Le **rôle** d'un crédit (Illustrateur, Traducteur...) n'est pas
+  renseigné — la correspondance entre son nom et l'identifiant numérique
+  interne (`ZROLEID`) n'a pas été trouvée en base.
+- Les tables utilisées pour Crédits/Personnages/Contenus (`ZCREATOR`,
+  `ZCHARACTER`, `ZSTORY`) étaient **vides** dans la collection de test :
+  leur plan SQL suit par analogie des motifs vérifiés ailleurs (auteurs,
+  liens), mais n'a pas pu être comparé à des lignes réelles préexistantes
+  comme pour le reste de l'étape 5. Vérifié par SQL direct (jointures,
+  `PRAGMA integrity_check`) sur `testdata-rw/`, pas encore inspecté
+  visuellement fiche par fiche dans l'application (navigation par liste
+  peu fiable en automatisation d'accessibilité sur cette fenêtre).
 
 ## 8. Dépannage
 
