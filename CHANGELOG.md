@@ -4,6 +4,11 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.14.0] - 2026-11-01
+
+### Added
+- `MANUAL.md` : premier manuel d'utilisation (présentation, installation, usage de base, sous-collections, page HTML, copie de test, dépannage), versionné dans git comme le reste du projet.
+
 ## [0.13.0] - 2026-11-01
 
 ### Added
