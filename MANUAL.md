@@ -103,7 +103,48 @@ tests, le projet garde une copie en lecture seule dans `testdata/` :
 cargo test --release       # lance les tests unitaires
 ```
 
-## 7. Dépannage
+## 7. (Expérimental) Préparer l'ajout d'un livre — étape 1/6
+
+> ⚠️ En cours de construction, par étapes. Cette étape ne fait **aucune
+> écriture** dans la base — `bc_add` ouvre `Book_data` en lecture seule, au
+> même titre que `bc_export`. L'écriture réelle (étapes suivantes) ne sera
+> ajoutée qu'après des garde-fous explicites (sauvegarde automatique,
+> vérification que Book Collector n'est pas lancé, transaction unique) et
+> sera d'abord testée sur une copie inscriptible dédiée, jamais sur la
+> vraie collection.
+
+`bc_add` prend un fichier JSON décrivant un nouveau livre (champs de
+l'onglet "Main" de la fenêtre "Add Book" de l'application) et vérifie, pour
+chaque valeur de type liste (auteur, éditeur, genre, format, langue, pays,
+sujet, emplacement), si elle existe déjà dans la collection ou si elle
+serait créée.
+
+```bash
+./target/release/bc_add \
+  --db testdata/MyCollection.bkcp \
+  --input new_book.json \
+  --output resolved-book.json
+```
+
+Exemple de `new_book.json` :
+
+```json
+{
+  "title": "Le Nom du Vent",
+  "authors": ["Patrick Rothfuss"],
+  "publisher": "Bragelonne",
+  "format": "Broché",
+  "language": "français",
+  "country": "France",
+  "genres": ["Fantasy"],
+  "collection": "book-collector-serge"
+}
+```
+
+La sous-collection (`collection`) doit déjà exister — contrairement aux
+autres champs, `bc_add` ne sait pas en créer une nouvelle.
+
+## 8. Dépannage
 
 - **`--db "~/Documents/..."` échoue** : si le chemin est entre guillemets,
   le shell n'étend pas `~` lui-même — l'outil le fait à votre place depuis
@@ -115,7 +156,7 @@ cargo test --release       # lance les tests unitaires
 - **Erreur de verrou SQLite** : fermez Book Collector avant de lancer un
   export, ou utilisez `testdata/` qui est une copie indépendante.
 
-## 8. Pour aller plus loin
+## 9. Pour aller plus loin
 
 - `CHANGELOG.md` : historique détaillé, version par version.
 - `./target/release/bc_export --help` : liste complète des options.

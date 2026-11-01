@@ -4,6 +4,16 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.16.0] - 2026-11-01
+
+### Added
+- Nouveau binaire **`bc_add`** (étape 1/6 du plan "ajout d'un livre") : prend un JSON décrivant un nouveau livre et résout chaque champ "liste" (auteur, éditeur, genre, format, langue, pays, sujet, emplacement) contre les tables flyweight existantes — réutilisation si la valeur existe déjà, sinon marquée "à créer". **Aucune écriture** dans la base (ouverture `SQLITE_OPEN_READ_ONLY`, comme `bc_export`).
+- Section 7 du manuel décrivant cette première étape et le format d'entrée JSON.
+
+### Changed
+- Extraction d'une bibliothèque partagée (`src/lib.rs`) regroupant les fonctions communes aux deux binaires (`expand_tilde`, `resolve_db_path`, `resolve_collection_pk`, et les nouvelles `resolve_lookup_pk`/`resolve_person_pk`) — `bc_export` et `bc_add` ne dupliquent plus ce code.
+- **Règle désormais actée** : tout développement/test se fait exclusivement sur `testdata/MyCollection.bkcp` — la vraie base de l'utilisateur (`~/Documents/Collectorz/...`) n'est plus jamais utilisée, pas même en lecture.
+
 ## [0.15.0] - 2026-11-01
 
 ### Added

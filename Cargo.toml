@@ -1,11 +1,19 @@
 [package]
 name = "book_collector_export"
-version = "0.15.0"
+version = "0.16.0"
 edition = "2021"
+
+[lib]
+name = "book_collector_export"
+path = "src/lib.rs"
 
 [[bin]]
 name = "bc_export"
 path = "src/main.rs"
+
+[[bin]]
+name = "bc_add"
+path = "src/bin/bc_add.rs"
 
 [dependencies]
 rusqlite = { version = "0.32", features = ["bundled"] }

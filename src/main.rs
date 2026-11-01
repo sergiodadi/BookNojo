@@ -25,8 +25,11 @@
 //!   filename that lives in the sibling "Images/" directory next to
 //!   Book_data inside the .bkcp package.
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use base64::Engine;
+use book_collector_export::{
+    book_entity_id, expand_tilde, resolve_collection_pk, resolve_db_path, resolve_images_dir,
+};
 use clap::Parser;
 use image::ImageEncoder;
 use rusqlite::{Connection, OpenFlags};
@@ -112,95 +115,6 @@ struct Book {
     front_cover_path: Option<String>,
     back_cover_file: Option<String>,
     back_cover_path: Option<String>,
-}
-
-/// Expands a leading "~" or "~/..." to $HOME. The shell only does this when
-/// the argument is unquoted, so a quoted "~/Documents/..." reaches us
-/// literally — this makes `--db "~/Documents/..."` work either way.
-fn expand_tilde(path: &Path) -> PathBuf {
-    let s = path.to_string_lossy();
-    let Ok(home) = std::env::var("HOME") else {
-        return path.to_path_buf();
-    };
-    if s == "~" {
-        PathBuf::from(home)
-    } else if let Some(rest) = s.strip_prefix("~/") {
-        PathBuf::from(home).join(rest)
-    } else {
-        path.to_path_buf()
-    }
-}
-
-fn resolve_db_path(input: &Path) -> Result<PathBuf> {
-    let input = &expand_tilde(input);
-    let resolved = if input.is_dir() {
-        let candidate = input.join("Book_data");
-        if !candidate.is_file() {
-            bail!(
-                "{} est un dossier mais ne contient pas de fichier 'Book_data'",
-                input.display()
-            );
-        }
-        candidate
-    } else {
-        if !input.is_file() {
-            bail!("fichier introuvable: {}", input.display());
-        }
-        input.to_path_buf()
-    };
-    // Canonicalize to an absolute path: front_cover_path/back_cover_path are
-    // derived from this and end up embedded as file:// URLs in the HTML
-    // export. A relative --db (e.g. "testdata/MyCollection.bkcp", run from
-    // the project directory) would otherwise produce a relative file:// URL
-    // like "file://testdata/...", which browsers cannot resolve at all.
-    std::fs::canonicalize(&resolved)
-        .with_context(|| format!("résolution du chemin absolu de {}", resolved.display()))
-}
-
-/// "Images/" lives next to Book_data inside the .bkcp package.
-fn resolve_images_dir(db_path: &Path) -> Option<PathBuf> {
-    let dir = db_path.parent()?.join("Images");
-    if dir.is_dir() {
-        Some(dir)
-    } else {
-        None
-    }
-}
-
-fn book_entity_id(conn: &Connection) -> Result<i64> {
-    conn.query_row(
-        "SELECT Z_ENT FROM Z_PRIMARYKEY WHERE Z_NAME = 'Book'",
-        [],
-        |row| row.get(0),
-    )
-    .context("entité Core Data 'Book' introuvable dans Z_PRIMARYKEY (schéma inattendu)")
-}
-
-/// Resolves a sous-collection name (ZCOLLECTION.ZTITLE, case-insensitive) to
-/// its primary key, or lists the available names in the error if not found.
-fn resolve_collection_pk(conn: &Connection, name: &str) -> Result<i64> {
-    let pk: Option<i64> = conn
-        .query_row(
-            "SELECT Z_PK FROM ZCOLLECTION WHERE ZTITLE = ?1 COLLATE NOCASE",
-            [name],
-            |row| row.get(0),
-        )
-        .ok();
-    match pk {
-        Some(pk) => Ok(pk),
-        None => {
-            let mut stmt = conn.prepare("SELECT ZTITLE FROM ZCOLLECTION ORDER BY ZTITLE")?;
-            let mut rows = stmt.query([])?;
-            let mut names = Vec::new();
-            while let Some(row) = rows.next()? {
-                names.push(row.get::<_, String>(0)?);
-            }
-            bail!(
-                "sous-collection '{name}' introuvable. Disponibles: {}",
-                names.join(", ")
-            );
-        }
-    }
 }
 
 /// Prints every sous-collection with its number of fiches and the sum of
@@ -786,30 +700,4 @@ mod tests {
         );
     }
 
-    #[test]
-    fn expand_tilde_rewrites_home_relative_paths_only() {
-        let original_home = std::env::var("HOME").ok();
-        std::env::set_var("HOME", "/tmp/bc_export_test_home");
-
-        assert_eq!(expand_tilde(Path::new("~")), PathBuf::from("/tmp/bc_export_test_home"));
-        assert_eq!(
-            expand_tilde(Path::new("~/Documents/MyCollection.bkcp")),
-            PathBuf::from("/tmp/bc_export_test_home/Documents/MyCollection.bkcp")
-        );
-        // Absolute paths, and paths that merely contain "~" past the first
-        // character, must be left alone.
-        assert_eq!(
-            expand_tilde(Path::new("/Volumes/Data/Book_data")),
-            PathBuf::from("/Volumes/Data/Book_data")
-        );
-        assert_eq!(
-            expand_tilde(Path::new("a~/b")),
-            PathBuf::from("a~/b")
-        );
-
-        match original_home {
-            Some(home) => std::env::set_var("HOME", home),
-            None => std::env::remove_var("HOME"),
-        }
-    }
 }
