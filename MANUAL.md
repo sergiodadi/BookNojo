@@ -177,6 +177,28 @@ couvre **pas** encore (ex. la ligne compagnon `ZSEARCHSTRING`, le tri de
 titre, les identifiants de synchronisation CLZ Cloud) — à lire avant de
 passer aux étapes suivantes.
 
+### Étape 3 — `bc_add guard`
+
+Vérifie que les conditions sont réunies pour écrire sans risque, et
+produit une sauvegarde horodatée de la base (copie, donc toujours sans
+modifier `Book_data` lui-même) :
+
+```bash
+./target/release/bc_add guard --db testdata/MyCollection.bkcp
+```
+
+Deux vérifications :
+- **Book Collector n'est pas lancé** (`pgrep`) — écrire pendant que l'app
+  tourne risquerait un fichier WAL incohérent, ou que l'app écrase nos
+  changements à sa prochaine sauvegarde.
+- **Sauvegarde automatique** de `Book_data` (et de `-wal`/`-shm` si
+  présents) dans `backups/` à côté de la base, horodatée.
+
+`lib.rs` contient aussi `run_write_transaction()`, qui exécutera le SQL
+d'une étape dans une transaction unique (tout ou rien) — écrite mais pas
+encore appelée par aucune commande : l'exécution réelle est l'étape
+suivante, pas encore implémentée.
+
 ## 8. Dépannage
 
 - **`--db "~/Documents/..."` échoue** : si le chemin est entre guillemets,

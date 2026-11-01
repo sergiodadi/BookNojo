@@ -9,15 +9,19 @@
 //! - `plan` (étape 2) : à partir du résultat de `resolve`, calcule et
 //!   affiche le SQL d'insertion exact — nouvelles clés primaires,
 //!   lignes à créer — SANS l'exécuter.
+//! - `guard` (étape 3) : vérifie que Book Collector n'est pas lancé et
+//!   produit une sauvegarde horodatée de la base. Ne modifie toujours rien
+//!   dans `Book_data` lui-même (seule une copie est créée ailleurs).
 //!
-//! Étapes suivantes (pas encore implémentées) : garde-fous d'écriture
-//! (sauvegarde automatique, app fermée, transaction unique), puis le
-//! premier commit réel sur une copie inscriptible dédiée.
+//! Étape suivante (pas encore implémentée) : le premier commit réel —
+//! exécution du plan dans une transaction unique (`run_write_transaction`,
+//! déjà écrit dans lib.rs, pas encore appelé) — sur une copie inscriptible
+//! dédiée, jamais sur `testdata/` ni sur la vraie collection.
 
 use anyhow::{Context, Result};
 use book_collector_export::{
-    entity_ent_id, entity_max_pk, resolve_collection_pk, resolve_db_path, resolve_lookup_pk,
-    resolve_person_pk,
+    backup_sqlite_store, entity_ent_id, entity_max_pk, is_book_collector_running,
+    resolve_collection_pk, resolve_db_path, resolve_lookup_pk, resolve_person_pk,
 };
 use clap::{Parser, Subcommand};
 use rusqlite::{Connection, OpenFlags};
@@ -61,6 +65,15 @@ enum Command {
         /// Fichier .sql de sortie (optionnel — toujours affiché sur stdout aussi).
         #[arg(long)]
         output: Option<PathBuf>,
+    },
+    /// Étape 3 : vérifie qu'il est sûr d'écrire (app fermée) et sauvegarde la base.
+    Guard {
+        /// Chemin vers le fichier Book_data, ou vers le dossier .bkcp qui le contient.
+        #[arg(long)]
+        db: PathBuf,
+        /// Dossier de sauvegarde (par défaut : "backups" à côté de la base).
+        #[arg(long)]
+        backup_dir: Option<PathBuf>,
     },
 }
 
@@ -537,10 +550,54 @@ fn cmd_plan(db: PathBuf, resolved_path: PathBuf, output: Option<PathBuf>) -> Res
     Ok(())
 }
 
+// ------------------------------------------------------------------ Guard
+
+fn cmd_guard(db: PathBuf, backup_dir: Option<PathBuf>) -> Result<()> {
+    let db_path = resolve_db_path(&db)?;
+    println!("Base: {}", db_path.display());
+    println!();
+
+    let running = is_book_collector_running()?;
+    if running {
+        println!("❌ Book Collector est actuellement lancé.");
+        println!("   Écrire maintenant risquerait un fichier WAL incohérent, ou que l'app");
+        println!("   écrase nos changements à sa prochaine sauvegarde. Fermez l'app d'abord.");
+    } else {
+        println!("✅ Book Collector n'est pas lancé.");
+    }
+
+    let backup_dir = backup_dir.unwrap_or_else(|| {
+        db_path
+            .parent()
+            .map(|p| p.join("backups"))
+            .unwrap_or_else(|| PathBuf::from("backups"))
+    });
+    let backup_path = backup_sqlite_store(&db_path, &backup_dir)
+        .context("création de la sauvegarde avant écriture")?;
+    let size = std::fs::metadata(&backup_path)
+        .with_context(|| format!("lecture de la taille de {}", backup_path.display()))?
+        .len();
+    println!("✅ Sauvegarde créée: {} ({size} octets)", backup_path.display());
+
+    println!();
+    if running {
+        println!("=> NE PAS écrire tant que Book Collector est ouvert.");
+        println!("   Fermez l'app, puis relancez cette vérification.");
+    } else {
+        println!("=> Conditions réunies pour une écriture : app fermée, sauvegarde faite.");
+        println!("   (L'exécution réelle du plan — étape suivante — n'est pas encore câblée ;");
+        println!("    run_write_transaction() existe dans lib.rs mais n'est appelée par");
+        println!("    aucune commande pour l'instant.)");
+    }
+
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
         Command::Resolve { db, input, output } => cmd_resolve(db, input, output),
         Command::Plan { db, resolved, output } => cmd_plan(db, resolved, output),
+        Command::Guard { db, backup_dir } => cmd_guard(db, backup_dir),
     }
 }

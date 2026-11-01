@@ -18,7 +18,7 @@
 //!   same pattern through ZPERSONDELEGATE instead.
 
 use anyhow::{bail, Context, Result};
-use rusqlite::Connection;
+use rusqlite::{Connection, OpenFlags};
 use std::path::{Path, PathBuf};
 
 /// Expands a leading "~" or "~/..." to $HOME. The shell only does this when
@@ -181,6 +181,83 @@ impl<T> OptionalResult<T> for rusqlite::Result<T> {
             Err(e) => Err(e.into()),
         }
     }
+}
+
+// --------------------------------------------------------------------
+// Write guardrails (step 3 of the add-a-book plan — see `bc_add guard`).
+// Nothing in this crate calls `run_write_transaction` yet: the actual
+// INSERTs come in a later step, executed against a dedicated writable
+// copy, never against `testdata/` (kept deliberately read-only) or the
+// user's real collection.
+// --------------------------------------------------------------------
+
+/// Checks whether Book Collector itself is currently running, via `pgrep`.
+/// Writing to `Book_data` while the app holds it open risks an
+/// inconsistent WAL or the app silently overwriting our changes on its
+/// next save — this must return `false` before any real write proceeds.
+pub fn is_book_collector_running() -> Result<bool> {
+    let output = std::process::Command::new("pgrep")
+        .args(["-x", "Book Collector"])
+        .output()
+        .context("exécution de pgrep pour vérifier si Book Collector est lancé")?;
+    // pgrep exits 0 when it found at least one matching process, 1 when it
+    // found none — both are "successful checks", not failures of pgrep
+    // itself, so only its exit code (not a spawn error) distinguishes them.
+    Ok(output.status.success())
+}
+
+/// Copies `db_path` (and its `-wal`/`-shm` siblings, if present, so the
+/// backup is a coherent snapshot) into `backup_dir`, each file suffixed
+/// with a timestamp. Returns the path to the backed-up main file.
+pub fn backup_sqlite_store(db_path: &Path, backup_dir: &Path) -> Result<PathBuf> {
+    std::fs::create_dir_all(backup_dir)
+        .with_context(|| format!("création du dossier de sauvegarde {}", backup_dir.display()))?;
+
+    let ts_output = std::process::Command::new("date")
+        .arg("+%Y%m%d-%H%M%S")
+        .output()
+        .context("obtention de l'horodatage pour la sauvegarde")?;
+    let timestamp = String::from_utf8_lossy(&ts_output.stdout).trim().to_string();
+
+    let db_name = db_path
+        .file_name()
+        .context("nom de fichier de base invalide")?
+        .to_string_lossy();
+    let dest = backup_dir.join(format!("{db_name}.{timestamp}"));
+    std::fs::copy(db_path, &dest)
+        .with_context(|| format!("copie de {} vers {}", db_path.display(), dest.display()))?;
+
+    for suffix in ["-wal", "-shm"] {
+        let sibling = PathBuf::from(format!("{}{suffix}", db_path.display()));
+        if sibling.is_file() {
+            let dest_sibling = backup_dir.join(format!("{db_name}.{timestamp}{suffix}"));
+            std::fs::copy(&sibling, &dest_sibling)
+                .with_context(|| format!("copie de {} vers {}", sibling.display(), dest_sibling.display()))?;
+        }
+    }
+
+    Ok(dest)
+}
+
+/// Runs `f` inside a single SQLite transaction opened read-write on
+/// `db_path`: commits only if `f` returns `Ok`, otherwise the transaction
+/// is dropped without committing (rusqlite rolls back automatically on
+/// drop) and the error propagates — an all-or-nothing write, as required
+/// before any real commit to a Core Data store.
+///
+/// Callers must have already checked `is_book_collector_running() ==
+/// false` and taken a `backup_sqlite_store` backup — this function enforces
+/// neither on its own.
+pub fn run_write_transaction<F>(db_path: &Path, f: F) -> Result<()>
+where
+    F: FnOnce(&Connection) -> Result<()>,
+{
+    let mut conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_WRITE)
+        .with_context(|| format!("ouverture en lecture-écriture de {}", db_path.display()))?;
+    let tx = conn.transaction().context("démarrage de la transaction")?;
+    f(&tx)?;
+    tx.commit().context("validation de la transaction")?;
+    Ok(())
 }
 
 #[cfg(test)]

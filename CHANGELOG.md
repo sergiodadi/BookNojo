@@ -4,6 +4,15 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.19.0] - 2026-11-01
+
+### Added
+- **`bc_add guard`** (étape 3) : vérifie que Book Collector n'est pas lancé (`pgrep`) et crée une sauvegarde horodatée de `Book_data` (+ `-wal`/`-shm` si présents) avant toute écriture future. Ne modifie jamais `Book_data` lui-même — seule une copie est créée dans `backups/`.
+- `is_book_collector_running()`, `backup_sqlite_store()` et `run_write_transaction()` dans `lib.rs` : les deux premières sont exercées par `bc_add guard` dès maintenant ; la troisième (transaction unique tout-ou-rien pour l'écriture réelle) est écrite et prête, mais pas encore appelée par aucune commande.
+
+### Verified
+- Testé en conditions réelles sur `testdata/` : Book Collector étant ouvert au moment du test, `guard` l'a correctement détecté et a refusé de recommander une écriture, tout en créant la sauvegarde avec succès.
+
 ## [0.18.0] - 2026-11-01
 
 ### Added
