@@ -1,0 +1,7 @@
+/target
+
+# Copie de travail de la collection (~400 Mo, données personnelles, jamais
+# à committer) — régénérée avec ./refresh-testdata.sh.
+/testdata
+
+.DS_Store
