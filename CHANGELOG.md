@@ -4,6 +4,19 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.24.0] - 2026-11-01
+
+### Added
+- **Étape 6/6 du plan "ajout d'un livre"** : `bc_add commit --force` (seule façon d'écrire sur un chemin qui ressemble à la vraie collection) exige désormais, en plus, une **confirmation tapée interactivement** ("OUI", exactement) avant toute écriture réelle — deux garde-fous indépendants (le chemin ET la confirmation), aucun des deux ne suffit seul. `confirm_real_write()` isole cette logique (entrée/sortie paramétrées) pour rester testable sans terminal réel.
+
+### Fixed
+- **Bug réel découvert en testant l'étape 6** : `looks_like_real_collection` comparait un chemin canonicalisé (toujours résolu par `resolve_db_path`) à un préfixe `$HOME` non canonicalisé. Sur un `$HOME` passant par un lien symbolique (ex. `/var` → `/private/var` sur macOS), la comparaison échouait silencieusement et **tout le garde-fou de la vraie collection était contourné** — y compris le refus par défaut déjà en place depuis l'étape 4, pas seulement la nouvelle confirmation. Corrigé en canonicalisant aussi le préfixe avant comparaison.
+
+### Verified
+- 3 nouveaux tests unitaires (`bc_add`) : confirmation stricte (accepte seulement "OUI", refuse "oui"/"yes"/vide/Entrée seule), détection correcte sous un `$HOME` normal, et régression spécifique au cas symlink qui aurait détecté le bug ci-dessus. 10 tests au total, tous au vert.
+- Scénario de bout en bout rejoué 3 fois avec un **`$HOME` factice isolé** (jamais le vrai répertoire de l'utilisateur) : refus sans `--force` (inchangé), refus avec `--force` + réponse incorrecte (fichier intact), succès avec `--force` + "OUI" (sauvegarde créée, écriture effectuée) — sur un fichier fictif, à aucun moment sur la vraie collection.
+- `bc_add resolve/plan/commit` sur `testdata-rw/` rejoués sans changement de comportement (régression).
+
 ## [0.23.0] - 2026-11-01
 
 ### Added

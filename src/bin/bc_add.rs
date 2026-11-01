@@ -27,6 +27,14 @@
 //! analogie avec des motifs vérifiés ailleurs (ZAUTHOR, ZLINK — ce dernier
 //! avec 832 lignes réelles), mais n'a pas pu être recoupé avec des lignes
 //! réelles existantes. À vérifier avec un soin particulier après `commit`.
+//!
+//! Étape 6 : `commit --force` reste la seule façon d'écrire sur un chemin
+//! qui ressemble à la vraie collection — mais ce n'est plus suffisant à lui
+//! seul : un second garde-fou (`confirm_real_write`) exige en plus de taper
+//! "OUI" de façon interactive sur stdin avant toute écriture réelle. Deux
+//! barrières indépendantes (un flag ET une confirmation tapée), pour qu'une
+//! vraie écriture ne puisse jamais être accidentelle ou silencieuse — y
+//! compris si cette commande est un jour appelée depuis un script.
 
 use anyhow::{bail, Context, Result};
 use book_collector_export::{
@@ -1208,10 +1216,20 @@ fn cmd_guard(db: PathBuf, backup_dir: Option<PathBuf>) -> Result<()> {
 /// of the user's real collection — unless `force` is set. Cheap defense in
 /// depth on top of the standing rule to only ever write to a dedicated
 /// test copy.
+///
+/// `db_path` is always canonicalized by `resolve_db_path` before reaching
+/// here, so `real_prefix` must be canonicalized the same way before the
+/// comparison — otherwise a symlink anywhere in `$HOME` (e.g. macOS's
+/// `/var` -> `/private/var`) silently defeats the whole check: the two
+/// paths would represent the same real location on disk but never compare
+/// equal as plain strings. Falls back to the raw (non-canonicalized) prefix
+/// if canonicalization fails (e.g. the directory doesn't exist yet) rather
+/// than disabling the check entirely.
 fn looks_like_real_collection(db_path: &std::path::Path) -> Option<PathBuf> {
     let home = std::env::var_os("HOME")?;
     let real_prefix = PathBuf::from(home).join("Documents").join("Collectorz");
-    db_path.starts_with(&real_prefix).then_some(real_prefix)
+    let canonical_prefix = real_prefix.canonicalize().unwrap_or_else(|_| real_prefix.clone());
+    db_path.starts_with(&canonical_prefix).then_some(real_prefix)
 }
 
 /// Strips `bc_add plan`'s own transaction wrapper (`BEGIN TRANSACTION;`
@@ -1229,12 +1247,42 @@ fn strip_plan_wrapper(raw_sql: &str) -> String {
         .join("\n")
 }
 
+/// Second, independent gate on top of `--force`: even with the flag set,
+/// a real write to what looks like the real collection requires typing
+/// "OUI" interactively. Takes `input`/`out` rather than touching stdin/
+/// stdout directly so the prompt logic itself is unit-testable without any
+/// real terminal or file I/O.
+fn confirm_real_write<R: std::io::BufRead, W: std::io::Write>(
+    input: &mut R,
+    out: &mut W,
+    db_path: &std::path::Path,
+    real_prefix: &std::path::Path,
+) -> Result<()> {
+    writeln!(
+        out,
+        "⚠️  ATTENTION : {} se trouve sous {} — ceci est la VRAIE collection Book Collector, pas une copie de test.",
+        db_path.display(),
+        real_prefix.display()
+    )?;
+    writeln!(out, "   Une sauvegarde horodatée sera prise avant d'écrire, mais cette opération")?;
+    writeln!(out, "   modifie directement vos données réelles.")?;
+    write!(out, "   Tapez exactement OUI pour continuer (autre chose annule) : ")?;
+    out.flush()?;
+    let mut answer = String::new();
+    input.read_line(&mut answer)?;
+    if answer.trim() == "OUI" {
+        Ok(())
+    } else {
+        bail!("Confirmation refusée ou incorrecte (réponse attendue : OUI, exactement) — aucune écriture effectuée.");
+    }
+}
+
 fn cmd_commit(db: PathBuf, plan: PathBuf, backup_dir: Option<PathBuf>, force: bool) -> Result<()> {
     let db_path = resolve_db_path(&db)?;
     println!("Base: {}", db_path.display());
 
-    if !force {
-        if let Some(real_prefix) = looks_like_real_collection(&db_path) {
+    match (force, looks_like_real_collection(&db_path)) {
+        (false, Some(real_prefix)) => {
             bail!(
                 "{} se trouve sous {} — ça ressemble à la vraie collection.\n\
                  Cette commande écrit réellement dans la base : utilisez une copie dédiée\n\
@@ -1244,6 +1292,13 @@ fn cmd_commit(db: PathBuf, plan: PathBuf, backup_dir: Option<PathBuf>, force: bo
                 real_prefix.display()
             );
         }
+        (true, Some(real_prefix)) => {
+            let stdin = std::io::stdin();
+            let mut locked = stdin.lock();
+            let mut stdout = std::io::stdout();
+            confirm_real_write(&mut locked, &mut stdout, &db_path, &real_prefix)?;
+        }
+        (_, None) => {}
     }
 
     if is_book_collector_running()? {
@@ -1286,5 +1341,89 @@ fn main() -> Result<()> {
         Command::Plan { db, resolved, output } => cmd_plan(db, resolved, output),
         Command::Guard { db, backup_dir } => cmd_guard(db, backup_dir),
         Command::Commit { db, plan, backup_dir, force } => cmd_commit(db, plan, backup_dir, force),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+    use std::path::Path;
+
+    fn confirm(answer: &str) -> Result<()> {
+        let mut input = Cursor::new(answer.as_bytes());
+        let mut out = Vec::new();
+        confirm_real_write(&mut input, &mut out, Path::new("/x/Documents/Collectorz/y"), Path::new("/x/Documents/Collectorz"))
+    }
+
+    #[test]
+    fn confirm_real_write_accepts_only_an_exact_oui() {
+        assert!(confirm("OUI\n").is_ok());
+        // Trailing whitespace from the terminal is forgiven...
+        assert!(confirm("OUI \n").is_ok());
+        // ...but anything else — including a casual lowercase or a plain
+        // Enter — must refuse. This is the step-6 safety gate: it must
+        // never succeed by accident.
+        assert!(confirm("oui\n").is_err());
+        assert!(confirm("yes\n").is_err());
+        assert!(confirm("\n").is_err());
+        assert!(confirm("").is_err());
+    }
+
+    #[test]
+    fn looks_like_real_collection_matches_only_under_documents_collectorz() {
+        let original_home = std::env::var("HOME").ok();
+        std::env::set_var("HOME", "/Users/test");
+
+        assert!(looks_like_real_collection(Path::new(
+            "/Users/test/Documents/Collectorz/Book Collector/MyCollection.bkcp/Book_data"
+        ))
+        .is_some());
+        assert!(looks_like_real_collection(Path::new("/Users/test/Developer/book_collector_export/testdata-rw/MyCollection.bkcp/Book_data")).is_none());
+
+        match original_home {
+            Some(home) => std::env::set_var("HOME", home),
+            None => std::env::remove_var("HOME"),
+        }
+    }
+
+    /// Regression test for a real bug found while testing step 6: on macOS,
+    /// `/var` is a symlink to `/private/var`. `resolve_db_path` always
+    /// canonicalizes (so a path under a `/var/...` $HOME arrives here as
+    /// `/private/var/...`), but `looks_like_real_collection` used to build
+    /// `real_prefix` from the raw $HOME without canonicalizing it — so the
+    /// `starts_with` check silently failed and the whole real-collection
+    /// gate (including the OUI prompt) was bypassed, for a path that *was*
+    /// genuinely the real collection. Caught with a fake $HOME under
+    /// std::env::temp_dir(), which on macOS is itself under `/var/...`.
+    #[test]
+    fn looks_like_real_collection_survives_a_symlinked_home_like_macos_var() {
+        let fake_home = std::env::temp_dir().join(format!(
+            "bc_add_test_home_{}_{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let collectorz_dir = fake_home.join("Documents").join("Collectorz");
+        std::fs::create_dir_all(&collectorz_dir).unwrap();
+
+        let original_home = std::env::var("HOME").ok();
+        std::env::set_var("HOME", &fake_home);
+
+        // The path a real `--db` run would see after resolve_db_path's own
+        // canonicalize() — i.e. with any $HOME symlink already resolved.
+        let canonical_db_path = collectorz_dir.canonicalize().unwrap().join("MyCollection.bkcp").join("Book_data");
+        assert!(
+            looks_like_real_collection(&canonical_db_path).is_some(),
+            "a canonicalized path under a symlinked $HOME must still be recognized as the real collection"
+        );
+
+        std::fs::remove_dir_all(&fake_home).ok();
+        match original_home {
+            Some(home) => std::env::set_var("HOME", home),
+            None => std::env::remove_var("HOME"),
+        }
     }
 }

@@ -103,15 +103,17 @@ tests, le projet garde une copie en lecture seule dans `testdata/` :
 cargo test --release       # lance les tests unitaires
 ```
 
-## 7. (Expérimental) Préparer l'ajout d'un livre — étapes 1 à 5 sur 6
+## 7. (Expérimental) Préparer l'ajout d'un livre — étapes 1 à 6 sur 6
 
 > ⚠️ En cours de construction, par étapes. `bc_add resolve`, `plan` et
 > `guard` ne font **aucune écriture** (base ouverte en lecture seule).
-> Depuis l'étape 4, `bc_add commit` **écrit réellement** dans `Book_data` —
-> mais uniquement sur une copie dédiée et inscriptible (`testdata-rw/`),
-> jamais sur la vraie collection : un garde-fou refuse d'écrire si le
-> chemin ressemble à `~/Documents/Collectorz/...` (sauf `--force`, à
-> réserver à l'étape 6, pas encore atteinte).
+> Depuis l'étape 4, `bc_add commit` **écrit réellement** dans `Book_data`.
+> Par défaut, cette écriture est réservée à une copie dédiée et
+> inscriptible (`testdata-rw/`) : un garde-fou refuse tout chemin qui
+> ressemble à `~/Documents/Collectorz/...`. Depuis l'étape 6, il est
+> possible de passer outre avec `--force`, mais un second garde-fou prend
+> le relais : taper **OUI** de façon interactive est alors obligatoire,
+> dans le terminal, à chaque exécution — jamais automatisable par erreur.
 
 ### Étape 1 — `bc_add resolve`
 
@@ -290,6 +292,46 @@ Limites connues de cette étape (affichées aussi par `bc_add plan`) :
   `PRAGMA integrity_check`) sur `testdata-rw/`, pas encore inspecté
   visuellement fiche par fiche dans l'application (navigation par liste
   peu fiable en automatisation d'accessibilité sur cette fenêtre).
+
+### Étape 6 — activation sur la vraie collection
+
+`bc_add commit` refuse par défaut tout chemin qui ressemble à
+`~/Documents/Collectorz/...` (voir Étape 4). `--force` lève ce refus, mais
+**n'écrit toujours pas directement** : un second garde-fou,
+indépendant du premier, prend le relais — une confirmation tapée à la
+main dans le terminal :
+
+```
+⚠️  ATTENTION : .../MyCollection.bkcp/Book_data se trouve sous
+.../Documents/Collectorz — ceci est la VRAIE collection Book Collector,
+pas une copie de test.
+   Une sauvegarde horodatée sera prise avant d'écrire, mais cette opération
+   modifie directement vos données réelles.
+   Tapez exactement OUI pour continuer (autre chose annule) :
+```
+
+Toute réponse différente de `OUI` (lettres capitales exactes) annule
+l'opération — aucune écriture n'a lieu, même avec `--force`. Les deux
+garde-fous (le chemin ET la confirmation tapée) sont indépendants et
+testés séparément (`cargo test`, y compris une régression spécifique à un
+`$HOME` passant par un lien symbolique, comme `/var` → `/private/var` sur
+macOS — un cas qui, avant correction, pouvait faire échouer silencieusement
+la détection du chemin).
+
+Avant d'utiliser `--force` sur la vraie collection :
+1. Fermez Book Collector.
+2. Faites une sauvegarde manuelle en plus de celle, automatique, que
+   `commit` effectue (ex. copier tout le dossier `.bkcp`).
+3. Relisez le `plan.sql` produit par l'étape 2 — c'est la dernière
+   occasion de repérer un problème avant une écriture réelle.
+4. Lancez `commit --force` et tapez `OUI` seulement si tout est en ordre.
+
+```bash
+./target/release/bc_add commit \
+  --db "~/Documents/Collectorz/Book Collector/MyCollection.bkcp" \
+  --plan plan.sql \
+  --force
+```
 
 ## 8. Dépannage
 
