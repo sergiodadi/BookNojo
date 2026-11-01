@@ -284,12 +284,16 @@ function stars(rating) {
   return out;
 }
 
-function selectBook(id) {
+function selectBook(id, scrollIntoView) {
   state.activeId = id;
   for (const row of rowsEl.children) row.classList.remove('active');
   const idx = state.items.slice((state.page - 1) * PAGE_SIZE, state.page * PAGE_SIZE)
     .findIndex(b => b.id === id);
-  if (idx >= 0) rowsEl.children[idx].classList.add('active');
+  if (idx >= 0) {
+    const row = rowsEl.children[idx];
+    row.classList.add('active');
+    if (scrollIntoView) row.scrollIntoView({ block: 'nearest' });
+  }
 
   const b = allBooks.find(x => x.id === id);
   if (!b) { detailEl.innerHTML = '<div id="empty">Livre introuvable.</div>'; return; }
@@ -419,8 +423,9 @@ function moveSelection(delta) {
   if (newPage !== state.page) {
     state.page = newPage;
     renderList();
+    selectBook(state.activeId, true);
   } else {
-    selectBook(state.activeId);
+    selectBook(state.activeId, true);
   }
 }
 document.addEventListener('keydown', (e) => {

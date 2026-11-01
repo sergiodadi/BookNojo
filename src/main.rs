@@ -42,7 +42,8 @@ const CORE_DATA_EPOCH_OFFSET: i64 = 978_307_200;
 #[derive(Parser, Debug)]
 #[command(
     name = "bc_export",
-    about = "Exporte une collection Book Collector (Core Data/SQLite) en CSV et JSON"
+    about = "Exporte une collection Book Collector (Core Data/SQLite) en CSV et JSON",
+    version
 )]
 struct Args {
     /// Chemin vers le fichier Book_data, ou vers le dossier .bkcp qui le contient.

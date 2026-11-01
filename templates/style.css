@@ -201,7 +201,8 @@
     cursor: pointer;
   }
   #rows .row:hover { background: #f0f3fb; }
-  #rows .row.active { background: #dce8fd; }
+  #rows .row.active { background: #dce8fd; box-shadow: inset 2px 0 0 var(--accent); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   #rows .row .thumb {
     width: 32px;
     height: 44px;

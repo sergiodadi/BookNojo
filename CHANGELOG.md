@@ -4,6 +4,12 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.15.0] - 2026-11-01
+
+### Added
+- Option `--version` / `-V` en ligne de commande (clap, lit `Cargo.toml`).
+- Focus clavier plus visible : la ligne atteinte par les flèches défile automatiquement dans la vue et affiche un repère (liseré bleu) en plus du fond coloré ; contour `:focus-visible` sur les contrôles natifs (boutons, champs, menus).
+
 ## [0.14.0] - 2026-11-01
 
 ### Added
