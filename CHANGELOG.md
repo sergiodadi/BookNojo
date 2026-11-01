@@ -4,6 +4,12 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.13.0] - 2026-11-01
+
+### Added
+- Dépôt git initialisé (`cargo new` l'avait déjà fait, mais sans commit) : premier commit `v0.12.1` taggé, `.gitignore` étendu pour exclure `testdata/` (données personnelles, ~400 Mo) en plus de `target/`.
+- `refresh-testdata.sh` : resynchronise `testdata/MyCollection.bkcp` depuis la vraie collection et la repasse en lecture seule, pour ne plus avoir à le faire à la main quand la collection réelle évolue.
+
 ## [0.12.1] - 2026-11-01
 
 ### Changed
