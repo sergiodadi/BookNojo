@@ -35,6 +35,13 @@
 //! barrières indépendantes (un flag ET une confirmation tapée), pour qu'une
 //! vraie écriture ne puisse jamais être accidentelle ou silencieuse — y
 //! compris si cette commande est un jour appelée depuis un script.
+//!
+//! - `add` : enchaîne resolve+plan+commit en une seule commande contre une
+//!   base, et peut répéter tout le pipeline contre une seconde base
+//!   (`--also-db`, ex. la vraie collection tant qu'elle existe encore) —
+//!   résolue et planifiée indépendamment pour chaque base, jamais une
+//!   simple recopie du même SQL (les clés primaires et valeurs déjà
+//!   connues divergent dès que deux bases évoluent séparément).
 
 use anyhow::{bail, Context, Result};
 use book_collector_export::{
@@ -108,6 +115,35 @@ enum Command {
         #[arg(long)]
         backup_dir: Option<PathBuf>,
         /// Autorise l'écriture même si le chemin ressemble à la vraie collection.
+        #[arg(long)]
+        force: bool,
+    },
+    /// Enchaîne resolve+plan+commit en une seule commande — l'usage courant,
+    /// une fois les 4 étapes validées séparément. Peut aussi répéter tout le
+    /// pipeline contre une seconde base (--also-db), ex. la vraie collection
+    /// Book Collector tant qu'elle existe encore.
+    Add {
+        /// Base principale.
+        #[arg(long)]
+        db: PathBuf,
+        /// Fichier JSON décrivant le nouveau livre (voir MANUAL.md § 7).
+        #[arg(long)]
+        input: PathBuf,
+        /// Seconde base à alimenter aussi, en plus de --db (ex. la vraie
+        /// collection) — le livre y est résolu et planifié séparément, pas
+        /// une simple recopie du plan de la base principale.
+        #[arg(long)]
+        also_db: Option<PathBuf>,
+        /// Dossier de sauvegarde (par défaut : "backups" à côté de chaque base).
+        #[arg(long)]
+        backup_dir: Option<PathBuf>,
+        /// Dossier où écrire les fichiers resolved/plan intermédiaires de
+        /// chaque base (par défaut : bc_add_runs/<horodatage>/).
+        #[arg(long)]
+        runs_dir: Option<PathBuf>,
+        /// Autorise l'écriture sur --db et/ou --also-db si l'un ressemble à
+        /// la vraie collection — la confirmation tapée (voir `commit`)
+        /// s'applique quand même à chaque base concernée.
         #[arg(long)]
         force: bool,
     },
@@ -1334,6 +1370,70 @@ fn cmd_commit(db: PathBuf, plan: PathBuf, backup_dir: Option<PathBuf>, force: bo
     Ok(())
 }
 
+// --------------------------------------------------------------------- Add
+
+/// Runs resolve → plan → commit against a single `db`, writing the two
+/// intermediate files under `runs_dir` (named after `label`, so running
+/// this twice for `--db`/`--also-db` never collides) — reuses the exact
+/// same `cmd_resolve`/`cmd_plan`/`cmd_commit` already exercised on their
+/// own, rather than duplicating any of their logic.
+fn run_one_leg(
+    db: &std::path::Path,
+    input: &std::path::Path,
+    runs_dir: &std::path::Path,
+    label: &str,
+    backup_dir: Option<PathBuf>,
+    force: bool,
+) -> Result<()> {
+    let resolved_path = runs_dir.join(format!("{label}.resolved.json"));
+    let plan_path = runs_dir.join(format!("{label}.plan.sql"));
+    cmd_resolve(db.to_path_buf(), input.to_path_buf(), resolved_path.clone())?;
+    cmd_plan(db.to_path_buf(), resolved_path, Some(plan_path.clone()))?;
+    cmd_commit(db.to_path_buf(), plan_path, backup_dir, force)
+}
+
+fn cmd_add(
+    db: PathBuf,
+    input: PathBuf,
+    also_db: Option<PathBuf>,
+    backup_dir: Option<PathBuf>,
+    runs_dir: Option<PathBuf>,
+    force: bool,
+) -> Result<()> {
+    let ts_output = std::process::Command::new("date")
+        .arg("+%Y%m%d-%H%M%S")
+        .output()
+        .context("obtention de l'horodatage pour le dossier de run")?;
+    let timestamp = String::from_utf8_lossy(&ts_output.stdout).trim().to_string();
+    let runs_dir = runs_dir.unwrap_or_else(|| PathBuf::from("bc_add_runs").join(&timestamp));
+    std::fs::create_dir_all(&runs_dir)
+        .with_context(|| format!("création de {}", runs_dir.display()))?;
+    println!("Fichiers intermédiaires (resolved/plan) dans : {}", runs_dir.display());
+
+    println!();
+    println!("=== Base principale : {} ===", db.display());
+    run_one_leg(&db, &input, &runs_dir, "principale", backup_dir.clone(), force)
+        .with_context(|| format!("échec sur la base principale ({})", db.display()))?;
+    println!("✅ Livre ajouté à la base principale ({}).", db.display());
+
+    if let Some(also) = also_db {
+        println!();
+        println!("=== Seconde base : {} ===", also.display());
+        match run_one_leg(&also, &input, &runs_dir, "aussi", backup_dir, force) {
+            Ok(()) => println!("✅ Livre ajouté aussi à : {}", also.display()),
+            Err(e) => {
+                println!("❌ Échec sur la seconde base ({}) : {e}", also.display());
+                println!("   La base principale, elle, a bien été mise à jour. Vous pouvez");
+                println!("   retenter cette seconde écriture plus tard — rien n'a été perdu,");
+                println!("   les fichiers resolved/plan de cette tentative restent dans");
+                println!("   {} pour être rejoués avec `bc_add commit`.", runs_dir.display());
+            }
+        }
+    }
+
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
@@ -1341,6 +1441,9 @@ fn main() -> Result<()> {
         Command::Plan { db, resolved, output } => cmd_plan(db, resolved, output),
         Command::Guard { db, backup_dir } => cmd_guard(db, backup_dir),
         Command::Commit { db, plan, backup_dir, force } => cmd_commit(db, plan, backup_dir, force),
+        Command::Add { db, input, also_db, backup_dir, runs_dir, force } => {
+            cmd_add(db, input, also_db, backup_dir, runs_dir, force)
+        }
     }
 }
 

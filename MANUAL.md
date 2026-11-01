@@ -333,6 +333,59 @@ Avant d'utiliser `--force` sur la vraie collection :
   --force
 ```
 
+### Usage courant — `bc_add add`
+
+Une fois les 4 étapes comprises et validées séparément, pas besoin de les
+relancer à la main à chaque livre : `bc_add add` les enchaîne en une seule
+commande (resolve → plan → commit).
+
+```bash
+./target/release/bc_add add \
+  --db collection/MyCollection.bkcp \
+  --input new_book.json
+```
+
+Elle accepte aussi `--also-db` pour répéter tout le pipeline contre une
+**seconde** base — typiquement la vraie collection Book Collector, tant
+qu'elle existe encore (voir § "Pourquoi une base indépendante" ci-dessous).
+Chaque base est résolue et planifiée **séparément** : ce n'est jamais le
+même SQL recopié d'une base à l'autre, parce que les clés primaires et les
+valeurs déjà connues (éditeurs, genres...) divergent dès que deux bases
+évoluent indépendamment.
+
+```bash
+./target/release/bc_add add \
+  --db collection/MyCollection.bkcp \
+  --also-db "~/Documents/Collectorz/Book Collector/MyCollection.bkcp" \
+  --input new_book.json \
+  --force
+```
+
+`--force` s'applique aux deux bases si l'une ou l'autre ressemble à la
+vraie collection ; la confirmation `OUI` (étape 6) reste exigée à chaque
+exécution. Si la base principale échoue, rien n'est tenté sur la seconde.
+Si c'est la seconde qui échoue (ex. confirmation refusée, ou Book
+Collector encore ouvert), la première reste acquise — les fichiers
+`resolved`/`plan` de la tentative sont conservés dans
+`bc_add_runs/<horodatage>/` pour être rejoués plus tard avec
+`bc_add commit`, sans tout recommencer.
+
+### Pourquoi une base indépendante de Book Collector
+
+Book Collector est une application Intel qui dépend de Rosetta 2 pour
+fonctionner sur Apple Silicon. Apple a annoncé la fin programmée de
+Rosetta 2 : support complet jusqu'à macOS 27 "Golden Gate" (automne 2026),
+largement retiré à partir de macOS 28 (automne 2027). Book Collector a
+donc une espérance de vie d'environ un an sur un Mac à jour, sauf mise à
+jour de l'éditeur vers Apple Silicon natif.
+
+L'objectif à terme est une base **indépendante** de l'application — amorcée
+une fois depuis la vraie collection, puis alimentée uniquement par ces
+outils, sans jamais dépendre de Book Collector pour continuer à grandir.
+`--also-db` sert la période de transition : continuer à alimenter la vraie
+application tant qu'elle tourne encore, en parallèle de la nouvelle base.
+L'emplacement et l'extension de cette base persistante restent à définir.
+
 ## 8. Dépannage
 
 - **`--db "~/Documents/..."` échoue** : si le chemin est entre guillemets,

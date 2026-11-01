@@ -4,6 +4,20 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.25.0] - 2026-11-01
+
+### Added
+- **`bc_add add`** : enchaîne resolve+plan+commit en une seule commande, au lieu des 4 étapes séparées — l'usage courant désormais que les 4 étapes ont été validées individuellement.
+- **`--also-db`** sur `bc_add add` : répète tout le pipeline (resolve+plan+commit) contre une seconde base, par exemple la vraie collection Book Collector tant qu'elle existe encore — en préparation d'une future base persistante propre au projet (extension/emplacement encore à définir), destinée à terme à remplacer la vraie collection quand Book Collector cessera de fonctionner (voir note Rosetta ci-dessous). Chaque base est résolue et planifiée **indépendamment** (jamais une recopie du même SQL — les clés primaires et valeurs déjà connues divergent dès que deux bases évoluent séparément). Si la base principale échoue, rien n'est tenté sur la seconde ; si la seconde échoue (ex. confirmation refusée), la première reste acquise et les fichiers resolved/plan de la tentative sont conservés pour être rejoués plus tard avec `bc_add commit`.
+- Les fichiers intermédiaires de chaque run sont écrits dans un dossier horodaté (`bc_add_runs/<horodatage>/` par défaut), un par base (`principale.*`/`aussi.*`), inspectables après coup.
+
+### Context
+- Recherche web confirmant la fin programmée de Rosetta 2 (macOS 27 "Golden Gate", automne 2026, est la dernière version à le supporter pleinement ; macOS 28, automne 2027, le retire largement) — Book Collector, une app Intel, cessera donc probablement de fonctionner d'ici environ un an. C'est le moteur de `--also-db` : préparer la transition vers une base indépendante de l'app pendant qu'elle fonctionne encore.
+
+### Verified
+- Testé de bout en bout avec un `$HOME` factice entièrement isolé (jamais le vrai répertoire utilisateur) tenant lieu de "vraie collection" : base principale seule (succède), `--also-db` sans `--force` (refusée proprement, base principale déjà acquise), `--also-db --force` + `OUI` (les deux bases acceptent le livre, `PRAGMA integrity_check` = `ok` sur les deux, une seule ligne insérée dans chacune).
+- 10 tests unitaires toujours au vert.
+
 ## [0.24.0] - 2026-11-01
 
 ### Added
