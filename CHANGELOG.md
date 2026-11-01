@@ -4,6 +4,16 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.18.0] - 2026-11-01
+
+### Added
+- `bc_add` devient multi-commandes : `bc_add resolve` (étape 1, inchangée) et **`bc_add plan`** (étape 2) — calcule et affiche le SQL d'insertion complet (nouvelles valeurs flyweight, fiche `ZCOLLECTIBLE`, jointures auteurs/genres/sujets, mises à jour `Z_PRIMARYKEY.Z_MAX`) à partir du résultat de `resolve`, **sans jamais l'exécuter**.
+- La sortie de `plan` liste explicitement ce qu'elle ne couvre pas encore (`ZSEARCHSTRING`, tri de titre, identifiants de synchro CLZ Cloud, prénom/nom séparés pour les auteurs).
+- `entity_ent_id`/`entity_max_pk` génériques dans `lib.rs` (généralisent l'ancien `book_entity_id`), pour allouer de nouvelles clés primaires sans collision.
+
+### Changed
+- CLI de `bc_add` : `--db/--input/--output` passent sous la sous-commande `resolve` (`bc_add resolve --db ... --input ...` au lieu de `bc_add --db ...`).
+
 ## [0.17.0] - 2026-11-01
 
 ### Added

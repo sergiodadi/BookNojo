@@ -103,21 +103,23 @@ tests, le projet garde une copie en lecture seule dans `testdata/` :
 cargo test --release       # lance les tests unitaires
 ```
 
-## 7. (Expérimental) Préparer l'ajout d'un livre — étape 1/6
+## 7. (Expérimental) Préparer l'ajout d'un livre — étapes 1 et 2 sur 6
 
-> ⚠️ En cours de construction, par étapes. Cette étape ne fait **aucune
+> ⚠️ En cours de construction, par étapes. Ces deux étapes ne font **aucune
 > écriture** dans la base — `bc_add` ouvre `Book_data` en lecture seule, au
-> même titre que `bc_export`. L'écriture réelle (étapes suivantes) ne sera
-> ajoutée qu'après des garde-fous explicites (sauvegarde automatique,
-> vérification que Book Collector n'est pas lancé, transaction unique) et
-> sera d'abord testée sur une copie inscriptible dédiée, jamais sur la
-> vraie collection.
+> même titre que `bc_export`, quelle que soit la sous-commande. L'écriture
+> réelle (étapes suivantes) ne sera ajoutée qu'après des garde-fous
+> explicites (sauvegarde automatique, vérification que Book Collector n'est
+> pas lancé, transaction unique) et sera d'abord testée sur une copie
+> inscriptible dédiée, jamais sur la vraie collection.
 
-`bc_add` prend un fichier JSON décrivant un nouveau livre (champs de
-l'onglet "Main" de la fenêtre "Add Book" de l'application) et vérifie, pour
-chaque valeur de type liste (auteur, éditeur, genre, format, langue, pays,
-sujet, emplacement), si elle existe déjà dans la collection ou si elle
-serait créée.
+### Étape 1 — `bc_add resolve`
+
+Prend un fichier JSON décrivant un nouveau livre (champs de l'onglet
+"Main" de la fenêtre "Add Book" de l'application) et vérifie, pour chaque
+valeur de type liste (auteur, éditeur, genre, format, langue, pays, sujet,
+emplacement), si elle existe déjà dans la collection ou si elle serait
+créée.
 
 ### Produire ce JSON : le formulaire dans la page HTML
 
@@ -133,7 +135,7 @@ existante). Il **ne contacte aucun serveur et n'écrit rien** : cliquer sur
 ### Ou à la main
 
 ```bash
-./target/release/bc_add \
+./target/release/bc_add resolve \
   --db testdata/MyCollection.bkcp \
   --input new_book.json \
   --output resolved-book.json
@@ -156,6 +158,24 @@ Exemple de `new_book.json` :
 
 La sous-collection (`collection`) doit déjà exister — contrairement aux
 autres champs, `bc_add` ne sait pas en créer une nouvelle.
+
+### Étape 2 — `bc_add plan`
+
+À partir du fichier produit par `resolve`, calcule et **affiche** le SQL
+d'insertion exact (nouvelles clés primaires, lignes à créer, mises à jour
+des compteurs `Z_PRIMARYKEY`) — sans jamais l'exécuter.
+
+```bash
+./target/release/bc_add plan \
+  --db testdata/MyCollection.bkcp \
+  --resolved resolved-book.json \
+  --output plan.sql
+```
+
+La sortie se termine par une liste explicite de ce que ce plan **ne**
+couvre **pas** encore (ex. la ligne compagnon `ZSEARCHSTRING`, le tri de
+titre, les identifiants de synchronisation CLZ Cloud) — à lire avant de
+passer aux étapes suivantes.
 
 ## 8. Dépannage
 

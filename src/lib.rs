@@ -74,16 +74,31 @@ pub fn resolve_images_dir(db_path: &Path) -> Option<PathBuf> {
     }
 }
 
-/// Looks up the Core Data entity id for "Book" by name, rather than
+/// Looks up a Core Data entity's `Z_ENT` id by name, rather than
 /// hardcoding it — the numeric id is a model-compiler detail, not
 /// guaranteed stable across collections.
+pub fn entity_ent_id(conn: &Connection, name: &str) -> Result<i64> {
+    conn.query_row("SELECT Z_ENT FROM Z_PRIMARYKEY WHERE Z_NAME = ?1", [name], |row| {
+        row.get(0)
+    })
+    .with_context(|| format!("entité Core Data '{name}' introuvable dans Z_PRIMARYKEY (schéma inattendu)"))
+}
+
+/// Looks up a Core Data entity's `Z_MAX` — the highest primary key handed
+/// out so far for that entity (shared by every sub-entity in a
+/// single-table-inheritance hierarchy, e.g. Book shares Collectible's
+/// counter). Used by `bc_add plan` to allocate new primary keys without
+/// colliding with ones the app itself would hand out next.
+pub fn entity_max_pk(conn: &Connection, name: &str) -> Result<i64> {
+    conn.query_row("SELECT Z_MAX FROM Z_PRIMARYKEY WHERE Z_NAME = ?1", [name], |row| {
+        row.get(0)
+    })
+    .with_context(|| format!("entité Core Data '{name}' introuvable dans Z_PRIMARYKEY (schéma inattendu)"))
+}
+
+/// Thin wrapper kept for `bc_export`'s existing call sites.
 pub fn book_entity_id(conn: &Connection) -> Result<i64> {
-    conn.query_row(
-        "SELECT Z_ENT FROM Z_PRIMARYKEY WHERE Z_NAME = 'Book'",
-        [],
-        |row| row.get(0),
-    )
-    .context("entité Core Data 'Book' introuvable dans Z_PRIMARYKEY (schéma inattendu)")
+    entity_ent_id(conn, "Book")
 }
 
 /// Resolves a sous-collection name (ZCOLLECTION.ZTITLE, case-insensitive) to
