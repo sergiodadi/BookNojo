@@ -4,6 +4,23 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.22.0] - 2026-11-01
+
+### Added
+- Le formulaire **« Ajouter un livre »** de la page HTML couvre maintenant tous les champs de l'étape 5 (`bc_add resolve`/`plan`), via des sous-onglets dans le panneau : Principal, Détails, Personnel, Crédits & Personnages, Contenus, Intrigue & Notes, Liens.
+  - Crédits : champ à puces, comme auteurs/genres/sujets.
+  - Personnages : petite liste avec nom + alias.
+  - Contenus : sous-formulaire (titre, sous-titre, pages, auteurs à puces) avec bouton « Ajouter ce contenu », qui accumule une liste d'entrées.
+  - Liens : liste url + description.
+  - Les sept panneaux restent tous montés dans le DOM (juste masqués en CSS) : un seul envoi du formulaire récupère les champs de tous les onglets, pas seulement de celui affiché au moment du clic.
+  - Les champs `original_publisher`/`original_country`/`original_language` réutilisent les mêmes suggestions (`<datalist>`) que les champs principaux ; `series` et `condition` ont aussi des suggestions (déjà présents dans le JSON exporté). Les autres nouveaux champs liste (édition, imprimeur, volume, type de papier, propriétaire, magasin) n'ont pas encore de suggestions — `bc_export` n'exporte pas encore ces valeurs.
+- `setupRepeatableList()` dans `app.js`, pendant de `setupChipField()` pour les entrées à plusieurs sous-champs (personnages, contenus, liens) ; `setupChipField()` retourne désormais un handle (`render`/`clear`) pour permettre de vider le mini-formulaire « auteurs de ce contenu » après chaque ajout.
+
+### Verified
+- `node --check` sur `app.js` : syntaxe valide.
+- Vérification statique (script Node ad hoc, pas de navigateur) : toutes les balises HTML du template du formulaire sont équilibrées (div/label/form/button/span/select/textarea/datalist/h2/h3/p), et chaque `name=` de champ correspond exactement à un appel `str()/num()/flt()/bool()` dans `onAddFormSubmit` — aucun champ manquant ni orphelin.
+- **Non vérifié visuellement dans un navigateur** : Chrome refuse les clics synthétiques via Accessibility sur cette machine (même limite déjà rencontrée plus tôt dans ce projet) — je n'ai pas pu cliquer sur les nouveaux onglets moi-même pour confirmer leur rendu. À vérifier à l'ouverture par l'utilisateur.
+
 ## [0.21.0] - 2026-11-01
 
 ### Added

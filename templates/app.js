@@ -73,9 +73,15 @@ const state = {
   panel: 'library', // 'library' | 'stats' | 'add'
 };
 
-// Multi-value chip fields for the "add a book" form live outside `state` so
-// they survive switching to another panel and back without being reset.
-const addFormState = { authors: [], genres: [], subjects: [] };
+// Multi-value chip/repeatable fields for the "add a book" form live outside
+// `state` so they survive switching to another panel and back without being
+// reset.
+const addFormState = {
+  authors: [], genres: [], subjects: [], credits: [],
+  characters: [], // { name, alias }
+  contents: [],   // { title, subtitle, number_of_pages, authors: [] }
+  links: [],      // { url, description }
+};
 
 function renderTabs() {
   tabsEl.innerHTML = '';
@@ -579,51 +585,204 @@ function setupChipField(inputId, chipsId, arr) {
     }
   });
   renderChips();
+  return {
+    render: renderChips,
+    clear: () => { arr.length = 0; renderChips(); },
+  };
 }
+
+/// Renders a list of free-form entries (characters, contents, links) with a
+/// "✕" to remove each one — the repeatable-group equivalent of a chip field
+/// for entries that carry more than one sub-field.
+function setupRepeatableList(listId, arr, renderLabel) {
+  const listEl = document.getElementById(listId);
+  function render() {
+    listEl.innerHTML = '';
+    arr.forEach((entry, i) => {
+      const row = document.createElement('div');
+      row.className = 'rep-row';
+      const label = document.createElement('span');
+      label.textContent = renderLabel(entry);
+      const x = document.createElement('span');
+      x.className = 'chip-x';
+      x.textContent = '✕';
+      x.title = 'Retirer';
+      x.addEventListener('click', () => {
+        arr.splice(i, 1);
+        render();
+      });
+      row.appendChild(label);
+      row.appendChild(x);
+      listEl.appendChild(row);
+    });
+  }
+  render();
+  return { render };
+}
+
+const ADD_TABS = [
+  { id: 'main', label: 'Principal' },
+  { id: 'details', label: 'Détails' },
+  { id: 'personal', label: 'Personnel' },
+  { id: 'credits', label: 'Crédits & Personnages' },
+  { id: 'contents', label: 'Contenus' },
+  { id: 'plot', label: 'Intrigue & Notes' },
+  { id: 'links', label: 'Liens' },
+];
 
 function renderAddForm() {
   const collOptions = collections
     .map(c => `<option value="${escapeHtml(c)}"${c === state.collection ? ' selected' : ''}>${escapeHtml(c)}</option>`)
     .join('');
+  const tabButtons = ADD_TABS
+    .map((t, i) => `<button type="button" class="add-tab-btn${i === 0 ? ' active' : ''}" data-tab="${t.id}">${t.label}</button>`)
+    .join('');
 
   addPaneEl.innerHTML = `
     <div class="add-wrap">
-      <h2>Ajouter un livre (préparation — étape 1)</h2>
+      <h2>Ajouter un livre (préparation — étapes 1 à 5)</h2>
       <p class="add-hint">Ce formulaire ne modifie aucune donnée existante : il génère un
         fichier <code>new_book.json</code> à télécharger, à passer ensuite à
-        <code>bc_add</code> pour vérifier ce qui existe déjà avant toute écriture réelle.</p>
+        <code>bc_add</code> pour vérifier ce qui existe déjà avant toute écriture réelle.
+        L'onglet Couvertures n'est pas repris ici (gestion de fichiers, hors périmètre).</p>
+      <div class="add-tabs">${tabButtons}</div>
       <form id="addForm">
-        <div class="add-grid">
-          <label>Titre *<input name="title" required></label>
-          <label>Sous-titre<input name="subtitle"></label>
-          <label>ISBN<input name="isbn"></label>
-          <label>Nombre de pages<input name="number_of_pages" type="number" min="0"></label>
-          <label>Année<input name="publication_year" placeholder="yyyy" maxlength="4"></label>
-          <label>Mois<input name="publication_month" placeholder="mm" maxlength="2"></label>
-          <label>Jour<input name="publication_day" placeholder="dd" maxlength="2"></label>
-          <label>Éditeur<input name="publisher" list="dl-publisher"></label>
-          <label>Format<input name="format" list="dl-format"></label>
-          <label>Langue<input name="language" list="dl-language"></label>
-          <label>Pays<input name="country" list="dl-country"></label>
-          <label>Emplacement<input name="location" list="dl-location"></label>
-          <label>Quantité<input name="quantity" type="number" min="1" value="1"></label>
-          <label>Sous-collection *<select name="collection" required>${collOptions}</select></label>
+        <div id="addtab-main" class="add-tab-panel">
+          <div class="add-grid">
+            <label>Titre *<input name="title" required></label>
+            <label>Sous-titre<input name="subtitle"></label>
+            <label>ISBN<input name="isbn"></label>
+            <label>Nombre de pages<input name="number_of_pages" type="number" min="0"></label>
+            <label>Année<input name="publication_year" placeholder="yyyy" maxlength="4"></label>
+            <label>Mois<input name="publication_month" placeholder="mm" maxlength="2"></label>
+            <label>Jour<input name="publication_day" placeholder="dd" maxlength="2"></label>
+            <label>Éditeur<input name="publisher" list="dl-publisher"></label>
+            <label>Format<input name="format" list="dl-format"></label>
+            <label>Langue<input name="language" list="dl-language"></label>
+            <label>Pays<input name="country" list="dl-country"></label>
+            <label>Emplacement<input name="location" list="dl-location"></label>
+            <label>Quantité<input name="quantity" type="number" min="1" value="1"></label>
+            <label>Sous-collection *<select name="collection" required>${collOptions}</select></label>
+          </div>
+          <div class="add-list-field">
+            <span class="label">Auteurs</span>
+            <div id="authorsChips" class="chip-input"></div>
+            <input id="authorInput" list="dl-author" placeholder="Nom, puis Entrée">
+          </div>
+          <div class="add-list-field">
+            <span class="label">Genres</span>
+            <div id="genresChips" class="chip-input"></div>
+            <input id="genreInput" list="dl-genre" placeholder="Genre, puis Entrée">
+          </div>
+          <div class="add-list-field">
+            <span class="label">Sujets</span>
+            <div id="subjectsChips" class="chip-input"></div>
+            <input id="subjectInput" list="dl-subject" placeholder="Sujet, puis Entrée">
+          </div>
         </div>
 
-        <div class="add-list-field">
-          <span class="label">Auteurs</span>
-          <div id="authorsChips" class="chip-input"></div>
-          <input id="authorInput" list="dl-author" placeholder="Nom, puis Entrée">
+        <div id="addtab-details" class="add-tab-panel hidden">
+          <div class="add-grid">
+            <label>Édition<input name="edition"></label>
+            <label>Imprimé par<input name="printed_by"></label>
+            <label>Série<input name="series" list="dl-series"></label>
+            <label>Volume<input name="volume"></label>
+            <label>Type de papier<input name="paper_type"></label>
+            <label>Hauteur<input name="height" placeholder="ex. 21 cm"></label>
+            <label>Largeur<input name="width" placeholder="ex. 14 cm"></label>
+            <label>Dewey<input name="dewey"></label>
+            <label>LCCN<input name="lccn"></label>
+            <label>Tirage<input name="printing" type="number" min="1"></label>
+            <label>Durée audio (min)<input name="audio_length_minutes" type="number" min="0"></label>
+          </div>
+          <label class="add-full">Dédicace<textarea name="dedication" rows="2"></textarea></label>
+          <div class="add-checkrow">
+            <label class="add-check"><input type="checkbox" name="first_edition"> Première édition</label>
+            <label class="add-check"><input type="checkbox" name="abridged"> Abrégé</label>
+          </div>
+          <h3 class="add-subhead">Édition originale</h3>
+          <div class="add-grid">
+            <label>Titre original<input name="original_title"></label>
+            <label>Sous-titre original<input name="original_subtitle"></label>
+            <label>Éditeur original<input name="original_publisher" list="dl-publisher"></label>
+            <label>Pays original<input name="original_country" list="dl-country"></label>
+            <label>Langue originale<input name="original_language" list="dl-language"></label>
+            <label>Année orig.<input name="original_publication_year" placeholder="yyyy" maxlength="4"></label>
+            <label>Mois orig.<input name="original_publication_month" placeholder="mm" maxlength="2"></label>
+            <label>Jour orig.<input name="original_publication_day" placeholder="dd" maxlength="2"></label>
+          </div>
         </div>
-        <div class="add-list-field">
-          <span class="label">Genres</span>
-          <div id="genresChips" class="chip-input"></div>
-          <input id="genreInput" list="dl-genre" placeholder="Genre, puis Entrée">
+
+        <div id="addtab-personal" class="add-tab-panel hidden">
+          <div class="add-grid">
+            <label>État<input name="condition" list="dl-condition"></label>
+            <label>Propriétaire<input name="owner"></label>
+            <label>Magasin<input name="store"></label>
+            <label>Valeur actuelle<input name="current_value" type="number" step="0.01" min="0"></label>
+            <label>Prix d'achat<input name="purchase_price" type="number" step="0.01" min="0"></label>
+            <label>Prix de couverture<input name="cover_price" type="number" step="0.01" min="0"></label>
+            <label>Année d'achat<input name="purchase_year" placeholder="yyyy" maxlength="4"></label>
+            <label>Mois d'achat<input name="purchase_month" placeholder="mm" maxlength="2"></label>
+            <label>Jour d'achat<input name="purchase_day" placeholder="dd" maxlength="2"></label>
+            <label>Nombre de lectures<input name="read_times" type="number" min="0"></label>
+            <label>Année de lecture<input name="read_year" placeholder="yyyy" maxlength="4"></label>
+            <label>Mois de lecture<input name="read_month" placeholder="mm" maxlength="2"></label>
+            <label>Jour de lecture<input name="read_day" placeholder="dd" maxlength="2"></label>
+            <label>Note (0–10)<input name="my_rating" type="number" min="0" max="10"></label>
+          </div>
+          <div class="add-checkrow">
+            <label class="add-check"><input type="checkbox" name="rare"> Rare</label>
+            <label class="add-check"><input type="checkbox" name="read_it"> Lu</label>
+          </div>
         </div>
-        <div class="add-list-field">
-          <span class="label">Sujets</span>
-          <div id="subjectsChips" class="chip-input"></div>
-          <input id="subjectInput" list="dl-subject" placeholder="Sujet, puis Entrée">
+
+        <div id="addtab-credits" class="add-tab-panel hidden">
+          <div class="add-list-field">
+            <span class="label">Crédits (traducteur, illustrateur...)</span>
+            <div id="creditsChips" class="chip-input"></div>
+            <input id="creditInput" placeholder="Nom, puis Entrée">
+          </div>
+          <div class="add-rep-field">
+            <span class="label">Personnages</span>
+            <div id="charactersList" class="rep-list"></div>
+            <div class="rep-add-row">
+              <input id="characterNameInput" placeholder="Nom du personnage">
+              <input id="characterAliasInput" placeholder="Alias (optionnel)">
+              <button type="button" id="characterAddBtn">Ajouter</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="addtab-contents" class="add-tab-panel hidden">
+          <p class="add-hint">Plusieurs histoires/nouvelles dans ce livre, chacune avec ses propres auteurs.</p>
+          <div id="contentsList" class="rep-list"></div>
+          <div class="add-rep-field">
+            <div class="add-grid">
+              <label>Titre<input id="contentTitleInput"></label>
+              <label>Sous-titre<input id="contentSubtitleInput"></label>
+              <label>Nombre de pages<input id="contentPagesInput" type="number" min="0"></label>
+            </div>
+            <div class="add-list-field">
+              <span class="label">Auteurs de ce contenu</span>
+              <div id="contentAuthorsChips" class="chip-input"></div>
+              <input id="contentAuthorInput" list="dl-author" placeholder="Nom, puis Entrée">
+            </div>
+            <button type="button" id="contentAddBtn">➕ Ajouter ce contenu</button>
+          </div>
+        </div>
+
+        <div id="addtab-plot" class="add-tab-panel hidden">
+          <label class="add-full">Intrigue / résumé<textarea name="plot" rows="4"></textarea></label>
+          <label class="add-full">Notes<textarea name="notes" rows="4"></textarea></label>
+        </div>
+
+        <div id="addtab-links" class="add-tab-panel hidden">
+          <div id="linksList" class="rep-list"></div>
+          <div class="rep-add-row">
+            <input id="linkUrlInput" placeholder="https://…">
+            <input id="linkDescInput" placeholder="Description (optionnel)">
+            <button type="button" id="linkAddBtn">Ajouter</button>
+          </div>
         </div>
 
         <datalist id="dl-publisher"></datalist>
@@ -634,6 +793,8 @@ function renderAddForm() {
         <datalist id="dl-author"></datalist>
         <datalist id="dl-genre"></datalist>
         <datalist id="dl-subject"></datalist>
+        <datalist id="dl-series"></datalist>
+        <datalist id="dl-condition"></datalist>
 
         <div class="add-actions">
           <button type="submit" class="primary">⬇️ Générer new_book.json</button>
@@ -648,7 +809,9 @@ function renderAddForm() {
   // Suggestions drawn from values already used somewhere in the loaded
   // collection(s) — helps match existing spelling exactly, which is what
   // bc_add's case-insensitive resolution needs to "reuse" rather than
-  // "create" a lookup value.
+  // "create" a lookup value. Only fields already present in bc_export's
+  // JSON (see Book in src/main.rs) get suggestions; edition/printed_by/
+  // volume/paper_type/owner/store/credits/characters don't have any yet.
   fillDatalist('dl-publisher', distinctFieldValues(b => [b.publisher]));
   fillDatalist('dl-format', distinctFieldValues(b => [b.format]));
   fillDatalist('dl-language', distinctFieldValues(b => [b.language]));
@@ -657,10 +820,77 @@ function renderAddForm() {
   fillDatalist('dl-author', distinctFieldValues(b => b.authors || []));
   fillDatalist('dl-genre', distinctFieldValues(b => b.genres || []));
   fillDatalist('dl-subject', distinctFieldValues(b => b.subjects || []));
+  fillDatalist('dl-series', distinctFieldValues(b => [b.series]));
+  fillDatalist('dl-condition', distinctFieldValues(b => [b.condition]));
 
   setupChipField('authorInput', 'authorsChips', addFormState.authors);
   setupChipField('genreInput', 'genresChips', addFormState.genres);
   setupChipField('subjectInput', 'subjectsChips', addFormState.subjects);
+  setupChipField('creditInput', 'creditsChips', addFormState.credits);
+
+  document.querySelectorAll('.add-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.add-tab-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      document.querySelectorAll('.add-tab-panel').forEach(p => p.classList.add('hidden'));
+      document.getElementById('addtab-' + btn.dataset.tab).classList.remove('hidden');
+    });
+  });
+
+  const charactersListHandle = setupRepeatableList(
+    'charactersList', addFormState.characters,
+    c => c.alias ? `${c.name} (alias : ${c.alias})` : c.name,
+  );
+  document.getElementById('characterAddBtn').addEventListener('click', () => {
+    const nameEl = document.getElementById('characterNameInput');
+    const aliasEl = document.getElementById('characterAliasInput');
+    const name = nameEl.value.trim();
+    if (!name) return;
+    addFormState.characters.push({ name, alias: aliasEl.value.trim() || null });
+    nameEl.value = '';
+    aliasEl.value = '';
+    charactersListHandle.render();
+  });
+
+  const linksListHandle = setupRepeatableList(
+    'linksList', addFormState.links,
+    l => l.description ? `${l.description} — ${l.url}` : l.url,
+  );
+  document.getElementById('linkAddBtn').addEventListener('click', () => {
+    const urlEl = document.getElementById('linkUrlInput');
+    const descEl = document.getElementById('linkDescInput');
+    const url = urlEl.value.trim();
+    if (!url) return;
+    addFormState.links.push({ url, description: descEl.value.trim() || null });
+    urlEl.value = '';
+    descEl.value = '';
+    linksListHandle.render();
+  });
+
+  const contentsListHandle = setupRepeatableList(
+    'contentsList', addFormState.contents,
+    c => `${c.title}${c.authors.length ? ' — ' + c.authors.join(', ') : ''}`,
+  );
+  let contentDraftAuthors = [];
+  const contentAuthorsChips = setupChipField('contentAuthorInput', 'contentAuthorsChips', contentDraftAuthors);
+  document.getElementById('contentAddBtn').addEventListener('click', () => {
+    const titleEl = document.getElementById('contentTitleInput');
+    const subtitleEl = document.getElementById('contentSubtitleInput');
+    const pagesEl = document.getElementById('contentPagesInput');
+    const title = titleEl.value.trim();
+    if (!title) return;
+    addFormState.contents.push({
+      title,
+      subtitle: subtitleEl.value.trim() || null,
+      number_of_pages: pagesEl.value ? parseInt(pagesEl.value, 10) : null,
+      authors: [...contentDraftAuthors],
+    });
+    titleEl.value = '';
+    subtitleEl.value = '';
+    pagesEl.value = '';
+    contentAuthorsChips.clear();
+    contentsListHandle.render();
+  });
 
   document.getElementById('addForm').addEventListener('submit', onAddFormSubmit);
 }
@@ -676,6 +906,11 @@ function onAddFormSubmit(e) {
     const v = str(name);
     return v ? parseInt(v, 10) : null;
   };
+  const flt = (name) => {
+    const v = str(name);
+    return v ? parseFloat(v) : null;
+  };
+  const bool = (name) => fd.get(name) === 'on';
   const msgEl = document.getElementById('addMsg');
 
   const title = str('title');
@@ -708,6 +943,54 @@ function onAddFormSubmit(e) {
     location: str('location'),
     quantity: num('quantity') || 1,
     collection: collectionName,
+
+    edition: str('edition'),
+    printed_by: str('printed_by'),
+    series: str('series'),
+    volume: str('volume'),
+    paper_type: str('paper_type'),
+    height: str('height'),
+    width: str('width'),
+    dewey: str('dewey'),
+    lccn: str('lccn'),
+    dedication: str('dedication'),
+    first_edition: bool('first_edition'),
+    printing: num('printing'),
+    abridged: bool('abridged'),
+    audio_length_minutes: num('audio_length_minutes'),
+    original_title: str('original_title'),
+    original_subtitle: str('original_subtitle'),
+    original_publisher: str('original_publisher'),
+    original_country: str('original_country'),
+    original_language: str('original_language'),
+    original_publication_year: str('original_publication_year'),
+    original_publication_month: str('original_publication_month'),
+    original_publication_day: str('original_publication_day'),
+
+    condition: str('condition'),
+    owner: str('owner'),
+    store: str('store'),
+    current_value: flt('current_value'),
+    purchase_price: flt('purchase_price'),
+    cover_price: flt('cover_price'),
+    purchase_year: str('purchase_year'),
+    purchase_month: str('purchase_month'),
+    purchase_day: str('purchase_day'),
+    rare: bool('rare'),
+    read_it: bool('read_it'),
+    read_times: num('read_times'),
+    read_year: str('read_year'),
+    read_month: str('read_month'),
+    read_day: str('read_day'),
+    my_rating: num('my_rating'),
+
+    plot: str('plot'),
+    notes: str('notes'),
+
+    credits: [...addFormState.credits],
+    characters: addFormState.characters.map(c => ({ ...c })),
+    contents: addFormState.contents.map(c => ({ ...c, authors: [...c.authors] })),
+    links: addFormState.links.map(l => ({ ...l })),
   };
 
   const blob = new Blob([JSON.stringify(book, null, 2)], { type: 'application/json' });

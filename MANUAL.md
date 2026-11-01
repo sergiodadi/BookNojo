@@ -125,12 +125,18 @@ créée.
 
 Pas besoin d'écrire le JSON à la main : la page générée par
 `--html` (§ 5) a un bouton **➕ Ajouter un livre** dans l'en-tête. Le
-formulaire reprend les champs ci-dessus, avec auto-complétion sur les
-valeurs déjà utilisées dans la collection (pour que l'orthographe
-corresponde exactement et que `bc_add` reconnaisse bien une valeur
-existante). Il **ne contacte aucun serveur et n'écrit rien** : cliquer sur
-"Générer new_book.json" télécharge simplement le fichier, à passer ensuite
-à `bc_add` comme décrit ci-dessous.
+formulaire est organisé en sous-onglets, comme la fenêtre "Add Book" de
+Book Collector : **Principal**, **Détails**, **Personnel**, **Crédits &
+Personnages**, **Contenus**, **Intrigue & Notes**, **Liens** (tous les
+champs des étapes 1 et 5, § 7). Auto-complétion sur les valeurs déjà
+utilisées dans la collection quand elles sont disponibles (éditeur,
+format, langue, pays, emplacement, auteur, genre, sujet, série, état —
+pas encore pour édition/imprimeur/volume/type de papier/propriétaire/
+magasin, que `bc_export` n'exporte pas encore). Il **ne contacte aucun
+serveur et n'écrit rien** : cliquer sur "Générer new_book.json" télécharge
+simplement le fichier, à passer ensuite à `bc_add` comme décrit ci-dessous.
+Changer d'onglet ne perd aucune saisie : un seul envoi du formulaire
+récupère les champs de tous les onglets.
 
 ### Ou à la main
 
