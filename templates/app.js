@@ -683,11 +683,11 @@ function renderAddForm() {
 
         <div id="addtab-details" class="add-tab-panel hidden">
           <div class="add-grid">
-            <label>Édition<input name="edition"></label>
-            <label>Imprimé par<input name="printed_by"></label>
+            <label>Édition<input name="edition" list="dl-edition"></label>
+            <label>Imprimé par<input name="printed_by" list="dl-printedby"></label>
             <label>Série<input name="series" list="dl-series"></label>
-            <label>Volume<input name="volume"></label>
-            <label>Type de papier<input name="paper_type"></label>
+            <label>Volume<input name="volume" list="dl-volume"></label>
+            <label>Type de papier<input name="paper_type" list="dl-papertype"></label>
             <label>Hauteur<input name="height" placeholder="ex. 21 cm"></label>
             <label>Largeur<input name="width" placeholder="ex. 14 cm"></label>
             <label>Dewey<input name="dewey"></label>
@@ -716,8 +716,8 @@ function renderAddForm() {
         <div id="addtab-personal" class="add-tab-panel hidden">
           <div class="add-grid">
             <label>État<input name="condition" list="dl-condition"></label>
-            <label>Propriétaire<input name="owner"></label>
-            <label>Magasin<input name="store"></label>
+            <label>Propriétaire<input name="owner" list="dl-owner"></label>
+            <label>Magasin<input name="store" list="dl-store"></label>
             <label>Valeur actuelle<input name="current_value" type="number" step="0.01" min="0"></label>
             <label>Prix d'achat<input name="purchase_price" type="number" step="0.01" min="0"></label>
             <label>Prix de couverture<input name="cover_price" type="number" step="0.01" min="0"></label>
@@ -795,6 +795,12 @@ function renderAddForm() {
         <datalist id="dl-subject"></datalist>
         <datalist id="dl-series"></datalist>
         <datalist id="dl-condition"></datalist>
+        <datalist id="dl-edition"></datalist>
+        <datalist id="dl-printedby"></datalist>
+        <datalist id="dl-volume"></datalist>
+        <datalist id="dl-papertype"></datalist>
+        <datalist id="dl-owner"></datalist>
+        <datalist id="dl-store"></datalist>
 
         <div class="add-actions">
           <button type="submit" class="primary">⬇️ Générer new_book.json</button>
@@ -809,9 +815,9 @@ function renderAddForm() {
   // Suggestions drawn from values already used somewhere in the loaded
   // collection(s) — helps match existing spelling exactly, which is what
   // bc_add's case-insensitive resolution needs to "reuse" rather than
-  // "create" a lookup value. Only fields already present in bc_export's
-  // JSON (see Book in src/main.rs) get suggestions; edition/printed_by/
-  // volume/paper_type/owner/store/credits/characters don't have any yet.
+  // "create" a lookup value. credits/characters still have none — no
+  // ZCREATOR/ZCHARACTER data exported yet (those tables were empty in the
+  // test collection, see bc_add's step 5 "non couvert" notes).
   fillDatalist('dl-publisher', distinctFieldValues(b => [b.publisher]));
   fillDatalist('dl-format', distinctFieldValues(b => [b.format]));
   fillDatalist('dl-language', distinctFieldValues(b => [b.language]));
@@ -822,6 +828,12 @@ function renderAddForm() {
   fillDatalist('dl-subject', distinctFieldValues(b => b.subjects || []));
   fillDatalist('dl-series', distinctFieldValues(b => [b.series]));
   fillDatalist('dl-condition', distinctFieldValues(b => [b.condition]));
+  fillDatalist('dl-edition', distinctFieldValues(b => [b.edition]));
+  fillDatalist('dl-printedby', distinctFieldValues(b => [b.printed_by]));
+  fillDatalist('dl-volume', distinctFieldValues(b => [b.volume]));
+  fillDatalist('dl-papertype', distinctFieldValues(b => [b.paper_type]));
+  fillDatalist('dl-owner', distinctFieldValues(b => [b.owner]));
+  fillDatalist('dl-store', distinctFieldValues(b => [b.store]));
 
   setupChipField('authorInput', 'authorsChips', addFormState.authors);
   setupChipField('genreInput', 'genresChips', addFormState.genres);

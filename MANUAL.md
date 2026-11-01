@@ -129,11 +129,12 @@ formulaire est organisé en sous-onglets, comme la fenêtre "Add Book" de
 Book Collector : **Principal**, **Détails**, **Personnel**, **Crédits &
 Personnages**, **Contenus**, **Intrigue & Notes**, **Liens** (tous les
 champs des étapes 1 et 5, § 7). Auto-complétion sur les valeurs déjà
-utilisées dans la collection quand elles sont disponibles (éditeur,
-format, langue, pays, emplacement, auteur, genre, sujet, série, état —
-pas encore pour édition/imprimeur/volume/type de papier/propriétaire/
-magasin, que `bc_export` n'exporte pas encore). Il **ne contacte aucun
-serveur et n'écrit rien** : cliquer sur "Générer new_book.json" télécharge
+utilisées dans la collection pour tous les champs de type liste (éditeur,
+format, langue, pays, emplacement, auteur, genre, sujet, série, état,
+édition, imprimeur, volume, type de papier, propriétaire, magasin) — pas
+encore pour les crédits/personnages (`bc_export` n'exporte pas ces
+tables, vides dans la collection de test — voir § 7, étape 5). Il **ne
+contacte aucun serveur et n'écrit rien** : cliquer sur "Générer new_book.json" télécharge
 simplement le fichier, à passer ensuite à `bc_add` comme décrit ci-dessous.
 Changer d'onglet ne perd aucune saisie : un seul envoi du formulaire
 récupère les champs de tous les onglets.

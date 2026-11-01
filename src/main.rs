@@ -92,6 +92,12 @@ struct Book {
     country: Option<String>,
     condition: Option<String>,
     location: Option<String>,
+    edition: Option<String>,
+    printed_by: Option<String>,
+    volume: Option<String>,
+    paper_type: Option<String>,
+    owner: Option<String>,
+    store: Option<String>,
     publication_day: Option<String>,
     publication_month: Option<String>,
     publication_year: Option<String>,
@@ -258,7 +264,13 @@ fn load_books(
             ctry_l.ZDISPLAYNAME AS country,
             cond_l.ZDISPLAYNAME AS condition,
             loc_l.ZDISPLAYNAME  AS location,
-            col.ZTITLE          AS collection_name
+            col.ZTITLE          AS collection_name,
+            edit_l.ZDISPLAYNAME  AS edition,
+            prnt_l.ZDISPLAYNAME  AS printed_by,
+            vol_l.ZDISPLAYNAME   AS volume,
+            paper_l.ZDISPLAYNAME AS paper_type,
+            own_p.ZDISPLAYNAME   AS owner,
+            store_l.ZDISPLAYNAME AS store
         FROM ZCOLLECTIBLE c
         LEFT JOIN ZPUBLISHER p   ON p.Z_PK = c.ZPUBLISHER
         LEFT JOIN ZLOOKUPITEMDELEGATE pub_l  ON pub_l.Z_PK = p.ZDELEGATE
@@ -275,6 +287,18 @@ fn load_books(
         LEFT JOIN ZLOCATION loc  ON loc.Z_PK = c.ZLOCATION
         LEFT JOIN ZLOOKUPITEMDELEGATE loc_l  ON loc_l.Z_PK = loc.ZDELEGATE
         LEFT JOIN ZCOLLECTION col ON col.Z_PK = c.ZCOLLECTION
+        LEFT JOIN ZEDITION edit  ON edit.Z_PK = c.ZEDITION
+        LEFT JOIN ZLOOKUPITEMDELEGATE edit_l ON edit_l.Z_PK = edit.ZDELEGATE
+        LEFT JOIN ZPRINTEDBY prnt ON prnt.Z_PK = c.ZPRINTEDBY
+        LEFT JOIN ZLOOKUPITEMDELEGATE prnt_l ON prnt_l.Z_PK = prnt.ZDELEGATE
+        LEFT JOIN ZVOLUME vol    ON vol.Z_PK = c.ZVOLUME
+        LEFT JOIN ZLOOKUPITEMDELEGATE vol_l  ON vol_l.Z_PK = vol.ZDELEGATE
+        LEFT JOIN ZPAPERTYPE paper ON paper.Z_PK = c.ZPAPERTYPE
+        LEFT JOIN ZLOOKUPITEMDELEGATE paper_l ON paper_l.Z_PK = paper.ZDELEGATE
+        LEFT JOIN ZOWNER own     ON own.Z_PK = c.ZOWNER
+        LEFT JOIN ZPERSONDELEGATE own_p ON own_p.Z_PK = own.ZDELEGATE
+        LEFT JOIN ZSTORE store   ON store.Z_PK = c.ZSTORE
+        LEFT JOIN ZLOOKUPITEMDELEGATE store_l ON store_l.Z_PK = store.ZDELEGATE
         WHERE c.Z_ENT = ?1 AND (?2 IS NULL OR c.ZCOLLECTION = ?2)
         ORDER BY c.Z_PK";
 
@@ -312,6 +336,12 @@ fn load_books(
             country: row.get(22)?,
             condition: row.get(23)?,
             location: row.get(24)?,
+            edition: row.get(26)?,
+            printed_by: row.get(27)?,
+            volume: row.get(28)?,
+            paper_type: row.get(29)?,
+            owner: row.get(30)?,
+            store: row.get(31)?,
             publication_day: row.get(12)?,
             publication_month: row.get(13)?,
             publication_year: row.get(14)?,
@@ -352,6 +382,12 @@ fn write_csv(path: &Path, books: &[Book]) -> Result<()> {
         "country",
         "condition",
         "location",
+        "edition",
+        "printed_by",
+        "volume",
+        "paper_type",
+        "owner",
+        "store",
         "publication_day",
         "publication_month",
         "publication_year",
@@ -391,6 +427,12 @@ fn write_csv(path: &Path, books: &[Book]) -> Result<()> {
             opt(&b.country),
             opt(&b.condition),
             opt(&b.location),
+            opt(&b.edition),
+            opt(&b.printed_by),
+            opt(&b.volume),
+            opt(&b.paper_type),
+            opt(&b.owner),
+            opt(&b.store),
             opt(&b.publication_day),
             opt(&b.publication_month),
             opt(&b.publication_year),

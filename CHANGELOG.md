@@ -4,6 +4,16 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.23.0] - 2026-11-01
+
+### Added
+- `bc_export` exporte désormais 6 champs supplémentaires (CSV et JSON) : `edition`, `printed_by`, `volume`, `paper_type`, `owner`, `store` — mêmes jointures que `publisher`/`format`/`condition`... (`owner` via `ZPERSONDELEGATE`, les cinq autres via `ZLOOKUPITEMDELEGATE`).
+- Le formulaire HTML « Ajouter un livre » (onglets Détails/Personnel) a maintenant de l'auto-complétion sur ces 6 champs, en plus de ceux déjà couverts — complète la limite notée dans la v0.22.0.
+
+### Verified
+- Testé sur `testdata/` : 16 fiches avec `edition` renseignée, 1653 avec `owner` = "Serge" (cohérent avec l'unique ligne `ZOWNER` de la collection), 0 avec `store` (cohérent avec `ZSTORE` vide) — les nouvelles colonnes CSV/JSON correspondent aux données réelles.
+- 7 tests unitaires toujours au vert ; vérifications statiques du formulaire (syntaxe JS, balises équilibrées) refaites après l'ajout des nouveaux `<datalist>`.
+
 ## [0.22.0] - 2026-11-01
 
 ### Added
