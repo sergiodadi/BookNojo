@@ -103,15 +103,15 @@ tests, le projet garde une copie en lecture seule dans `testdata/` :
 cargo test --release       # lance les tests unitaires
 ```
 
-## 7. (Expérimental) Préparer l'ajout d'un livre — étapes 1 et 2 sur 6
+## 7. (Expérimental) Préparer l'ajout d'un livre — étapes 1 à 4 sur 6
 
-> ⚠️ En cours de construction, par étapes. Ces deux étapes ne font **aucune
-> écriture** dans la base — `bc_add` ouvre `Book_data` en lecture seule, au
-> même titre que `bc_export`, quelle que soit la sous-commande. L'écriture
-> réelle (étapes suivantes) ne sera ajoutée qu'après des garde-fous
-> explicites (sauvegarde automatique, vérification que Book Collector n'est
-> pas lancé, transaction unique) et sera d'abord testée sur une copie
-> inscriptible dédiée, jamais sur la vraie collection.
+> ⚠️ En cours de construction, par étapes. `bc_add resolve`, `plan` et
+> `guard` ne font **aucune écriture** (base ouverte en lecture seule).
+> Depuis l'étape 4, `bc_add commit` **écrit réellement** dans `Book_data` —
+> mais uniquement sur une copie dédiée et inscriptible (`testdata-rw/`),
+> jamais sur la vraie collection : un garde-fou refuse d'écrire si le
+> chemin ressemble à `~/Documents/Collectorz/...` (sauf `--force`, à
+> réserver à l'étape 6, pas encore atteinte).
 
 ### Étape 1 — `bc_add resolve`
 
@@ -194,10 +194,39 @@ Deux vérifications :
 - **Sauvegarde automatique** de `Book_data` (et de `-wal`/`-shm` si
   présents) dans `backups/` à côté de la base, horodatée.
 
-`lib.rs` contient aussi `run_write_transaction()`, qui exécutera le SQL
-d'une étape dans une transaction unique (tout ou rien) — écrite mais pas
-encore appelée par aucune commande : l'exécution réelle est l'étape
-suivante, pas encore implémentée.
+### Étape 4 — `bc_add commit`
+
+Exécute le SQL produit par `plan`, **dans une transaction unique** (tout ou
+rien — en cas d'erreur, aucune modification n'est conservée). C'est la
+première commande qui écrit réellement dans `Book_data`.
+
+```bash
+# D'abord une copie inscriptible dédiée (jamais testdata/, lui reste
+# en lecture seule) :
+./refresh-testdata-rw.sh
+
+./target/release/bc_add commit \
+  --db testdata-rw/MyCollection.bkcp \
+  --plan plan.sql
+```
+
+Avant d'écrire, `commit` vérifie dans l'ordre :
+1. que le chemin de la base **ne ressemble pas** à la vraie collection
+   (`~/Documents/Collectorz/...`) — refus immédiat sinon, sans option de
+   contournement accidentelle (`--force` existe mais est réservé à
+   l'étape 6, qui n'a pas encore été abordée) ;
+2. que Book Collector **n'est pas lancé** (comme `guard`) ;
+3. crée une sauvegarde horodatée de `Book_data` (comme `guard`) ;
+4. ouvre la base en lecture-écriture et exécute tout le SQL de `plan.sql`
+   dans une seule transaction (`run_write_transaction` dans `lib.rs`).
+
+Vérifié en conditions réelles sur `testdata-rw/` : `PRAGMA integrity_check`
+reste à `ok` après coup, et Book Collector, rouvert sur cette copie,
+affiche le compteur de livres incrémenté de 1, sans aucune alerte de
+corruption. La fiche du nouveau livre n'apparaît pas encore dans la
+**recherche texte** de l'application — normal, `ZSEARCHSTRING` fait partie
+des champs "non couverts" listés par `plan` (§ Étape 2) ; elle reste en
+revanche consultable en parcourant/triant la liste.
 
 ## 8. Dépannage
 

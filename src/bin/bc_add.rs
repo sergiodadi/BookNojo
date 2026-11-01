@@ -12,16 +12,18 @@
 //! - `guard` (étape 3) : vérifie que Book Collector n'est pas lancé et
 //!   produit une sauvegarde horodatée de la base. Ne modifie toujours rien
 //!   dans `Book_data` lui-même (seule une copie est créée ailleurs).
-//!
-//! Étape suivante (pas encore implémentée) : le premier commit réel —
-//! exécution du plan dans une transaction unique (`run_write_transaction`,
-//! déjà écrit dans lib.rs, pas encore appelé) — sur une copie inscriptible
-//! dédiée, jamais sur `testdata/` ni sur la vraie collection.
+//! - `commit` (étape 4) : exécute le SQL produit par `plan`, dans une seule
+//!   transaction (tout ou rien), après les mêmes vérifications que `guard`
+//!   (refuse si Book Collector tourne, sauvegarde d'abord). C'est la
+//!   SEULE sous-commande qui écrit réellement — et elle refuse de le faire
+//!   sur un chemin qui ressemble à la vraie collection
+//!   (`~/Documents/Collectorz/...`) sauf `--force` explicite.
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use book_collector_export::{
     backup_sqlite_store, entity_ent_id, entity_max_pk, is_book_collector_running,
     resolve_collection_pk, resolve_db_path, resolve_lookup_pk, resolve_person_pk,
+    run_write_transaction,
 };
 use clap::{Parser, Subcommand};
 use rusqlite::{Connection, OpenFlags};
@@ -74,6 +76,23 @@ enum Command {
         /// Dossier de sauvegarde (par défaut : "backups" à côté de la base).
         #[arg(long)]
         backup_dir: Option<PathBuf>,
+    },
+    /// Étape 4 : exécute le plan — la SEULE sous-commande qui écrit réellement.
+    Commit {
+        /// Chemin vers le fichier Book_data, ou vers le dossier .bkcp qui le contient.
+        /// Doit être une copie de test (ex. testdata-rw/) — refusé sur un chemin
+        /// qui ressemble à la vraie collection, sauf --force.
+        #[arg(long)]
+        db: PathBuf,
+        /// Fichier .sql produit par `bc_add plan`.
+        #[arg(long)]
+        plan: PathBuf,
+        /// Dossier de sauvegarde (par défaut : "backups" à côté de la base).
+        #[arg(long)]
+        backup_dir: Option<PathBuf>,
+        /// Autorise l'écriture même si le chemin ressemble à la vraie collection.
+        #[arg(long)]
+        force: bool,
     },
 }
 
@@ -585,10 +604,85 @@ fn cmd_guard(db: PathBuf, backup_dir: Option<PathBuf>) -> Result<()> {
         println!("   Fermez l'app, puis relancez cette vérification.");
     } else {
         println!("=> Conditions réunies pour une écriture : app fermée, sauvegarde faite.");
-        println!("   (L'exécution réelle du plan — étape suivante — n'est pas encore câblée ;");
-        println!("    run_write_transaction() existe dans lib.rs mais n'est appelée par");
-        println!("    aucune commande pour l'instant.)");
+        println!("   (`bc_add commit` refait ces deux vérifications lui-même avant d'écrire.)");
     }
+
+    Ok(())
+}
+
+// ----------------------------------------------------------------- Commit
+
+/// Refuses paths under `~/Documents/Collectorz/...` — the known location
+/// of the user's real collection — unless `force` is set. Cheap defense in
+/// depth on top of the standing rule to only ever write to a dedicated
+/// test copy.
+fn looks_like_real_collection(db_path: &std::path::Path) -> Option<PathBuf> {
+    let home = std::env::var_os("HOME")?;
+    let real_prefix = PathBuf::from(home).join("Documents").join("Collectorz");
+    db_path.starts_with(&real_prefix).then_some(real_prefix)
+}
+
+/// Strips `bc_add plan`'s own transaction wrapper (`BEGIN TRANSACTION;`
+/// ... `COMMIT;`) and comments from its SQL output, since
+/// `run_write_transaction` opens its own transaction — keeps just the
+/// INSERT/UPDATE statements to execute.
+fn strip_plan_wrapper(raw_sql: &str) -> String {
+    raw_sql
+        .lines()
+        .filter(|line| {
+            let t = line.trim();
+            !(t.is_empty() || t.starts_with("--") || t == "BEGIN TRANSACTION;" || t == "COMMIT;")
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn cmd_commit(db: PathBuf, plan: PathBuf, backup_dir: Option<PathBuf>, force: bool) -> Result<()> {
+    let db_path = resolve_db_path(&db)?;
+    println!("Base: {}", db_path.display());
+
+    if !force {
+        if let Some(real_prefix) = looks_like_real_collection(&db_path) {
+            bail!(
+                "{} se trouve sous {} — ça ressemble à la vraie collection.\n\
+                 Cette commande écrit réellement dans la base : utilisez une copie dédiée\n\
+                 (ex. testdata-rw/, via ./refresh-testdata-rw.sh), ou passez --force si\n\
+                 vous savez vraiment ce que vous faites.",
+                db_path.display(),
+                real_prefix.display()
+            );
+        }
+    }
+
+    if is_book_collector_running()? {
+        bail!("Book Collector est actuellement lancé — fermez l'app avant d'écrire (voir `bc_add guard`).");
+    }
+    println!("✅ Book Collector n'est pas lancé.");
+
+    let backup_dir = backup_dir.unwrap_or_else(|| {
+        db_path
+            .parent()
+            .map(|p| p.join("backups"))
+            .unwrap_or_else(|| PathBuf::from("backups"))
+    });
+    let backup_path =
+        backup_sqlite_store(&db_path, &backup_dir).context("création de la sauvegarde avant écriture")?;
+    println!("✅ Sauvegarde créée: {}", backup_path.display());
+
+    let raw_sql =
+        std::fs::read_to_string(&plan).with_context(|| format!("lecture de {}", plan.display()))?;
+    let statements = strip_plan_wrapper(&raw_sql);
+    let statement_count = statements.lines().filter(|l| !l.trim().is_empty()).count();
+    println!("Exécution de {statement_count} instruction(s) dans une transaction unique...");
+
+    run_write_transaction(&db_path, |conn| {
+        conn.execute_batch(&statements).context("exécution du plan SQL")
+    })?;
+
+    println!("✅ Commit réussi — tout ou rien, comme prévu.");
+    println!();
+    println!("Vérification recommandée : ouvrez {} dans Book Collector", db_path.display());
+    println!("et confirmez que le livre apparaît correctement (titre, auteurs, couverture...).");
 
     Ok(())
 }
@@ -599,5 +693,6 @@ fn main() -> Result<()> {
         Command::Resolve { db, input, output } => cmd_resolve(db, input, output),
         Command::Plan { db, resolved, output } => cmd_plan(db, resolved, output),
         Command::Guard { db, backup_dir } => cmd_guard(db, backup_dir),
+        Command::Commit { db, plan, backup_dir, force } => cmd_commit(db, plan, backup_dir, force),
     }
 }

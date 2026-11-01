@@ -4,6 +4,15 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.20.0] - 2026-11-01
+
+### Added
+- **`bc_add commit`** (étape 4) : exécute le SQL produit par `plan` dans une transaction unique (tout ou rien) — première commande qui écrit réellement dans `Book_data`. Avant toute écriture : refus si le chemin ressemble à la vraie collection (`~/Documents/Collectorz/...`, sauf `--force`, non utilisé avant l'étape 6), vérification que Book Collector n'est pas lancé, et sauvegarde horodatée automatique (réutilise les fonctions de `guard`).
+- `refresh-testdata-rw.sh` : copie dédiée **inscriptible** (`testdata-rw/`), distincte de `testdata/` qui reste en lecture seule — sert uniquement aux tests d'écriture de `bc_add commit`, jamais la vraie collection.
+
+### Verified
+- Testé de bout en bout sur `testdata-rw/` : `bc_add commit` insère le livre de test ("Le Nom du Vent"), `PRAGMA integrity_check` reste `ok`, et Book Collector rouvert sur cette copie affiche le compteur de livres incrémenté de 1 (1242 → 1243), sans alerte de corruption. La recherche texte ne trouve pas encore la fiche (`ZSEARCHSTRING` non couvert, déjà documenté par `plan`), mais la fiche est bien présente et correcte en parcourant la liste.
+
 ## [0.19.0] - 2026-11-01
 
 ### Added
