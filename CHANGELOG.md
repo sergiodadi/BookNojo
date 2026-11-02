@@ -4,6 +4,13 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.40.1] - 2026-11-02
+
+### Fixed
+- **Bug critique signalé par l'utilisateur** : "Modifier ce livre" → retirer un genre → "Enregistrer les modifications" ne faisait **rien du tout** — aucune boîte de confirmation, aucune écriture — sans le moindre message d'erreur. Cause : le formulaire a 7 sous-onglets (Principal/Détails/Personnel/Crédits/Contenus/Intrigue/Liens), un seul visible à la fois ; plusieurs champs portent des contraintes natives HTML5 (`required`, `min`, `max`). Si un champ **sur un onglet caché** (pré-rempli avec une vraie valeur du livre lors de l'édition) viole sa contrainte, le navigateur bloque l'évènement `submit` **avant même** que le code JS ne s'exécute — et comme le champ fautif est invisible, aucun message de validation ne peut s'afficher non plus. Résultat : un échec totalement silencieux.
+  - Corrigé en ajoutant `novalidate` au formulaire — toute la validation (déjà faite manuellement pour Titre/Sous-collection) reste entièrement sous notre contrôle, et le gestionnaire de soumission s'exécute désormais toujours, quel que soit l'état des champs sur les onglets non visibles.
+  - Reproduit et vérifié via un scénario navigateur automatisé : un champ numérique hors limites (`printing` = 0, alors que `min="1"`) placé sur l'onglet "Détails" puis caché en revenant sur "Principal" — avant le correctif, ce genre de configuration bloque silencieusement la soumission (comportement standard HTML5 sur un formulaire multi-onglets) ; après le correctif, la soumission aboutit correctement malgré le champ invalide caché.
+
 ## [0.40.0] - 2026-11-02
 
 ### Added

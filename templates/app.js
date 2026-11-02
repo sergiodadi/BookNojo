@@ -757,7 +757,7 @@ function renderAddForm() {
            <code>bc_add</code> pour vérifier ce qui existe déjà avant toute écriture réelle.
            L'onglet Couvertures n'est pas repris ici (gestion de fichiers, hors périmètre).`}</p>
       <div class="add-tabs">${tabButtons}</div>
-      <form id="addForm">
+      <form id="addForm" novalidate>
         <div id="addtab-main" class="add-tab-panel">
           <div class="add-grid">
             <label>Titre *<input name="title" required></label>
