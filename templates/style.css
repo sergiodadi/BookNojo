@@ -1,14 +1,23 @@
   :root {
-    --panel-bg: #f5f5f7;
-    --border: #d9d9de;
-    --text: #1c1c1e;
-    --muted: #6e6e73;
-    --accent: #3478f6;
+    --panel-bg: #f3f4f7;
+    --surface: #ffffff;
+    --surface-alt: #eceef3;
+    --surface-alt-hover: #e2e5ed;
+    --border: #d8dae1;
+    --border-strong: #c2c5d0;
+    --text: #1b1c20;
+    --muted: #686b74;
+    --accent: #2e5bd7;
+    --accent-dark: #2147ad;
+    --accent-soft: #e8edfc;
+    --shadow-sm: 0 1px 2px rgba(20, 24, 38, .06), 0 1px 1px rgba(20, 24, 38, .04);
+    --shadow-md: 0 6px 16px rgba(20, 24, 38, .10);
   }
   * { box-sizing: border-box; }
   body {
     margin: 0;
     font-family: -apple-system, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
     color: var(--text);
     background: var(--panel-bg);
     height: 100vh;
@@ -20,35 +29,43 @@
     align-items: center;
     gap: 8px;
     padding: 10px 16px;
-    background: #ececef;
+    background: var(--surface);
     border-bottom: 1px solid var(--border);
+    box-shadow: var(--shadow-sm);
+    position: relative;
+    z-index: 1;
   }
-  header h1 { font-size: 15px; margin: 0; font-weight: 600; }
+  header h1 { font-size: 15px; margin: 0; font-weight: 700; letter-spacing: -.01em; }
   #appVersion {
     margin-left: auto;
     border: 1px solid var(--border);
-    background: white;
+    background: var(--surface-alt);
     border-radius: 6px;
     padding: 6px 12px;
     font-size: 12px;
-    color: var(--text);
+    font-weight: 500;
+    color: var(--muted);
     font-variant-numeric: tabular-nums;
   }
   #statsBtn, #addBtn {
     border: 1px solid var(--border);
-    background: white;
+    background: var(--surface);
     border-radius: 6px;
     padding: 6px 12px;
     font-size: 12px;
+    font-weight: 500;
+    color: var(--text);
     cursor: pointer;
+    transition: background .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease;
   }
-  #statsBtn.active, #addBtn.active { background: var(--accent); color: white; border-color: var(--accent); }
+  #statsBtn:hover, #addBtn:hover { background: var(--surface-alt); border-color: var(--border-strong); }
+  #statsBtn.active, #addBtn.active { background: var(--accent); color: white; border-color: var(--accent); box-shadow: var(--shadow-sm); }
   #tabs {
     display: flex;
     gap: 6px;
     padding: 8px 16px;
     overflow-x: auto;
-    background: #e2e2e6;
+    background: var(--surface-alt);
     border-bottom: 1px solid var(--border);
   }
   #tabs .tab {
@@ -56,14 +73,18 @@
     padding: 5px 12px;
     border-radius: 999px;
     font-size: 12px;
+    font-weight: 500;
     white-space: nowrap;
     cursor: pointer;
-    background: white;
+    background: var(--surface);
     border: 1px solid var(--border);
     color: var(--text);
+    transition: background .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease;
   }
+  #tabs .tab:hover { border-color: var(--accent); color: var(--accent); }
   #tabs .tab .n { color: var(--muted); margin-left: 5px; }
-  #tabs .tab.active { background: var(--accent); border-color: var(--accent); color: white; }
+  #tabs .tab.active { background: var(--accent); border-color: var(--accent); color: white; font-weight: 600; box-shadow: var(--shadow-sm); }
+  #tabs .tab.active:hover { color: white; }
   #tabs .tab.active .n { color: #dce8ff; }
 
   main { flex: 1; display: flex; min-height: 0; }
@@ -91,7 +112,9 @@
     border-radius: 6px;
     border: 1px solid var(--border);
     font-size: 12.5px;
-    background: white;
+    font-weight: 500;
+    color: var(--text);
+    background: var(--surface);
   }
   #azbar {
     display: flex;
@@ -104,13 +127,15 @@
     border: 1px solid transparent;
     background: none;
     font-size: 10.5px;
+    font-weight: 600;
     color: var(--muted);
     padding: 2px 4px;
     border-radius: 4px;
     cursor: pointer;
     min-width: 18px;
+    transition: background .15s ease, color .15s ease;
   }
-  #azbar button:hover { background: #ececef; }
+  #azbar button:hover { background: var(--surface-alt); color: var(--text); }
   #azbar button.active { background: var(--accent); color: white; }
   #groupList { flex: 1; overflow-y: auto; }
   #groupList .g {
@@ -128,8 +153,8 @@
     white-space: nowrap;
   }
   #groupList .g .n { color: var(--muted); font-size: 11px; flex-shrink: 0; }
-  #groupList .g:hover { background: #f0f3fb; }
-  #groupList .g.active { background: #dce8fd; font-weight: 600; }
+  #groupList .g:hover { background: var(--surface-alt); }
+  #groupList .g.active { background: var(--accent-soft); color: var(--accent-dark); font-weight: 600; }
 
   /* Right side: book list on top, detail card below — like the app. */
   #rightCol { flex: 1; display: flex; flex-direction: column; min-width: 0; }
@@ -162,31 +187,39 @@
     border-radius: 6px;
     border: 1px solid var(--border);
     font-size: 13px;
-    background: white;
+    background: var(--surface);
+    color: var(--text);
+    transition: border-color .15s ease;
   }
+  #listToolbar input:hover, #listToolbar select:hover { border-color: var(--border-strong); }
   #listToolbar input { width: 200px; }
-  #viewToggle { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+  #viewToggle { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--surface); }
   #viewToggle button {
     border: none;
-    background: white;
+    background: var(--surface);
     padding: 6px 10px;
     font-size: 12px;
+    font-weight: 500;
     cursor: pointer;
     color: var(--muted);
+    transition: background .15s ease, color .15s ease;
   }
+  #viewToggle button:hover { background: var(--surface-alt); color: var(--text); }
   #viewToggle button + button { border-left: 1px solid var(--border); }
   #viewToggle button.active { background: var(--accent); color: white; }
+  #viewToggle button.active:hover { background: var(--accent); color: white; }
 
   #colHeader {
     display: flex;
     gap: 16px;
     padding: 4px 14px 4px 56px;
     font-size: 10.5px;
+    font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: .04em;
+    letter-spacing: .05em;
     color: var(--muted);
     border-bottom: 1px solid var(--border);
-    background: #fafafa;
+    background: var(--surface-alt);
   }
   #bookListPane.grid #colHeader { display: none; }
   #colHeader span { cursor: pointer; }
@@ -201,8 +234,8 @@
     border-bottom: 1px solid #ededf0;
     cursor: pointer;
   }
-  #rows .row:hover { background: #f0f3fb; }
-  #rows .row.active { background: #dce8fd; box-shadow: inset 2px 0 0 var(--accent); }
+  #rows .row:hover { background: var(--surface-alt); }
+  #rows .row.active { background: var(--accent-soft); box-shadow: inset 2px 0 0 var(--accent); }
   :focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
   #rows .row .thumb {
     width: 32px;
@@ -238,7 +271,7 @@
     border-bottom: none;
     border-radius: 6px;
   }
-  #bookListPane.grid .row:hover, #bookListPane.grid .row.active { background: #dce8fd; }
+  #bookListPane.grid .row:hover, #bookListPane.grid .row.active { background: var(--accent-soft); }
   #bookListPane.grid .row .thumb { width: 100%; height: 118px; }
   #bookListPane.grid .row .txt { padding: 4px 2px; }
   #bookListPane.grid .row .t {
@@ -263,12 +296,15 @@
   }
   #pager button {
     border: 1px solid var(--border);
-    background: white;
+    background: var(--surface);
     border-radius: 6px;
     padding: 4px 10px;
     cursor: pointer;
     font-size: 12px;
+    color: var(--text);
+    transition: background .15s ease, border-color .15s ease;
   }
+  #pager button:hover:not(:disabled) { background: var(--surface-alt); border-color: var(--border-strong); }
   #pager button:disabled { opacity: .35; cursor: default; }
 
   #detail {
@@ -311,11 +347,13 @@
   .tags { display: flex; flex-wrap: wrap; gap: 6px; }
   .tag {
     font-size: 11px;
+    font-weight: 500;
     padding: 3px 9px;
     border-radius: 999px;
     background: #2b2d35;
     border: 1px solid #3c3e47;
     color: #d4d5db;
+    transition: background .15s ease, border-color .15s ease, color .15s ease;
   }
   .tag.genre { cursor: pointer; }
   .tag.genre:hover { background: #3a3d47; }
@@ -333,7 +371,7 @@
   body.panel-stats main { display: none; }
   body.panel-stats #statsPane { display: block; }
   .stats-wrap { max-width: 920px; margin: 0 auto; }
-  .stats-wrap h2 { font-size: 17px; margin: 0 0 14px; }
+  .stats-wrap h2 { font-size: 18px; font-weight: 700; letter-spacing: -.01em; margin: 0 0 14px; }
   .stat-summary {
     display: flex;
     flex-wrap: wrap;
@@ -342,14 +380,15 @@
     color: var(--muted);
     margin-bottom: 22px;
     padding: 12px 16px;
-    background: white;
+    background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 10px;
+    box-shadow: var(--shadow-sm);
   }
   .stat-summary strong { color: var(--text); }
   .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 18px; }
-  .stat-block { background: white; border: 1px solid var(--border); border-radius: 8px; padding: 14px 16px; }
-  .stat-block h3 { font-size: 11.5px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 0 0 10px; }
+  .stat-block { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 16px; box-shadow: var(--shadow-sm); }
+  .stat-block h3 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 10px; }
   .stat-row { display: flex; align-items: center; gap: 8px; font-size: 12.5px; margin-bottom: 5px; }
   .stat-row .label { width: 150px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .stat-row .bar-wrap { flex: 1; background: #eceef2; border-radius: 3px; height: 10px; overflow: hidden; }
@@ -366,30 +405,39 @@
   .add-wrap {
     max-width: 760px;
     margin: 0 auto;
-    background: white;
+    background: var(--surface);
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 10px;
     padding: 20px 24px;
+    box-shadow: var(--shadow-sm);
   }
-  .add-wrap h2 { font-size: 17px; margin: 0 0 8px; }
+  .add-wrap h2 { font-size: 18px; font-weight: 700; letter-spacing: -.01em; margin: 0 0 8px; }
   .add-hint { font-size: 12.5px; color: var(--muted); margin-bottom: 18px; line-height: 1.5; }
-  .add-hint code { background: #f0f0f2; padding: 1px 5px; border-radius: 4px; }
+  .add-hint code { background: var(--surface-alt); padding: 1px 5px; border-radius: 4px; }
   .add-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px 16px; margin-bottom: 16px; }
   .add-grid label, .add-list-field {
     display: flex;
     flex-direction: column;
     gap: 4px;
-    font-size: 12px;
+    font-size: 11.5px;
+    font-weight: 600;
+    letter-spacing: .01em;
     color: var(--muted);
   }
   .add-grid input, .add-grid select, .add-list-field input {
     font-size: 13px;
+    font-weight: 400;
     color: var(--text);
     padding: 6px 8px;
     border: 1px solid var(--border);
     border-radius: 6px;
-    background: white;
+    background: var(--surface);
     font-family: inherit;
+    transition: border-color .15s ease, box-shadow .15s ease;
+  }
+  .add-grid input:focus, .add-grid select:focus, .add-list-field input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-soft);
   }
   .add-list-field { margin-bottom: 14px; }
   .chip-input { display: flex; flex-wrap: wrap; gap: 6px; min-height: 14px; }
@@ -397,12 +445,13 @@
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    background: #eef2fb;
-    border: 1px solid #c9d8f5;
+    background: var(--accent-soft);
+    border: 1px solid #c3d2f7;
     border-radius: 999px;
     padding: 3px 9px;
     font-size: 12px;
-    color: var(--text);
+    font-weight: 500;
+    color: var(--accent-dark);
   }
   .chip-x { cursor: pointer; color: var(--muted); }
   .chip-x:hover { color: #c0392b; }
@@ -412,34 +461,58 @@
   /* Sub-tabs within the "add a book" form (step 5: Détails, Personnel,
      Crédits & Personnages, Contenus, Intrigue & Notes, Liens). All tab
      panels stay mounted in the DOM (just hidden) so a single form submit
-     still collects every field, whichever tab was last visible. */
-  .add-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+     still collects every field, whichever tab was last visible.
+     Given a visible fill (not just a border) so each badge reads clearly
+     against the form's white card instead of blending into it. */
+  .add-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 18px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid var(--border);
+  }
   .add-tab-btn {
-    background: white;
+    background: var(--surface-alt);
     border: 1px solid var(--border);
     border-radius: 999px;
-    padding: 5px 12px;
+    padding: 5px 13px;
     font-size: 12px;
-    color: var(--muted);
+    font-weight: 500;
+    color: var(--text);
     cursor: pointer;
     font-family: inherit;
+    transition: background .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease;
   }
-  .add-tab-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
+  .add-tab-btn:hover { background: var(--surface-alt-hover); border-color: var(--border-strong); }
+  .add-tab-btn.active { background: var(--accent); border-color: var(--accent); color: white; font-weight: 600; box-shadow: var(--shadow-sm); }
+  .add-tab-btn.active:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
   .add-tab-panel.hidden { display: none; }
-  .add-full { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+  .add-full { display: flex; flex-direction: column; gap: 4px; font-size: 11.5px; font-weight: 600; letter-spacing: .01em; color: var(--muted); margin-bottom: 14px; }
   .add-full textarea {
     font-size: 13px;
     color: var(--text);
     padding: 6px 8px;
     border: 1px solid var(--border);
     border-radius: 6px;
-    background: white;
+    background: var(--surface);
     font-family: inherit;
     resize: vertical;
+    transition: border-color .15s ease, box-shadow .15s ease;
   }
+  .add-full textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
   .add-checkrow { display: flex; gap: 18px; margin-bottom: 14px; }
   .add-check { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); }
-  .add-subhead { font-size: 13px; margin: 4px 0 10px; color: var(--muted); border-top: 1px solid var(--border); padding-top: 14px; }
+  .add-subhead {
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    margin: 4px 0 12px;
+    color: var(--muted);
+    border-top: 1px solid var(--border);
+    padding-top: 16px;
+  }
 
   /* Repeatable entries (characters, contents, links): a short list of
      already-added items, each with a "✕" to remove, plus a small inline
@@ -451,7 +524,7 @@
     align-items: center;
     justify-content: space-between;
     gap: 10px;
-    background: #f6f7fa;
+    background: var(--surface-alt);
     border: 1px solid var(--border);
     border-radius: 6px;
     padding: 6px 10px;
@@ -467,20 +540,24 @@
     padding: 6px 8px;
     border: 1px solid var(--border);
     border-radius: 6px;
-    background: white;
+    background: var(--surface);
     font-family: inherit;
+    transition: border-color .15s ease, box-shadow .15s ease;
   }
+  .rep-add-row input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
   .rep-add-row button, #contentAddBtn {
-    background: white;
+    background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 6px;
     padding: 6px 12px;
     font-size: 12.5px;
+    font-weight: 500;
     color: var(--text);
     cursor: pointer;
     font-family: inherit;
+    transition: border-color .15s ease, color .15s ease, background .15s ease;
   }
-  .rep-add-row button:hover, #contentAddBtn:hover { border-color: var(--accent); color: var(--accent); }
+  .rep-add-row button:hover, #contentAddBtn:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-dark); }
   button.primary {
     background: var(--accent);
     color: white;
@@ -488,5 +565,9 @@
     border-radius: 6px;
     padding: 8px 16px;
     font-size: 13px;
+    font-weight: 600;
     cursor: pointer;
+    box-shadow: var(--shadow-sm);
+    transition: background .15s ease, box-shadow .15s ease;
   }
+  button.primary:hover { background: var(--accent-dark); box-shadow: var(--shadow-md); }

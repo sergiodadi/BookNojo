@@ -4,6 +4,15 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.33.0] - 2026-11-02
+
+### Changed
+- **Refonte visuelle (`templates/style.css`)**, partagée par l'export HTML de `bc_export` et l'app NBC — demandée explicitement pour avoir un rendu "plus professionnel" :
+  - Nouvelle palette (variables CSS) : accent bleu plus soutenu (`#2e5bd7`, + variante foncée pour le survol), surfaces neutres (`--surface`, `--surface-alt`) distinctes du fond de page, ombres légères (`--shadow-sm`/`--shadow-md`) pour donner du relief aux cartes (statistiques, formulaire d'ajout) au lieu d'un simple cadre plat.
+  - **Correction du point signalé** : les badges/onglets du formulaire "Ajouter un livre" (Principal, Détails, Personnel, Crédits & Personnages, Contenus, Intrigue & Notes, Liens) étaient des pastilles blanches sur fond blanc (bordure à peine visible) — ils ont désormais un **fond gris lisible** (`--surface-alt`) à l'état inactif, et un bleu plein avec ombre à l'état actif. Même traitement appliqué par cohérence aux onglets de sous-collections en haut de l'écran.
+  - Ajout d'états de survol/transition sur la quasi-totalité des boutons et contrôles (jusque-là statiques), d'un anneau de focus visible sur les champs du formulaire, et d'un renforcement des titres (graisse, interlignage) pour une hiérarchie typographique plus nette.
+  - Vérifié visuellement via capture d'écran automatisée (export HTML statique rechargé dans Chrome headless) sur la vue principale, le panneau Statistiques, et le formulaire d'ajout (onglet Détails) — avant/après comparés.
+
 ## [0.32.2] - 2026-11-02
 
 ### Added

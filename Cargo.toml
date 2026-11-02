@@ -1,6 +1,6 @@
 [package]
 name = "book_collector_export"
-version = "0.32.2"
+version = "0.33.0"
 edition = "2021"
 
 [lib]
