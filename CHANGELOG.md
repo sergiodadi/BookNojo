@@ -4,6 +4,20 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.34.0] - 2026-11-02
+
+### Added
+- **Le formulaire "Ajouter un livre" de l'app NBC écrit désormais directement dans la collection**, sans passer par un fichier `new_book.json` à télécharger puis repasser à `bc_add` en ligne de commande — ce pont manuel n'avait de sens que pour l'utilisateur technique de ce projet, pas pour un futur utilisateur "grand public". Le bouton devient **"💾 Enregistrer"** (au lieu de "⬇️ Générer new_book.json") quand l'app tourne dans Tauri ; l'export HTML statique de `bc_export` garde exactement son comportement de téléchargement inchangé (pas de backend à qui écrire).
+  - Avant d'écrire, une **étape de confirmation** résout le livre contre la collection ouverte et affiche la liste des valeurs de type auteur/éditeur/genre/sujet/etc. qui seraient créées pour la première fois (badge "nouveau"), pour repérer une faute de frappe avant qu'elle ne devienne une entrée permanente dans la collection — plutôt qu'un bouton "Save" qui écrit sans y regarder.
+  - Deux nouvelles commandes Tauri IPC, `prepare_add_book` (lecture seule — résout + construit le plan, renvoie un résumé) et `commit_add_book` (sauvegarde + écrit, une fois la confirmation donnée) — toutes deux refusent sans exception un chemin qui ressemble à la vraie collection Book Collector (`looks_like_real_collection`), sans possibilité de forcer depuis l'interface (contrairement à `bc_add commit --force` en CLI) ; `commit_add_book` refuse aussi si Book Collector est lancé.
+- **Refactor interne** : le cœur de `bc_add resolve`/`plan`/`commit` (résolution des champs, construction du SQL d'insertion, sauvegarde + écriture transactionnelle) a été déplacé de `src/bin/bc_add.rs` vers `src/lib.rs` (`resolve_book`, `plan_book_sql`, `write_plan_sql`, `looks_like_real_collection`, `prepare_add_book`, `commit_add_book`), pour que `bc_add` (CLI) et l'app NBC (IPC) appellent exactement le même code — même motif que le partage `load_books`/`PageBook` fait à l'étape 3 du plan NBC. Les garde-fous spécifiquement interactifs (`--force`, "OUI" tapé au clavier) restent dans `bc_add.rs`, puisqu'ils n'ont pas de sens côté GUI (refus pur et simple à la place).
+
+### Verified
+- Refactor vérifié comme un déplacement pur : `bc_add resolve`/`plan`/`commit` relancés bout en bout contre `testdata-rw/` (livre réellement écrit, vérifié par requête SQL directe) — comportement identique à avant le déplacement.
+- `prepare_add_book`/`commit_add_book` (les fonctions exactement appelées par les commandes Tauri) testées directement contre `testdata-rw/` : détection correcte des valeurs nouvelles vs déjà connues, écriture réelle confirmée en base.
+- Gate de refus sur la vraie collection (`looks_like_real_collection`) reconfirmée sur le vrai chemin `~/Documents/Collectorz/...` (lecture seule, aucune écriture tentée).
+- 12 tests toujours au vert (`cargo test --release`), build propre des deux crates (`book_collector_export` et `app/src-tauri`).
+
 ## [0.33.0] - 2026-11-02
 
 ### Changed

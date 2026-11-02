@@ -20,6 +20,55 @@ fn load_collection(path: String) -> Result<Vec<book_collector_export::PageBook>,
     book_collector_export::load_page_books(&db_path).map_err(|e| format!("{e:#}"))
 }
 
+/// Refuses any write-bound operation against what looks like the real Book
+/// Collector collection — unlike `bc_add`'s CLI, there is no `--force`/"OUI"
+/// override reachable from the GUI at all. The standing project rule is
+/// that new code never touches the real collection directly; this is where
+/// that rule is enforced for the "Ajouter un livre" form.
+fn refuse_if_real_collection(db_path: &Path) -> Result<(), String> {
+    if book_collector_export::looks_like_real_collection(db_path).is_some() {
+        return Err(
+            "NBC n'écrit jamais directement dans la vraie collection Book Collector — \
+             cette opération n'est possible qu'en ligne de commande (bc_add)."
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
+/// Read-only half of "Ajouter un livre" (étape 1-5 du formulaire) — résout
+/// les champs du nouveau livre contre la collection actuellement ouverte et
+/// renvoie un résumé à faire valider par l'utilisateur avant toute écriture.
+#[tauri::command]
+fn prepare_add_book(
+    path: String,
+    input: book_collector_export::NewBookInput,
+) -> Result<book_collector_export::AddBookPreview, String> {
+    let db_path = book_collector_export::resolve_db_path(Path::new(&path)).map_err(|e| format!("{e:#}"))?;
+    refuse_if_real_collection(&db_path)?;
+    book_collector_export::prepare_add_book(&db_path, input).map_err(|e| format!("{e:#}"))
+}
+
+/// Write half of "Ajouter un livre" — appelé seulement après que
+/// l'utilisateur a validé l'aperçu renvoyé par `prepare_add_book`. Refuse la
+/// vraie collection (voir `refuse_if_real_collection`) et refuse si Book
+/// Collector est actuellement lancé, avant toute sauvegarde/écriture.
+#[tauri::command]
+fn commit_add_book(path: String, input: book_collector_export::NewBookInput) -> Result<String, String> {
+    let db_path = book_collector_export::resolve_db_path(Path::new(&path)).map_err(|e| format!("{e:#}"))?;
+    refuse_if_real_collection(&db_path)?;
+    if book_collector_export::is_book_collector_running().map_err(|e| format!("{e:#}"))? {
+        return Err("Book Collector est actuellement lancé — fermez l'application avant d'enregistrer.".to_string());
+    }
+    let backup_dir = db_path
+        .parent()
+        .map(|p| p.join("backups"))
+        .unwrap_or_else(|| std::path::PathBuf::from("backups"));
+    book_collector_export::commit_add_book(&db_path, &backup_dir, input)
+        .map(|backup| format!("Livre ajouté. Sauvegarde : {}", backup.display()))
+        .map_err(|e| format!("{e:#}"))
+}
+
 /// Reads `kPreferencesApplicationVersion` out of a `.bkcp`'s
 /// `preferences.plist` (binary plist — shelled out to `plutil`, since this
 /// is macOS-only code anyway and avoids a new plist-parsing dependency for
@@ -162,7 +211,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![load_collection])
+        .invoke_handler(tauri::generate_handler![load_collection, prepare_add_book, commit_add_book])
         .setup(|app| {
             let menu = build_menu(app.handle())?;
             app.set_menu(menu)?;

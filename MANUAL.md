@@ -146,11 +146,17 @@ utilisées dans la collection pour tous les champs de type liste (éditeur,
 format, langue, pays, emplacement, auteur, genre, sujet, série, état,
 édition, imprimeur, volume, type de papier, propriétaire, magasin) — pas
 encore pour les crédits/personnages (`bc_export` n'exporte pas ces
-tables, vides dans la collection de test — voir § 7, étape 5). Il **ne
-contacte aucun serveur et n'écrit rien** : cliquer sur "Générer new_book.json" télécharge
+tables, vides dans la collection de test — voir § 7, étape 5). Changer
+d'onglet ne perd aucune saisie : un seul envoi du formulaire récupère les
+champs de tous les onglets.
+
+Ce formulaire se comporte différemment selon où il tourne : dans **l'export
+HTML statique** de `bc_export` décrit ici, il **ne contacte aucun serveur
+et n'écrit rien** — cliquer sur "Générer new_book.json" télécharge
 simplement le fichier, à passer ensuite à `bc_add` comme décrit ci-dessous.
-Changer d'onglet ne perd aucune saisie : un seul envoi du formulaire
-récupère les champs de tous les onglets.
+Dans **l'app NBC** (§ 8), le même formulaire écrit directement dans la
+collection ouverte, avec une confirmation avant écriture — voir § 8 pour
+le détail.
 
 ### Ou à la main
 
@@ -500,8 +506,27 @@ perte de temps de diagnostic ; vérifiable avec
 
 Le chemin de la collection chargée au démarrage reste `DEV_COLLECTION_PATH`
 (`templates/app.js`, vers `testdata-sample/`) **seulement comme valeur de
-repli** au tout premier lancement — "File > Import a file…" le remplace et
-le mémorise (`localStorage`) pour les lancements suivants.
+repli** au tout premier lancement — "File > Import a collection…" le
+remplace et le mémorise (`localStorage`) pour les lancements suivants.
+
+**"Ajouter un livre" écrit désormais réellement dans la collection**
+(v0.34.0), sans passer par le fichier `new_book.json`/`bc_add` manuel décrit
+au § 7 — ce détour n'avait de sens que pour un usage technique, pas pour un
+futur utilisateur de l'app. Le bouton devient "💾 Enregistrer" (au lieu de
+"⬇️ Générer new_book.json") dès que `window.__TAURI__` existe ; l'export
+HTML statique de `bc_export` garde son comportement de téléchargement
+inchangé. Avant d'écrire, une boîte de confirmation résout le livre contre
+la collection ouverte et liste chaque valeur de type auteur/éditeur/genre/
+sujet/etc. qui serait créée pour la première fois (badge "nouveau") — pour
+repérer une faute de frappe avant qu'elle devienne une entrée permanente.
+Deux commandes IPC, `prepare_add_book` (lecture seule) et `commit_add_book`
+(écrit, une fois confirmé), toutes deux implémentées en appelant
+directement `book_collector_export::resolve_book`/`plan_book_sql`/
+`write_plan_sql` (même code que `bc_add resolve`/`plan`/`commit`, partagé
+via `src/lib.rs`) — et refusent **sans aucune exception possible** un
+chemin qui ressemble à la vraie collection Book Collector, contrairement à
+`bc_add commit --force` en CLI qui peut la forcer avec une confirmation
+tapée au clavier.
 
 `app/src/index.html` reste gitignoré (généré par `generate-dev-data.sh`
 depuis `app/src/index.template.html`, committé lui) mais ne contient plus

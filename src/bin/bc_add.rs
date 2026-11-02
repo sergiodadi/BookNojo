@@ -1,7 +1,5 @@
 //! bc_add — préparation de l'ajout d'un nouveau livre à Book Collector,
-//! par étapes (voir MANUAL.md § 7). Ce binaire n'écrit JAMAIS dans la
-//! base : chaque sous-commande ouvre `Book_data` en lecture seule
-//! (`SQLITE_OPEN_READ_ONLY`), comme `bc_export`.
+//! par étapes (voir MANUAL.md § 7).
 //!
 //! - `resolve` (étape 1) : vérifie quels champs "liste" d'un livre
 //!   existent déjà dans la collection (réutilisables) et lesquels seraient
@@ -42,17 +40,22 @@
 //!   résolue et planifiée indépendamment pour chaque base, jamais une
 //!   simple recopie du même SQL (les clés primaires et valeurs déjà
 //!   connues divergent dès que deux bases évoluent séparément).
+//!
+//! Le cœur résolution/plan/écriture (`resolve_book`, `plan_book_sql`,
+//! `write_plan_sql`, ...) vit dans `book_collector_export` (lib.rs) — partagé
+//! avec l'app NBC, qui l'appelle directement en IPC Tauri au lieu de ce
+//! détour par fichiers. Les garde-fous CLI (`--force`, "OUI" tapé au
+//! clavier) restent spécifiques à ce binaire : l'app NBC n'écrit jamais sur
+//! un chemin qui ressemble à la vraie collection, sans possibilité de forcer.
 
 use anyhow::{bail, Context, Result};
 use book_collector_export::{
-    backup_sqlite_store, entity_ent_id, entity_max_pk, is_book_collector_running,
-    resolve_collection_pk, resolve_db_path, resolve_lookup_pk, resolve_person_pk,
-    run_write_transaction,
+    backup_sqlite_store, entity_ent_id, is_book_collector_running, looks_like_real_collection,
+    plan_book_sql, resolve_book, resolve_db_path, strip_plan_wrapper, write_plan_sql, NewBookInput,
+    ResolvedBook, ResolvedLookup,
 };
 use clap::{Parser, Subcommand};
 use rusqlite::{Connection, OpenFlags};
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
@@ -192,304 +195,6 @@ enum Command {
 
 // ---------------------------------------------------------------- Resolve
 
-/// Les champs correspondent à l'onglet "Main" de la fenêtre "Add Book" de
-/// Book Collector — seuls ceux dont on connaît déjà la colonne/relation en
-/// base sont repris ici.
-#[derive(Debug, Deserialize)]
-struct NewBookInput {
-    title: String,
-    #[serde(default)]
-    subtitle: Option<String>,
-    #[serde(default)]
-    isbn: Option<String>,
-    #[serde(default)]
-    authors: Vec<String>,
-    #[serde(default)]
-    publisher: Option<String>,
-    #[serde(default)]
-    format: Option<String>,
-    #[serde(default)]
-    language: Option<String>,
-    #[serde(default)]
-    country: Option<String>,
-    #[serde(default)]
-    number_of_pages: Option<i64>,
-    #[serde(default)]
-    publication_year: Option<String>,
-    #[serde(default)]
-    publication_month: Option<String>,
-    #[serde(default)]
-    publication_day: Option<String>,
-    #[serde(default)]
-    genres: Vec<String>,
-    #[serde(default)]
-    subjects: Vec<String>,
-    #[serde(default)]
-    location: Option<String>,
-    #[serde(default = "default_quantity")]
-    quantity: i64,
-    /// Nom de la sous-collection cible (table ZCOLLECTION) — obligatoire :
-    /// contrairement aux autres champs, elle DOIT déjà exister.
-    collection: String,
-
-    // ---- Onglet "Détails" ----
-    #[serde(default)]
-    edition: Option<String>,
-    #[serde(default)]
-    printed_by: Option<String>,
-    #[serde(default)]
-    series: Option<String>,
-    #[serde(default)]
-    volume: Option<String>,
-    #[serde(default)]
-    paper_type: Option<String>,
-    #[serde(default)]
-    height: Option<String>,
-    #[serde(default)]
-    width: Option<String>,
-    #[serde(default)]
-    dewey: Option<String>,
-    #[serde(default)]
-    lccn: Option<String>,
-    #[serde(default)]
-    dedication: Option<String>,
-    #[serde(default)]
-    first_edition: Option<bool>,
-    #[serde(default)]
-    printing: Option<i64>,
-    #[serde(default)]
-    abridged: Option<bool>,
-    #[serde(default)]
-    audio_length_minutes: Option<i64>,
-    #[serde(default)]
-    original_title: Option<String>,
-    #[serde(default)]
-    original_subtitle: Option<String>,
-    #[serde(default)]
-    original_publisher: Option<String>,
-    #[serde(default)]
-    original_country: Option<String>,
-    #[serde(default)]
-    original_language: Option<String>,
-    #[serde(default)]
-    original_publication_year: Option<String>,
-    #[serde(default)]
-    original_publication_month: Option<String>,
-    #[serde(default)]
-    original_publication_day: Option<String>,
-
-    // ---- Onglet "Personnel" ----
-    #[serde(default)]
-    condition: Option<String>,
-    #[serde(default)]
-    owner: Option<String>,
-    #[serde(default)]
-    store: Option<String>,
-    #[serde(default)]
-    current_value: Option<f64>,
-    #[serde(default)]
-    purchase_price: Option<f64>,
-    #[serde(default)]
-    cover_price: Option<f64>,
-    #[serde(default)]
-    purchase_year: Option<String>,
-    #[serde(default)]
-    purchase_month: Option<String>,
-    #[serde(default)]
-    purchase_day: Option<String>,
-    #[serde(default)]
-    rare: Option<bool>,
-    #[serde(default)]
-    read_it: Option<bool>,
-    #[serde(default)]
-    read_times: Option<i64>,
-    #[serde(default)]
-    read_year: Option<String>,
-    #[serde(default)]
-    read_month: Option<String>,
-    #[serde(default)]
-    read_day: Option<String>,
-    #[serde(default)]
-    my_rating: Option<i64>,
-
-    // ---- Onglet "Intrigue & Notes" ----
-    #[serde(default)]
-    plot: Option<String>,
-    #[serde(default)]
-    notes: Option<String>,
-
-    // ---- Onglet "Crédits & Personnages" ----
-    #[serde(default)]
-    credits: Vec<String>,
-    #[serde(default)]
-    characters: Vec<CharacterInput>,
-
-    // ---- Onglet "Contenus" ----
-    #[serde(default)]
-    contents: Vec<ContentInput>,
-
-    // ---- Onglet "Liens" ----
-    #[serde(default)]
-    links: Vec<LinkInput>,
-}
-
-fn default_quantity() -> i64 {
-    1
-}
-
-#[derive(Debug, Deserialize)]
-struct CharacterInput {
-    name: String,
-    #[serde(default)]
-    alias: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct ContentInput {
-    title: String,
-    #[serde(default)]
-    subtitle: Option<String>,
-    #[serde(default)]
-    number_of_pages: Option<i64>,
-    #[serde(default)]
-    authors: Vec<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct LinkInput {
-    url: String,
-    #[serde(default)]
-    description: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct ResolvedLookup {
-    value: String,
-    /// `Some(pk)` = une ligne existante sera réutilisée (clé primaire de
-    /// l'entité "liste", ex. ZPUBLISHER.Z_PK — pas celle du delegate).
-    /// `None` = cette valeur n'existe pas encore et serait créée.
-    existing_pk: Option<i64>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct ResolvedBook {
-    title: String,
-    subtitle: Option<String>,
-    isbn: Option<String>,
-    authors: Vec<ResolvedLookup>,
-    publisher: Option<ResolvedLookup>,
-    format: Option<ResolvedLookup>,
-    language: Option<ResolvedLookup>,
-    country: Option<ResolvedLookup>,
-    number_of_pages: Option<i64>,
-    publication_year: Option<String>,
-    publication_month: Option<String>,
-    publication_day: Option<String>,
-    genres: Vec<ResolvedLookup>,
-    subjects: Vec<ResolvedLookup>,
-    location: Option<ResolvedLookup>,
-    quantity: i64,
-    /// La sous-collection cible ; `existing_pk` est toujours `Some(...)`
-    /// ici — on a déjà vérifié son existence avant de construire ce champ.
-    collection: ResolvedLookup,
-
-    // ---- Détails ----
-    edition: Option<ResolvedLookup>,
-    printed_by: Option<ResolvedLookup>,
-    series: Option<ResolvedLookup>,
-    volume: Option<ResolvedLookup>,
-    paper_type: Option<ResolvedLookup>,
-    height: Option<String>,
-    width: Option<String>,
-    dewey: Option<String>,
-    lccn: Option<String>,
-    dedication: Option<String>,
-    first_edition: Option<bool>,
-    printing: Option<i64>,
-    abridged: Option<bool>,
-    audio_length_minutes: Option<i64>,
-    original_title: Option<String>,
-    original_subtitle: Option<String>,
-    original_publisher: Option<ResolvedLookup>,
-    original_country: Option<ResolvedLookup>,
-    original_language: Option<ResolvedLookup>,
-    original_publication_year: Option<String>,
-    original_publication_month: Option<String>,
-    original_publication_day: Option<String>,
-
-    // ---- Personnel ----
-    condition: Option<ResolvedLookup>,
-    owner: Option<ResolvedLookup>,
-    store: Option<ResolvedLookup>,
-    current_value: Option<f64>,
-    purchase_price: Option<f64>,
-    cover_price: Option<f64>,
-    purchase_year: Option<String>,
-    purchase_month: Option<String>,
-    purchase_day: Option<String>,
-    rare: Option<bool>,
-    read_it: Option<bool>,
-    read_times: Option<i64>,
-    read_year: Option<String>,
-    read_month: Option<String>,
-    read_day: Option<String>,
-    my_rating: Option<i64>,
-
-    // ---- Intrigue & Notes ----
-    plot: Option<String>,
-    notes: Option<String>,
-
-    // ---- Crédits & Personnages ----
-    credits: Vec<ResolvedLookup>,
-    characters: Vec<ResolvedCharacter>,
-
-    // ---- Contenus ----
-    contents: Vec<ResolvedContent>,
-
-    // ---- Liens ----
-    links: Vec<LinkInput>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct ResolvedCharacter {
-    person: ResolvedLookup,
-    alias: Option<String>,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-struct ResolvedContent {
-    title: String,
-    subtitle: Option<String>,
-    number_of_pages: Option<i64>,
-    authors: Vec<ResolvedLookup>,
-}
-
-fn resolve_lookup(conn: &Connection, table: &str, value: &str) -> Result<ResolvedLookup> {
-    let existing_pk = resolve_lookup_pk(conn, table, value)
-        .with_context(|| format!("résolution de '{value}' dans {table}"))?;
-    Ok(ResolvedLookup {
-        value: value.to_string(),
-        existing_pk,
-    })
-}
-
-fn resolve_lookup_list(conn: &Connection, table: &str, values: &[String]) -> Result<Vec<ResolvedLookup>> {
-    values.iter().map(|v| resolve_lookup(conn, table, v)).collect()
-}
-
-fn resolve_person(conn: &Connection, table: &str, value: &str) -> Result<ResolvedLookup> {
-    let existing_pk = resolve_person_pk(conn, table, value)
-        .with_context(|| format!("résolution de la personne '{value}' dans {table}"))?;
-    Ok(ResolvedLookup {
-        value: value.to_string(),
-        existing_pk,
-    })
-}
-
-fn resolve_person_list(conn: &Connection, table: &str, values: &[String]) -> Result<Vec<ResolvedLookup>> {
-    values.iter().map(|v| resolve_person(conn, table, v)).collect()
-}
-
 fn print_lookup(label: &str, r: &ResolvedLookup) {
     match r.existing_pk {
         Some(pk) => println!("  {label}: \"{}\" -> réutilise Z_PK={pk}", r.value),
@@ -508,227 +213,98 @@ fn cmd_resolve(db: PathBuf, input: PathBuf, output: PathBuf) -> Result<()> {
     let book: NewBookInput =
         serde_json::from_str(&raw).with_context(|| format!("parsing JSON de {}", input.display()))?;
 
-    // La sous-collection DOIT déjà exister — contrairement aux autres
-    // champs, on ne sait pas en créer une nouvelle ici.
-    let collection_pk = resolve_collection_pk(&conn, &book.collection).context("sous-collection cible")?;
-
-    let authors = resolve_person_list(&conn, "ZAUTHORPERSON", &book.authors)?;
-
-    let publisher = book.publisher.as_deref().map(|v| resolve_lookup(&conn, "ZPUBLISHER", v)).transpose()?;
-    let format = book.format.as_deref().map(|v| resolve_lookup(&conn, "ZFORMAT", v)).transpose()?;
-    let language = book.language.as_deref().map(|v| resolve_lookup(&conn, "ZLANGUAGE", v)).transpose()?;
-    let country = book.country.as_deref().map(|v| resolve_lookup(&conn, "ZCOUNTRY", v)).transpose()?;
-    let location = book.location.as_deref().map(|v| resolve_lookup(&conn, "ZLOCATION", v)).transpose()?;
-    let genres = resolve_lookup_list(&conn, "ZGENRE", &book.genres)?;
-    let subjects = resolve_lookup_list(&conn, "ZSUBJECT", &book.subjects)?;
-
-    // ---- Détails ----
-    let edition = book.edition.as_deref().map(|v| resolve_lookup(&conn, "ZEDITION", v)).transpose()?;
-    let printed_by = book.printed_by.as_deref().map(|v| resolve_lookup(&conn, "ZPRINTEDBY", v)).transpose()?;
-    let series = book.series.as_deref().map(|v| resolve_lookup(&conn, "ZSERIES", v)).transpose()?;
-    let volume = book.volume.as_deref().map(|v| resolve_lookup(&conn, "ZVOLUME", v)).transpose()?;
-    let paper_type = book.paper_type.as_deref().map(|v| resolve_lookup(&conn, "ZPAPERTYPE", v)).transpose()?;
-    let original_publisher = book
-        .original_publisher
-        .as_deref()
-        .map(|v| resolve_lookup(&conn, "ZPUBLISHER", v))
-        .transpose()?;
-    let original_country = book
-        .original_country
-        .as_deref()
-        .map(|v| resolve_lookup(&conn, "ZCOUNTRY", v))
-        .transpose()?;
-    let original_language = book
-        .original_language
-        .as_deref()
-        .map(|v| resolve_lookup(&conn, "ZLANGUAGE", v))
-        .transpose()?;
-
-    // ---- Personnel ----
-    let condition = book.condition.as_deref().map(|v| resolve_lookup(&conn, "ZCONDITION", v)).transpose()?;
-    let owner = book.owner.as_deref().map(|v| resolve_person(&conn, "ZOWNER", v)).transpose()?;
-    let store = book.store.as_deref().map(|v| resolve_lookup(&conn, "ZSTORE", v)).transpose()?;
-
-    // ---- Crédits & Personnages ----
-    let credits = resolve_person_list(&conn, "ZCREDITPERSON", &book.credits)?;
-    let characters: Vec<ResolvedCharacter> = book
-        .characters
-        .iter()
-        .map(|c| {
-            Ok::<_, anyhow::Error>(ResolvedCharacter {
-                person: resolve_person(&conn, "ZCHARACTERPERSON", &c.name)?,
-                alias: c.alias.clone(),
-            })
-        })
-        .collect::<Result<_>>()?;
-
-    // ---- Contenus ----
-    let contents: Vec<ResolvedContent> = book
-        .contents
-        .iter()
-        .map(|c| {
-            Ok::<_, anyhow::Error>(ResolvedContent {
-                title: c.title.clone(),
-                subtitle: c.subtitle.clone(),
-                number_of_pages: c.number_of_pages,
-                authors: resolve_person_list(&conn, "ZAUTHORPERSON", &c.authors)?,
-            })
-        })
-        .collect::<Result<_>>()?;
+    let resolved = resolve_book(&conn, book)?;
 
     println!();
-    println!("Titre: \"{}\"", book.title);
-    if let Some(s) = &book.subtitle {
+    println!("Titre: \"{}\"", resolved.title);
+    if let Some(s) = &resolved.subtitle {
         println!("  Sous-titre: \"{s}\"");
     }
-    if let Some(i) = &book.isbn {
+    if let Some(i) = &resolved.isbn {
         println!("  ISBN: {i}");
     }
     println!("Auteurs:");
-    if authors.is_empty() {
+    if resolved.authors.is_empty() {
         println!("  (aucun)");
     }
-    for a in &authors {
+    for a in &resolved.authors {
         print_lookup("Auteur", a);
     }
-    if let Some(r) = &publisher {
+    if let Some(r) = &resolved.publisher {
         print_lookup("Éditeur", r);
     }
-    if let Some(r) = &format {
+    if let Some(r) = &resolved.format {
         print_lookup("Format", r);
     }
-    if let Some(r) = &language {
+    if let Some(r) = &resolved.language {
         print_lookup("Langue", r);
     }
-    if let Some(r) = &country {
+    if let Some(r) = &resolved.country {
         print_lookup("Pays", r);
     }
-    if let Some(r) = &location {
+    if let Some(r) = &resolved.location {
         print_lookup("Emplacement", r);
     }
-    for g in &genres {
+    for g in &resolved.genres {
         print_lookup("Genre", g);
     }
-    for s in &subjects {
+    for s in &resolved.subjects {
         print_lookup("Sujet", s);
     }
-    println!("Sous-collection: \"{}\" -> Z_PK={collection_pk}", book.collection);
+    println!(
+        "Sous-collection: \"{}\" -> Z_PK={}",
+        resolved.collection.value,
+        resolved.collection.existing_pk.context("sous-collection non résolue")?
+    );
 
-    if let Some(r) = &edition {
+    if let Some(r) = &resolved.edition {
         print_lookup("Édition", r);
     }
-    if let Some(r) = &printed_by {
+    if let Some(r) = &resolved.printed_by {
         print_lookup("Imprimé par", r);
     }
-    if let Some(r) = &series {
+    if let Some(r) = &resolved.series {
         print_lookup("Série", r);
     }
-    if let Some(r) = &volume {
+    if let Some(r) = &resolved.volume {
         print_lookup("Volume", r);
     }
-    if let Some(r) = &paper_type {
+    if let Some(r) = &resolved.paper_type {
         print_lookup("Type de papier", r);
     }
-    if let Some(r) = &original_publisher {
+    if let Some(r) = &resolved.original_publisher {
         print_lookup("Éditeur original", r);
     }
-    if let Some(r) = &original_country {
+    if let Some(r) = &resolved.original_country {
         print_lookup("Pays original", r);
     }
-    if let Some(r) = &original_language {
+    if let Some(r) = &resolved.original_language {
         print_lookup("Langue originale", r);
     }
-    if let Some(r) = &condition {
+    if let Some(r) = &resolved.condition {
         print_lookup("État", r);
     }
-    if let Some(r) = &owner {
+    if let Some(r) = &resolved.owner {
         print_lookup("Propriétaire", r);
     }
-    if let Some(r) = &store {
+    if let Some(r) = &resolved.store {
         print_lookup("Magasin", r);
     }
-    for c in &credits {
+    for c in &resolved.credits {
         print_lookup("Crédit", c);
     }
-    for c in &characters {
+    for c in &resolved.characters {
         print_lookup("Personnage", &c.person);
     }
-    for (i, c) in contents.iter().enumerate() {
+    for (i, c) in resolved.contents.iter().enumerate() {
         println!("Contenu {}: \"{}\" ({} auteur(s))", i + 1, c.title, c.authors.len());
         for a in &c.authors {
             print_lookup("  Auteur du contenu", a);
         }
     }
-    for l in &book.links {
+    for l in &resolved.links {
         println!("Lien: {} ({})", l.url, l.description.as_deref().unwrap_or("sans description"));
     }
-
-    let resolved = ResolvedBook {
-        title: book.title,
-        subtitle: book.subtitle,
-        isbn: book.isbn,
-        authors,
-        publisher,
-        format,
-        language,
-        country,
-        number_of_pages: book.number_of_pages,
-        publication_year: book.publication_year,
-        publication_month: book.publication_month,
-        publication_day: book.publication_day,
-        genres,
-        subjects,
-        location,
-        quantity: book.quantity,
-        collection: ResolvedLookup {
-            value: book.collection,
-            existing_pk: Some(collection_pk),
-        },
-        edition,
-        printed_by,
-        series,
-        volume,
-        paper_type,
-        height: book.height,
-        width: book.width,
-        dewey: book.dewey,
-        lccn: book.lccn,
-        dedication: book.dedication,
-        first_edition: book.first_edition,
-        printing: book.printing,
-        abridged: book.abridged,
-        audio_length_minutes: book.audio_length_minutes,
-        original_title: book.original_title,
-        original_subtitle: book.original_subtitle,
-        original_publisher,
-        original_country,
-        original_language,
-        original_publication_year: book.original_publication_year,
-        original_publication_month: book.original_publication_month,
-        original_publication_day: book.original_publication_day,
-        condition,
-        owner,
-        store,
-        current_value: book.current_value,
-        purchase_price: book.purchase_price,
-        cover_price: book.cover_price,
-        purchase_year: book.purchase_year,
-        purchase_month: book.purchase_month,
-        purchase_day: book.purchase_day,
-        rare: book.rare,
-        read_it: book.read_it,
-        read_times: book.read_times,
-        read_year: book.read_year,
-        read_month: book.read_month,
-        read_day: book.read_day,
-        my_rating: book.my_rating,
-        plot: book.plot,
-        notes: book.notes,
-        credits,
-        characters,
-        contents,
-        links: book.links,
-    };
 
     let out = serde_json::to_string_pretty(&resolved)?;
     std::fs::write(&output, out).with_context(|| format!("écriture de {}", output.display()))?;
@@ -745,211 +321,6 @@ fn cmd_resolve(db: PathBuf, input: PathBuf, output: PathBuf) -> Result<()> {
 
 // ------------------------------------------------------------------- Plan
 
-/// Alloue de nouvelles clés primaires sans jamais écrire en base : lit
-/// Z_PRIMARYKEY.Z_MAX une fois par entité (mis en cache), puis incrémente
-/// localement. À la fin, `updates()` donne les UPDATE à afficher pour
-/// chaque entité dont le compteur a effectivement bougé.
-struct PkAllocator<'a> {
-    conn: &'a Connection,
-    current: HashMap<String, i64>,
-    touched: Vec<String>,
-}
-
-impl<'a> PkAllocator<'a> {
-    fn new(conn: &'a Connection) -> Self {
-        Self {
-            conn,
-            current: HashMap::new(),
-            touched: Vec::new(),
-        }
-    }
-
-    fn alloc(&mut self, entity: &str) -> Result<i64> {
-        if !self.current.contains_key(entity) {
-            let max = entity_max_pk(self.conn, entity)?;
-            self.current.insert(entity.to_string(), max);
-        }
-        let next = self.current.get_mut(entity).unwrap();
-        *next += 1;
-        if !self.touched.contains(&entity.to_string()) {
-            self.touched.push(entity.to_string());
-        }
-        Ok(*next)
-    }
-
-    fn updates(&self) -> Vec<(String, i64)> {
-        self.touched
-            .iter()
-            .map(|e| (e.clone(), self.current[e]))
-            .collect()
-    }
-}
-
-fn sql_quote(s: &str) -> String {
-    format!("'{}'", s.replace('\'', "''"))
-}
-
-fn sql_opt_str(s: &Option<String>) -> String {
-    match s {
-        Some(v) => sql_quote(v),
-        None => "NULL".to_string(),
-    }
-}
-
-fn sql_opt_i64(v: Option<i64>) -> String {
-    match v {
-        Some(v) => v.to_string(),
-        None => "NULL".to_string(),
-    }
-}
-
-fn sql_opt_f64(v: Option<f64>) -> String {
-    match v {
-        Some(v) => v.to_string(),
-        None => "NULL".to_string(),
-    }
-}
-
-/// Core Data stores booleans as 0/1 integers.
-fn sql_opt_bool(v: Option<bool>) -> String {
-    match v {
-        Some(true) => "1".to_string(),
-        Some(false) => "0".to_string(),
-        None => "NULL".to_string(),
-    }
-}
-
-/// One "liste" field: Core Data entity name (for Z_PRIMARYKEY lookups) and
-/// SQL table name. Both the lookup table itself and the shared
-/// ZLOOKUPITEMDELEGATE row behind it need a fresh primary key when the
-/// value doesn't exist yet.
-struct LookupKind {
-    entity: &'static str,
-    table: &'static str,
-}
-
-const PUBLISHER: LookupKind = LookupKind { entity: "Publisher", table: "ZPUBLISHER" };
-const FORMAT: LookupKind = LookupKind { entity: "Format", table: "ZFORMAT" };
-const LANGUAGE: LookupKind = LookupKind { entity: "Language", table: "ZLANGUAGE" };
-const COUNTRY: LookupKind = LookupKind { entity: "Country", table: "ZCOUNTRY" };
-const LOCATION: LookupKind = LookupKind { entity: "Location", table: "ZLOCATION" };
-const GENRE: LookupKind = LookupKind { entity: "Genre", table: "ZGENRE" };
-const SUBJECT: LookupKind = LookupKind { entity: "Subject", table: "ZSUBJECT" };
-const EDITION: LookupKind = LookupKind { entity: "Edition", table: "ZEDITION" };
-const PRINTEDBY: LookupKind = LookupKind { entity: "PrintedBy", table: "ZPRINTEDBY" };
-const SERIES: LookupKind = LookupKind { entity: "Series", table: "ZSERIES" };
-const VOLUME: LookupKind = LookupKind { entity: "Volume", table: "ZVOLUME" };
-const PAPERTYPE: LookupKind = LookupKind { entity: "PaperType", table: "ZPAPERTYPE" };
-const CONDITION: LookupKind = LookupKind { entity: "Condition", table: "ZCONDITION" };
-const STORE: LookupKind = LookupKind { entity: "Store", table: "ZSTORE" };
-
-/// Same idea as `LookupKind`, but for "person" flyweight fields (shared
-/// `ZPERSONDELEGATE` instead of `ZLOOKUPITEMDELEGATE`) — authors, credits,
-/// characters, owner.
-struct PersonKind {
-    entity: &'static str,
-    table: &'static str,
-}
-
-const AUTHOR_PERSON: PersonKind = PersonKind { entity: "AuthorPerson", table: "ZAUTHORPERSON" };
-const CREDIT_PERSON: PersonKind = PersonKind { entity: "CreditPerson", table: "ZCREDITPERSON" };
-const CHARACTER_PERSON: PersonKind = PersonKind { entity: "CharacterPerson", table: "ZCHARACTERPERSON" };
-const OWNER_PERSON: PersonKind = PersonKind { entity: "Owner", table: "ZOWNER" };
-
-/// Emits the two INSERTs needed to create a brand-new person value (a
-/// `ZPERSONDELEGATE` row holding the display name, plus the person entity's
-/// own row pointing at it), and returns the person entity's new primary key.
-fn plan_new_person(alloc: &mut PkAllocator, kind: &PersonKind, value: &str, sql: &mut String) -> Result<i64> {
-    let delegate_ent = entity_ent_id(alloc.conn, "PersonDelegate")?;
-    let table_ent = entity_ent_id(alloc.conn, kind.entity)?;
-    let delegate_pk = alloc.alloc("PersonDelegate")?;
-    let table_pk = alloc.alloc(kind.entity)?;
-
-    sql.push_str(&format!(
-        "INSERT INTO ZPERSONDELEGATE (Z_PK, Z_ENT, Z_OPT, ZDISPLAYNAME, ZSORTNAME) \
-         VALUES ({delegate_pk}, {delegate_ent}, 1, {v}, {v});\n",
-        v = sql_quote(value)
-    ));
-    sql.push_str(&format!(
-        "INSERT INTO {} (Z_PK, Z_ENT, Z_OPT, ZDELEGATE) VALUES ({table_pk}, {table_ent}, 1, {delegate_pk});\n",
-        kind.table
-    ));
-    Ok(table_pk)
-}
-
-/// Resolves a (possibly-new) single-valued person field to its primary key,
-/// emitting INSERTs first if needed.
-fn plan_person_fk(
-    alloc: &mut PkAllocator,
-    kind: &PersonKind,
-    field: &Option<ResolvedLookup>,
-    sql: &mut String,
-) -> Result<String> {
-    match field {
-        None => Ok("NULL".to_string()),
-        Some(r) => match r.existing_pk {
-            Some(pk) => Ok(pk.to_string()),
-            None => Ok(plan_new_person(alloc, kind, &r.value, sql)?.to_string()),
-        },
-    }
-}
-
-/// Resolves a list of (possibly-new) persons (authors, credits...) to their
-/// primary keys, in order, emitting INSERTs first for any new ones.
-fn plan_person_list(
-    alloc: &mut PkAllocator,
-    kind: &PersonKind,
-    values: &[ResolvedLookup],
-    sql: &mut String,
-) -> Result<Vec<i64>> {
-    values
-        .iter()
-        .map(|r| match r.existing_pk {
-            Some(pk) => Ok(pk),
-            None => plan_new_person(alloc, kind, &r.value, sql),
-        })
-        .collect()
-}
-
-/// Emits the two INSERTs needed to create a brand-new "liste" value (a
-/// ZLOOKUPITEMDELEGATE row holding the display name, plus the lookup
-/// entity's own row pointing at it), and returns the lookup entity's new
-/// primary key — the one a ZCOLLECTIBLE/etc. foreign key column needs.
-fn plan_new_lookup(alloc: &mut PkAllocator, kind: &LookupKind, value: &str, sql: &mut String) -> Result<i64> {
-    let delegate_ent = entity_ent_id(alloc.conn, "LookupItemDelegate")?;
-    let table_ent = entity_ent_id(alloc.conn, kind.entity)?;
-    let delegate_pk = alloc.alloc("LookupItemDelegate")?;
-    let table_pk = alloc.alloc(kind.entity)?;
-
-    sql.push_str(&format!(
-        "INSERT INTO ZLOOKUPITEMDELEGATE (Z_PK, Z_ENT, Z_OPT, ZDISPLAYNAME, ZNAME, ZSORTNAME) \
-         VALUES ({delegate_pk}, {delegate_ent}, 1, {v}, {v}, {v});\n",
-        v = sql_quote(value)
-    ));
-    sql.push_str(&format!(
-        "INSERT INTO {} (Z_PK, Z_ENT, Z_OPT, ZDELEGATE) VALUES ({table_pk}, {table_ent}, 1, {delegate_pk});\n",
-        kind.table
-    ));
-    Ok(table_pk)
-}
-
-/// Resolves a (possibly-new) lookup field to the SQL fragment for its
-/// ZCOLLECTIBLE foreign key column, emitting INSERTs first if needed.
-fn plan_lookup_fk(
-    alloc: &mut PkAllocator,
-    kind: &LookupKind,
-    field: &Option<ResolvedLookup>,
-    sql: &mut String,
-) -> Result<String> {
-    match field {
-        None => Ok("NULL".to_string()),
-        Some(r) => match r.existing_pk {
-            Some(pk) => Ok(pk.to_string()),
-            None => Ok(plan_new_lookup(alloc, kind, &r.value, sql)?.to_string()),
-        },
-    }
-}
-
 fn cmd_plan(db: PathBuf, resolved_path: PathBuf, output: Option<PathBuf>) -> Result<()> {
     let db_path = resolve_db_path(&db)?;
     println!("Base lue (lecture seule): {}", db_path.display());
@@ -962,248 +333,7 @@ fn cmd_plan(db: PathBuf, resolved_path: PathBuf, output: Option<PathBuf>) -> Res
     let book: ResolvedBook =
         serde_json::from_str(&raw).with_context(|| format!("parsing JSON de {}", resolved_path.display()))?;
 
-    let mut alloc = PkAllocator::new(&conn);
-    let mut sql = String::new();
-    sql.push_str("-- Plan d'insertion généré par `bc_add plan` — APERÇU, RIEN N'EST EXÉCUTÉ.\n");
-    sql.push_str("BEGIN TRANSACTION;\n\n");
-
-    // 1) Nouvelles valeurs "liste" (éditeur, format, langue, pays, emplacement...).
-    let publisher_fk = plan_lookup_fk(&mut alloc, &PUBLISHER, &book.publisher, &mut sql)?;
-    let format_fk = plan_lookup_fk(&mut alloc, &FORMAT, &book.format, &mut sql)?;
-    let language_fk = plan_lookup_fk(&mut alloc, &LANGUAGE, &book.language, &mut sql)?;
-    let country_fk = plan_lookup_fk(&mut alloc, &COUNTRY, &book.country, &mut sql)?;
-    let location_fk = plan_lookup_fk(&mut alloc, &LOCATION, &book.location, &mut sql)?;
-    let edition_fk = plan_lookup_fk(&mut alloc, &EDITION, &book.edition, &mut sql)?;
-    let printed_by_fk = plan_lookup_fk(&mut alloc, &PRINTEDBY, &book.printed_by, &mut sql)?;
-    let series_fk = plan_lookup_fk(&mut alloc, &SERIES, &book.series, &mut sql)?;
-    let volume_fk = plan_lookup_fk(&mut alloc, &VOLUME, &book.volume, &mut sql)?;
-    let paper_type_fk = plan_lookup_fk(&mut alloc, &PAPERTYPE, &book.paper_type, &mut sql)?;
-    let original_publisher_fk = plan_lookup_fk(&mut alloc, &PUBLISHER, &book.original_publisher, &mut sql)?;
-    let original_country_fk = plan_lookup_fk(&mut alloc, &COUNTRY, &book.original_country, &mut sql)?;
-    let original_language_fk = plan_lookup_fk(&mut alloc, &LANGUAGE, &book.original_language, &mut sql)?;
-    let condition_fk = plan_lookup_fk(&mut alloc, &CONDITION, &book.condition, &mut sql)?;
-    let store_fk = plan_lookup_fk(&mut alloc, &STORE, &book.store, &mut sql)?;
-    let owner_fk = plan_person_fk(&mut alloc, &OWNER_PERSON, &book.owner, &mut sql)?;
-
-    // 2) Nouveaux auteurs (ZPERSONDELEGATE + ZAUTHORPERSON), avant la fiche
-    //    livre elle-même puisque ZAUTHOR a besoin du Z_PK du livre.
-    let author_person_pks = plan_person_list(&mut alloc, &AUTHOR_PERSON, &book.authors, &mut sql)?;
-
-    // 3) La fiche livre elle-même (ZCOLLECTIBLE, Z_ENT="Book").
-    let book_ent = entity_ent_id(&conn, "Book")?;
-    let book_pk = alloc.alloc("Collectible")?; // Book partage le compteur de l'entité racine.
-    sql.push('\n');
-    sql.push_str(&format!(
-        "INSERT INTO ZCOLLECTIBLE (\n\
-         \x20 Z_PK, Z_ENT, Z_OPT, ZCOLLECTION, ZCOLLECTIONSTATUS, ZQUANTITY,\n\
-         \x20 ZTITLE, ZTITLESORT, ZSUBTITLE, ZISBN,\n\
-         \x20 ZPUBLISHER, ZFORMAT, ZLANGUAGE, ZCOUNTRY, ZLOCATION,\n\
-         \x20 ZNUMBEROFPAGES, ZPUBLICATIONYEAR, ZPUBLICATIONMONTH, ZPUBLICATIONDAY,\n\
-         \x20 ZEDITION, ZPRINTEDBY, ZSERIES, ZVOLUME, ZPAPERTYPE,\n\
-         \x20 ZHEIGHT, ZWIDTH, ZDEWEY, ZLCCN, ZDEDICATION,\n\
-         \x20 ZFIRSTEDITION, ZPRINTING, ZABRIDGED, ZAUDIOLENGTHMINUTES,\n\
-         \x20 ZORIGINALTITLE, ZORIGINALSUBTITLE, ZORIGINALPUBLISHER, ZORIGINALCOUNTRY, ZORIGINALLANGUAGE,\n\
-         \x20 ZORIGINALPUBLICATIONYEAR, ZORIGINALPUBLICATIONMONTH, ZORIGINALPUBLICATIONDAY,\n\
-         \x20 ZCONDITION, ZOWNER, ZSTORE, ZCURRENTVALUE, ZPURCHASEPRICE, ZCOVERPRICE,\n\
-         \x20 ZPURCHASEYEAR, ZPURCHASEMONTH, ZPURCHASEDAY,\n\
-         \x20 ZRARE, ZREADIT, ZREADTIMES, ZREADYEAR, ZREADMONTH, ZREADDAY, ZMYRATING,\n\
-         \x20 ZPLOT, ZNOTES\n\
-         ) VALUES (\n\
-         \x20 {book_pk}, {book_ent}, 1, {collection_pk}, 2, {quantity},\n\
-         \x20 {title}, {title_sort}, {subtitle}, {isbn},\n\
-         \x20 {publisher_fk}, {format_fk}, {language_fk}, {country_fk}, {location_fk},\n\
-         \x20 {pages}, {year}, {month}, {day},\n\
-         \x20 {edition_fk}, {printed_by_fk}, {series_fk}, {volume_fk}, {paper_type_fk},\n\
-         \x20 {height}, {width}, {dewey}, {lccn}, {dedication},\n\
-         \x20 {first_edition}, {printing}, {abridged}, {audio_length_minutes},\n\
-         \x20 {original_title}, {original_subtitle}, {original_publisher_fk}, {original_country_fk}, {original_language_fk},\n\
-         \x20 {original_year}, {original_month}, {original_day},\n\
-         \x20 {condition_fk}, {owner_fk}, {store_fk}, {current_value}, {purchase_price}, {cover_price},\n\
-         \x20 {purchase_year}, {purchase_month}, {purchase_day},\n\
-         \x20 {rare}, {read_it}, {read_times}, {read_year}, {read_month}, {read_day}, {my_rating},\n\
-         \x20 {plot}, {notes}\n\
-         );\n",
-        collection_pk = book.collection.existing_pk.context("sous-collection non résolue")?,
-        quantity = book.quantity,
-        title = sql_quote(&book.title),
-        title_sort = sql_quote(&book.title), // simplification — voir note en bas de sortie
-        subtitle = sql_opt_str(&book.subtitle),
-        isbn = sql_opt_str(&book.isbn),
-        pages = sql_opt_i64(book.number_of_pages),
-        year = sql_opt_str(&book.publication_year),
-        month = sql_opt_str(&book.publication_month),
-        day = sql_opt_str(&book.publication_day),
-        height = sql_opt_str(&book.height),
-        width = sql_opt_str(&book.width),
-        dewey = sql_opt_str(&book.dewey),
-        lccn = sql_opt_str(&book.lccn),
-        dedication = sql_opt_str(&book.dedication),
-        first_edition = sql_opt_bool(book.first_edition),
-        printing = sql_opt_i64(book.printing),
-        abridged = sql_opt_bool(book.abridged),
-        audio_length_minutes = sql_opt_i64(book.audio_length_minutes),
-        original_title = sql_opt_str(&book.original_title),
-        original_subtitle = sql_opt_str(&book.original_subtitle),
-        original_year = sql_opt_str(&book.original_publication_year),
-        original_month = sql_opt_str(&book.original_publication_month),
-        original_day = sql_opt_str(&book.original_publication_day),
-        current_value = sql_opt_f64(book.current_value),
-        purchase_price = sql_opt_f64(book.purchase_price),
-        cover_price = sql_opt_f64(book.cover_price),
-        purchase_year = sql_opt_str(&book.purchase_year),
-        purchase_month = sql_opt_str(&book.purchase_month),
-        purchase_day = sql_opt_str(&book.purchase_day),
-        rare = sql_opt_bool(book.rare),
-        read_it = sql_opt_bool(book.read_it),
-        read_times = sql_opt_i64(book.read_times),
-        read_year = sql_opt_str(&book.read_year),
-        read_month = sql_opt_str(&book.read_month),
-        read_day = sql_opt_str(&book.read_day),
-        my_rating = sql_opt_i64(book.my_rating),
-        plot = sql_opt_str(&book.plot),
-        notes = sql_opt_str(&book.notes),
-    ));
-
-    // 4) Auteurs : lignes de jointure ZAUTHOR(ZBOOK, ZAUTHORPERSON, ZRANK).
-    let author_ent = entity_ent_id(&conn, "Author")?;
-    for (i, person_pk) in author_person_pks.iter().enumerate() {
-        let author_pk = alloc.alloc("Author")?;
-        sql.push_str(&format!(
-            "INSERT INTO ZAUTHOR (Z_PK, Z_ENT, Z_OPT, ZRANK, ZAUTHORPERSON, ZBOOK) \
-             VALUES ({author_pk}, {author_ent}, 1, {rank}, {person_pk}, {book_pk});\n",
-            rank = i + 1
-        ));
-    }
-
-    // 5) Genres / sujets : nouvelles valeurs puis lignes de jointure.
-    for g in &book.genres {
-        let genre_pk = match g.existing_pk {
-            Some(pk) => pk,
-            None => plan_new_lookup(&mut alloc, &GENRE, &g.value, &mut sql)?,
-        };
-        sql.push_str(&format!(
-            "INSERT INTO Z_7GENRES (Z_7BASEBOOKCOLLECTIBLES1, Z_18GENRES) VALUES ({book_pk}, {genre_pk});\n"
-        ));
-    }
-    for s in &book.subjects {
-        let subject_pk = match s.existing_pk {
-            Some(pk) => pk,
-            None => plan_new_lookup(&mut alloc, &SUBJECT, &s.value, &mut sql)?,
-        };
-        sql.push_str(&format!(
-            "INSERT INTO Z_8SUBJECTS (Z_8BOOKS1, Z_38SUBJECTS) VALUES ({book_pk}, {subject_pk});\n"
-        ));
-    }
-
-    // 6) Crédits : ZCREATOR, rattachés directement au livre (ZBASEBOOKCOLLECTIBLE
-    //    + sa colonne jumelle Z7_BASEBOOKCOLLECTIBLE, qui porte le Z_ENT de la
-    //    cible — motif confirmé empiriquement sur ZLINK, § non couvert plus bas
-    //    pour ce qui reste incertain ici). Le rôle (ZROLEID) n'est pas renseigné.
-    let credit_person_pks = plan_person_list(&mut alloc, &CREDIT_PERSON, &book.credits, &mut sql)?;
-    let creator_ent = entity_ent_id(&conn, "Creator")?;
-    for (i, person_pk) in credit_person_pks.iter().enumerate() {
-        let creator_pk = alloc.alloc("Creator")?;
-        sql.push_str(&format!(
-            "INSERT INTO ZCREATOR (Z_PK, Z_ENT, Z_OPT, ZRANK, ZCREDITPERSON, ZBASEBOOKCOLLECTIBLE, Z7_BASEBOOKCOLLECTIBLE) \
-             VALUES ({creator_pk}, {creator_ent}, 1, {rank}, {person_pk}, {book_pk}, {book_ent});\n",
-            rank = i + 1
-        ));
-    }
-
-    // 7) Personnages : ZCHARACTER, même motif que les crédits. ZALIAS est
-    //    porté par ZCHARACTERPERSON lui-même (valeur partagée) : il n'est
-    //    donc écrit que lors de la création d'un nouveau personnage, jamais
-    //    en réutilisant un personnage existant.
-    let character_ent = entity_ent_id(&conn, "Character")?;
-    let character_person_ent = entity_ent_id(&conn, CHARACTER_PERSON.entity)?;
-    for (i, c) in book.characters.iter().enumerate() {
-        let person_pk = match c.person.existing_pk {
-            Some(pk) => pk,
-            None => {
-                let delegate_ent = entity_ent_id(&conn, "PersonDelegate")?;
-                let delegate_pk = alloc.alloc("PersonDelegate")?;
-                let person_pk = alloc.alloc(CHARACTER_PERSON.entity)?;
-                sql.push_str(&format!(
-                    "INSERT INTO ZPERSONDELEGATE (Z_PK, Z_ENT, Z_OPT, ZDISPLAYNAME, ZSORTNAME) \
-                     VALUES ({delegate_pk}, {delegate_ent}, 1, {v}, {v});\n",
-                    v = sql_quote(&c.person.value)
-                ));
-                sql.push_str(&format!(
-                    "INSERT INTO {} (Z_PK, Z_ENT, Z_OPT, ZDELEGATE, ZALIAS) \
-                     VALUES ({person_pk}, {character_person_ent}, 1, {delegate_pk}, {alias});\n",
-                    CHARACTER_PERSON.table,
-                    alias = sql_opt_str(&c.alias)
-                ));
-                person_pk
-            }
-        };
-        let character_pk = alloc.alloc("Character")?;
-        sql.push_str(&format!(
-            "INSERT INTO ZCHARACTER (Z_PK, Z_ENT, Z_OPT, ZRANK, ZCHARACTERPERSON, ZBASEBOOKCOLLECTIBLE, Z7_BASEBOOKCOLLECTIBLE) \
-             VALUES ({character_pk}, {character_ent}, 1, {rank}, {person_pk}, {book_pk}, {book_ent});\n",
-            rank = i + 1
-        ));
-    }
-
-    // 8) Contenus : ZSTORY (une "histoire" dans le livre), avec ses propres
-    //    auteurs rattachés via ZAUTHOR.ZSTORY au lieu de ZAUTHOR.ZBOOK —
-    //    même table de jointure, déjà vérifiée en conditions réelles pour
-    //    les auteurs du livre lui-même (étape 4).
-    let story_ent = entity_ent_id(&conn, "Story")?;
-    for (ci, c) in book.contents.iter().enumerate() {
-        let story_pk = alloc.alloc("Story")?;
-        sql.push_str(&format!(
-            "INSERT INTO ZSTORY (Z_PK, Z_ENT, Z_OPT, ZRANK, ZBOOK, ZNUMBEROFPAGES, ZTITLE, ZTITLESORT, ZSUBTITLE) \
-             VALUES ({story_pk}, {story_ent}, 1, {rank}, {book_pk}, {pages}, {title}, {title_sort}, {subtitle});\n",
-            rank = ci + 1,
-            pages = sql_opt_i64(c.number_of_pages),
-            title = sql_quote(&c.title),
-            title_sort = sql_quote(&c.title),
-            subtitle = sql_opt_str(&c.subtitle),
-        ));
-
-        let content_author_pks = plan_person_list(&mut alloc, &AUTHOR_PERSON, &c.authors, &mut sql)?;
-        for (ai, person_pk) in content_author_pks.iter().enumerate() {
-            let content_author_pk = alloc.alloc("Author")?;
-            sql.push_str(&format!(
-                "INSERT INTO ZAUTHOR (Z_PK, Z_ENT, Z_OPT, ZRANK, ZAUTHORPERSON, ZSTORY) \
-                 VALUES ({content_author_pk}, {author_ent}, 1, {rank}, {person_pk}, {story_pk});\n",
-                rank = ai + 1
-            ));
-        }
-    }
-
-    // 9) Liens : ZLINK + une ligne ZITEMDELEGATE compagnon (motif confirmé
-    //    sur 832 liens réels existants dans cette collection — ZTYPEID=4
-    //    pour 100% d'entre eux, repris tel quel ici).
-    let link_ent = entity_ent_id(&conn, "Link")?;
-    let itemdelegate_ent = entity_ent_id(&conn, "ItemDelegate")?;
-    for (i, l) in book.links.iter().enumerate() {
-        let link_pk = alloc.alloc("Link")?;
-        let itemdelegate_pk = alloc.alloc("ItemDelegate")?;
-        sql.push_str(&format!(
-            "INSERT INTO ZITEMDELEGATE (Z_PK, Z_ENT, Z_OPT, ZUNIQUEID, ZONLINELINK) \
-             VALUES ({itemdelegate_pk}, {itemdelegate_ent}, 1, 0, {link_pk});\n"
-        ));
-        sql.push_str(&format!(
-            "INSERT INTO ZLINK (Z_PK, Z_ENT, Z_OPT, ZRANK, ZTYPEID, ZBASEBOOKCOLLECTIBLE1, Z7_BASEBOOKCOLLECTIBLE1, ZITEMDELEGATE1, ZDESCRIPTION, ZURL) \
-             VALUES ({link_pk}, {link_ent}, 1, {rank}, 4, {book_pk}, {book_ent}, {itemdelegate_pk}, {desc}, {url});\n",
-            rank = i + 1,
-            desc = sql_opt_str(&l.description),
-            url = sql_quote(&l.url),
-        ));
-    }
-
-    // 10) Compteurs Z_PRIMARYKEY à mettre à jour pour chaque entité touchée.
-    sql.push('\n');
-    for (entity, new_max) in alloc.updates() {
-        sql.push_str(&format!(
-            "UPDATE Z_PRIMARYKEY SET Z_MAX = {new_max} WHERE Z_NAME = {};\n",
-            sql_quote(&entity)
-        ));
-    }
-
-    sql.push_str("\nCOMMIT;\n");
+    let sql = plan_book_sql(&conn, &book)?;
 
     println!();
     println!("{sql}");
@@ -1289,41 +419,6 @@ fn cmd_guard(db: PathBuf, backup_dir: Option<PathBuf>) -> Result<()> {
 
 // ----------------------------------------------------------------- Commit
 
-/// Refuses paths under `~/Documents/Collectorz/...` — the known location
-/// of the user's real collection — unless `force` is set. Cheap defense in
-/// depth on top of the standing rule to only ever write to a dedicated
-/// test copy.
-///
-/// `db_path` is always canonicalized by `resolve_db_path` before reaching
-/// here, so `real_prefix` must be canonicalized the same way before the
-/// comparison — otherwise a symlink anywhere in `$HOME` (e.g. macOS's
-/// `/var` -> `/private/var`) silently defeats the whole check: the two
-/// paths would represent the same real location on disk but never compare
-/// equal as plain strings. Falls back to the raw (non-canonicalized) prefix
-/// if canonicalization fails (e.g. the directory doesn't exist yet) rather
-/// than disabling the check entirely.
-fn looks_like_real_collection(db_path: &std::path::Path) -> Option<PathBuf> {
-    let home = std::env::var_os("HOME")?;
-    let real_prefix = PathBuf::from(home).join("Documents").join("Collectorz");
-    let canonical_prefix = real_prefix.canonicalize().unwrap_or_else(|_| real_prefix.clone());
-    db_path.starts_with(&canonical_prefix).then_some(real_prefix)
-}
-
-/// Strips `bc_add plan`'s own transaction wrapper (`BEGIN TRANSACTION;`
-/// ... `COMMIT;`) and comments from its SQL output, since
-/// `run_write_transaction` opens its own transaction — keeps just the
-/// INSERT/UPDATE statements to execute.
-fn strip_plan_wrapper(raw_sql: &str) -> String {
-    raw_sql
-        .lines()
-        .filter(|line| {
-            let t = line.trim();
-            !(t.is_empty() || t.starts_with("--") || t == "BEGIN TRANSACTION;" || t == "COMMIT;")
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
 /// Second, independent gate on top of `--force`: even with the flag set,
 /// a real write to what looks like the real collection requires typing
 /// "OUI" interactively. Takes `input`/`out` rather than touching stdin/
@@ -1389,20 +484,13 @@ fn cmd_commit(db: PathBuf, plan: PathBuf, backup_dir: Option<PathBuf>, force: bo
             .map(|p| p.join("backups"))
             .unwrap_or_else(|| PathBuf::from("backups"))
     });
-    let backup_path =
-        backup_sqlite_store(&db_path, &backup_dir).context("création de la sauvegarde avant écriture")?;
-    println!("✅ Sauvegarde créée: {}", backup_path.display());
 
-    let raw_sql =
-        std::fs::read_to_string(&plan).with_context(|| format!("lecture de {}", plan.display()))?;
-    let statements = strip_plan_wrapper(&raw_sql);
-    let statement_count = statements.lines().filter(|l| !l.trim().is_empty()).count();
+    let raw_sql = std::fs::read_to_string(&plan).with_context(|| format!("lecture de {}", plan.display()))?;
+    let statement_count = strip_plan_wrapper(&raw_sql).lines().filter(|l| !l.trim().is_empty()).count();
     println!("Exécution de {statement_count} instruction(s) dans une transaction unique...");
 
-    run_write_transaction(&db_path, |conn| {
-        conn.execute_batch(&statements).context("exécution du plan SQL")
-    })?;
-
+    let backup_path = write_plan_sql(&db_path, &backup_dir, &raw_sql)?;
+    println!("✅ Sauvegarde créée: {}", backup_path.display());
     println!("✅ Commit réussi — tout ou rien, comme prévu.");
     println!();
     println!("Vérification recommandée : ouvrez {} dans Book Collector", db_path.display());

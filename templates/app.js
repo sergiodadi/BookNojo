@@ -841,10 +841,23 @@ function renderAddForm() {
         <datalist id="dl-store"></datalist>
 
         <div class="add-actions">
-          <button type="submit" class="primary">⬇️ Générer new_book.json</button>
+          <button type="submit" class="primary">${window.__TAURI__ ? '💾 Enregistrer' : '⬇️ Générer new_book.json'}</button>
           <span id="addMsg"></span>
         </div>
       </form>
+    </div>
+
+    <div id="addConfirmOverlay" class="confirm-overlay hidden">
+      <div class="confirm-card">
+        <h3>Confirmer l'ajout</h3>
+        <p class="confirm-title" id="addConfirmTitle"></p>
+        <p class="confirm-hint" id="addConfirmHint"></p>
+        <div class="confirm-fields" id="addConfirmFields"></div>
+        <div class="confirm-actions">
+          <button type="button" id="addConfirmCancel">Annuler</button>
+          <button type="button" id="addConfirmOk" class="primary">Enregistrer</button>
+        </div>
+      </div>
     </div>`;
 
   const fillDatalist = (id, values) => {
@@ -943,6 +956,8 @@ function renderAddForm() {
   });
 
   document.getElementById('addForm').addEventListener('submit', onAddFormSubmit);
+  document.getElementById('addConfirmCancel').addEventListener('click', closeAddConfirm);
+  document.getElementById('addConfirmOk').addEventListener('click', confirmAddBook);
 }
 
 function onAddFormSubmit(e) {
@@ -1043,6 +1058,11 @@ function onAddFormSubmit(e) {
     links: addFormState.links.map(l => ({ ...l })),
   };
 
+  if (window.__TAURI__) {
+    openAddConfirm(book, msgEl);
+    return;
+  }
+
   const blob = new Blob([JSON.stringify(book, null, 2)], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -1053,6 +1073,69 @@ function onAddFormSubmit(e) {
   a.remove();
   URL.revokeObjectURL(url);
   msgEl.textContent = 'new_book.json téléchargé — passe-le à bc_add pour le vérifier.';
+}
+
+// --- Tauri-only confirmation step: resolve+plan the book against the
+// currently-loaded collection via IPC, show a human-readable preview (any
+// value that would create a brand-new Publisher/Genre/etc. entry flagged
+// "nouveau"), and only call commit_add_book once the user explicitly
+// confirms. Never reachable from bc_export's static HTML export. ---
+let pendingAddBook = null;
+
+async function openAddConfirm(book, msgEl) {
+  msgEl.textContent = '';
+  msgEl.className = '';
+  try {
+    const preview = await window.__TAURI__.core.invoke('prepare_add_book', { path: currentCollectionPath, input: book });
+    pendingAddBook = book;
+    document.getElementById('addConfirmTitle').textContent = preview.title;
+    const hintEl = document.getElementById('addConfirmHint');
+    if (preview.new_count > 0) {
+      hintEl.textContent = `${preview.new_count} nouvelle(s) valeur(s) seront créées (marquées "nouveau" ci-dessous) :`;
+    } else {
+      hintEl.textContent = 'Toutes les valeurs ci-dessous existent déjà dans la collection.';
+    }
+    const fieldsEl = document.getElementById('addConfirmFields');
+    fieldsEl.innerHTML = preview.fields.length
+      ? preview.fields.map(f => `
+          <div class="confirm-field">
+            <span class="confirm-field-label">${escapeHtml(f.label)}</span>
+            <span class="confirm-field-value">${escapeHtml(f.value)}</span>
+            ${f.is_new ? '<span class="confirm-badge-new">nouveau</span>' : ''}
+          </div>`).join('')
+      : '<p class="confirm-empty">(aucune valeur de type éditeur/genre/auteur/etc. sur cette fiche)</p>';
+    document.getElementById('addConfirmOverlay').classList.remove('hidden');
+  } catch (err) {
+    pendingAddBook = null;
+    msgEl.textContent = String(err);
+    msgEl.className = 'add-msg-error';
+  }
+}
+
+function closeAddConfirm() {
+  pendingAddBook = null;
+  document.getElementById('addConfirmOverlay').classList.add('hidden');
+}
+
+async function confirmAddBook() {
+  if (!pendingAddBook) return;
+  const okBtn = document.getElementById('addConfirmOk');
+  const msgEl = document.getElementById('addMsg');
+  okBtn.disabled = true;
+  okBtn.textContent = 'Enregistrement…';
+  try {
+    const result = await window.__TAURI__.core.invoke('commit_add_book', { path: currentCollectionPath, input: pendingAddBook });
+    closeAddConfirm();
+    msgEl.textContent = result;
+    msgEl.className = 'add-msg-success';
+  } catch (err) {
+    closeAddConfirm();
+    msgEl.textContent = String(err);
+    msgEl.className = 'add-msg-error';
+  } finally {
+    okBtn.disabled = false;
+    okBtn.textContent = 'Enregistrer';
+  }
 }
 
 // --- Draggable splitters (left/right panes, and top/bottom right panes) ---
