@@ -5,14 +5,21 @@
 // apart that case from bc_export's static HTML export, which keeps working
 // exactly as before (synchronous, embedded JSON, opened in any browser).
 //
-// TEMPORARY until step 4 (a real Files > Import... file picker): hardcoded
-// to this dev machine's sample collection (see testdata-sample/,
-// build-sample-testdata.sh).
+// Fallback when nothing better is known yet (first launch, nothing in
+// localStorage): this dev machine's sample collection (see
+// testdata-sample/, build-sample-testdata.sh). "File > Import a file..."
+// (step 4) picks a real one and overrides it from then on, remembered
+// across relaunches the same way the rest of the UI state already is.
 const DEV_COLLECTION_PATH = '/Users/serge/Developer/book_collector_export/testdata-sample/MyCollection.bkcp';
+let currentCollectionPath = DEV_COLLECTION_PATH;
+try {
+  const saved = localStorage.getItem('bc_collection_path');
+  if (saved) currentCollectionPath = saved;
+} catch (e) { /* ignore */ }
 
 async function loadAllBooks() {
   if (window.__TAURI__) {
-    return await window.__TAURI__.core.invoke('load_collection', { path: DEV_COLLECTION_PATH });
+    return await window.__TAURI__.core.invoke('load_collection', { path: currentCollectionPath });
   }
   return JSON.parse(document.getElementById('data').textContent);
 }
@@ -1155,9 +1162,25 @@ async function boot() {
   updateColHeaderActive();
 }
 
-boot().catch(err => {
-  console.error('NBC: échec du chargement de la collection', err);
-  document.body.innerHTML =
-    '<div style="padding:40px;font-family:sans-serif;color:#c0392b;">'
-    + '<h2>Impossible de charger la collection</h2><pre>' + escapeHtml(String(err)) + '</pre></div>';
-});
+function bootWithErrorHandling() {
+  boot().catch(err => {
+    console.error('NBC: échec du chargement de la collection', err);
+    document.body.innerHTML =
+      '<div style="padding:40px;font-family:sans-serif;color:#c0392b;">'
+      + '<h2>Impossible de charger la collection</h2><pre>' + escapeHtml(String(err)) + '</pre></div>';
+  });
+}
+
+// "File > Import a file..." (step 4): the native picker runs on the Rust
+// side (app/src-tauri/src/lib.rs) and sends the chosen path as this event,
+// since picking a file is inherently async/callback-based there. Switches
+// the whole page over to the new collection and remembers it for next time.
+if (window.__TAURI__) {
+  window.__TAURI__.event.listen('import-collection', (event) => {
+    currentCollectionPath = event.payload;
+    try { localStorage.setItem('bc_collection_path', currentCollectionPath); } catch (e) { /* ignore */ }
+    bootWithErrorHandling();
+  });
+}
+
+bootWithErrorHandling();

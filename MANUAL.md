@@ -462,6 +462,10 @@ vraie commande Tauri (`load_collection`) qui appelle le même code que
 `bc_export` (`src/lib.rs`) — plus de fichier de données à régénérer à la
 main.
 
+**Étape 4/6 (faite)** : menus natifs — **File > Import a file…** ouvre le
+sélecteur macOS natif pour choisir une autre collection (`.bkcp`/`.col`),
+et **NBC Help > About NBC** affiche la version.
+
 ```bash
 cargo build --release        # si bc_export n'est pas déjà compilé (depuis la racine)
 ./app/generate-dev-data.sh   # synchronise app/src/{index.html,app.js,style.css}
@@ -471,10 +475,18 @@ cargo tauri build    # compile une vraie .app (et un .dmg), dans
                       # app/src-tauri/target/release/bundle/
 ```
 
-⚠️ Le chemin de la collection chargée est **temporairement codé en dur**
-(`DEV_COLLECTION_PATH` dans `templates/app.js`, pointant vers
-`testdata-sample/`) — l'étape 4 le remplacera par un vrai sélecteur de
-fichier (menu Files > Import a file...).
+⚠️ **Important** : `./app/generate-dev-data.sh` doit être relancé après
+**toute** modification de `templates/app.js`/`style.css` avant de tester
+— sinon `cargo tauri dev` tourne avec une copie obsolète dans
+`app/src/`, sans erreur visible (juste un comportement qui ne correspond
+plus au code). Piège déjà rencontré une fois (v0.32.0), source d'une
+perte de temps de diagnostic ; vérifiable avec
+`diff <(md5 -q templates/app.js) <(md5 -q app/src/app.js)`.
+
+Le chemin de la collection chargée au démarrage reste `DEV_COLLECTION_PATH`
+(`templates/app.js`, vers `testdata-sample/`) **seulement comme valeur de
+repli** au tout premier lancement — "File > Import a file…" le remplace et
+le mémorise (`localStorage`) pour les lancements suivants.
 
 `app/src/index.html` reste gitignoré (généré par `generate-dev-data.sh`
 depuis `app/src/index.template.html`, committé lui) mais ne contient plus
@@ -493,11 +505,13 @@ jamais dans l'export HTML classique). ⚠️ Si une nouvelle collection est
 ouverte depuis un emplacement hors de cette portée (ou un nouveau dossier
 de test est créé), il faudra l'y ajouter — oubli déjà fait une fois pour
 `testdata-sample/`, couvertures silencieusement absentes sans aucune
-erreur JS (v0.31.1). L'étape 4 devra rendre ça dynamique, en
-même temps que le sélecteur de fichier.
+erreur JS (v0.31.1). Le sélecteur de fichier de l'étape 4 permet
+maintenant d'ouvrir d'autres collections, mais la portée reste **statique**
+— ouvrir une collection ailleurs que les emplacements déjà listés y
+cachera encore les couvertures ; ça restera le cas tant que cette portée
+n'est pas rendue dynamique.
 
-Étapes suivantes, pas encore commencées : les menus natifs Files/Help
-(étape 4), icône et finitions (étape 5).
+Étape suivante, pas encore commencée : icône et finitions (étape 5).
 
 ## 9. Dépannage
 

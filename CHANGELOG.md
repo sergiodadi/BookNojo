@@ -4,6 +4,24 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.32.0] - 2026-11-02
+
+### Added
+- **Étape 4/6 du plan NBC : menus natifs.**
+  - **File > Import a file…** : ouvre le sélecteur de fichier macOS natif (`tauri-plugin-dialog`), scope "dossier" — `.bkcp`/`.col` apparaît comme un seul élément sélectionnable (Book Collector l'a enregistré comme type de paquet auprès de macOS), pas un dossier à ouvrir. Le chemin choisi est envoyé au frontend via un évènement Tauri (`import-collection`) ; `templates/app.js` l'écoute et recharge toute la page avec la nouvelle collection — mémorisé dans `localStorage` pour les lancements suivants (plus de `DEV_COLLECTION_PATH` figé en dur à chaque fois, juste une valeur de repli au tout premier lancement).
+  - **NBC Help > About NBC** : affiche une boîte de dialogue avec le nom et la version.
+  - Menus App/Edit/Window standards reconstruits explicitement (`SubmenuBuilder`) plutôt que de garder le menu par défaut de Tauri, pour pouvoir y insérer "Import a file…".
+
+### Fixed
+- **Bug Tauri contourné** : un sous-menu nommé exactement `"Help"` est entièrement avalé par macOS/Tauri dans cette version (n'apparaît pas du tout dans la barre, correspond à des rapports de bug connus en amont) — confirmé en renommant temporairement le menu pour test, puis corrigé définitivement en le nommant `"NBC Help"`.
+- **Erreur d'appel d'API corrigée** (`.hide()`/`.hide_others()`/`.show_all()` ne prennent aucun argument dans cette version de Tauri, contrairement à ce que suggérait la documentation trouvée) — corrigé d'après les messages d'erreur du compilateur.
+
+### Verified
+- **Chaîne complète vérifiée bout en bout** : clic sur le menu → ouverture du sélecteur natif (titré "Importer une collection", scope dossier confirmé sur un vrai `.bkcp`) → sélection → évènement `import-collection` émis → reçu par `templates/app.js` → `load_collection` appelé → page rechargée. Confirmé via un test délibéré avec un dossier invalide : le message d'erreur exact attendu s'est affiché dans l'interface, prouvant que toute la plomberie (menu, dialogue, évènement, écouteur, IPC, gestion d'erreur) fonctionne.
+- `invoke('load_collection', ...)` testé directement avec le chemin de `testdata/` (2237 fiches) : retourne bien 2237 livres.
+- **Non vérifié par automatisation** : le clic sur l'unique fichier visible dans le sélecteur natif lui-même — tentatives multiples (sélection AX, clic coordonnées) toutes infructueuses, même friction déjà documentée dans ce projet avec le contenu WebKit. Un clic de souris réel, trivial pour un humain sur un élément unique, n'a aucune raison de se comporter différemment ; à confirmer par l'utilisateur.
+- **Bug trouvé et corrigé en testant** : `app/src/app.js` n'avait pas été resynchronisé (`./app/generate-dev-data.sh`) après plusieurs modifications de `templates/app.js` pendant cette étape — l'app tournait avec une version obsolète du script sans l'écouteur d'évènement, ce qui a fait perdre un temps de diagnostic significatif avant d'être repéré par un simple `diff`/`md5`. À retenir : toujours resynchroniser avant de tester après une modification de `templates/app.js`.
+
 ## [0.31.1] - 2026-11-02
 
 ### Fixed
