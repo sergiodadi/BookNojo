@@ -443,16 +443,28 @@ réutiliser le code déjà écrit plutôt que tout réécrire.
 **Étape 1/6 (faite)** : squelette vide, juste pour prouver que la
 mécanique fonctionne.
 
+**Étape 2/6 (faite)** : l'interface existante (`templates/page.html`,
+`style.css`, `app.js`) s'affiche dans la fenêtre — avec de vraies données,
+mais encore **statiques** (régénérées à la main, pas en direct).
+
 ```bash
+cargo build --release        # si bc_export n'est pas déjà compilé (depuis la racine)
+./app/generate-dev-data.sh   # génère app/src/index.html depuis testdata/
 cd app
 cargo tauri dev      # lance une fenêtre de développement (rechargement à chaud)
 cargo tauri build    # compile une vraie .app (et un .dmg), dans
                       # app/src-tauri/target/release/bundle/
 ```
 
-Étapes suivantes, pas encore commencées : brancher l'interface HTML/CSS/JS
-existante (étape 2), puis le vrai moteur Rust (étape 3), les menus natifs
-Files/Help (étape 4), icône et finitions (étape 5).
+⚠️ `app/src/index.html` (généré par `generate-dev-data.sh`) contient les
+données de `testdata/` et n'est **jamais committé** (`.gitignore` de
+`app/`) — seul `app/src/index.template.html`, sans données, l'est. À
+régénérer après `./refresh-testdata.sh`, ou après toute modification de
+`templates/app.js`/`style.css`.
+
+Étapes suivantes, pas encore commencées : le vrai moteur Rust via IPC
+Tauri (étape 3 — plus besoin de régénérer de fichier à la main), les
+menus natifs Files/Help (étape 4), icône et finitions (étape 5).
 
 ## 9. Dépannage
 

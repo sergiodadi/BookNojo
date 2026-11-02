@@ -4,6 +4,23 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.28.0] - 2026-11-02
+
+### Added
+- **Étape 2/6 du plan NBC : interface existante branchée dans la fenêtre Tauri.** `app/src/` reprend `templates/page.html`/`style.css`/`app.js` tels quels (liens externes au lieu de l'inlining fait par `bc_export`, mais `app.js` byte-pour-byte identique — aucun risque pris sur 1100 lignes déjà validées). En-tête renommé "NBC", badge de version "NBC — développement" (provisoire).
+- `app/generate-dev-data.sh` : régénère `app/src/index.html` depuis `testdata/` (jamais la vraie collection) en réutilisant `bc_export --html` tel quel, puis en réinjectant son bloc de données dans `app/src/index.template.html`. Resynchronise aussi `app.js`/`style.css` depuis `templates/`.
+
+### Fixed
+- **Risque de fuite de données personnelles évité avant tout commit** : la première version de `app/src/index.html` embarquait directement les vraies données de `testdata/` (titres, auteurs...). Corrigé en séparant un gabarit sans données (`index.template.html`, committé) de l'HTML généré (`index.html`, ~20 Mo, ajouté au `.gitignore` de `app/` et retiré du suivi — même règle que `/testdata`, `/collection`, `*.col` à la racine). `app.js`/`style.css`, simples copies de `templates/`, sont aussi gitignorés pour éviter la duplication.
+
+### Verified
+- Lancé réellement (`cargo tauri dev` puis `cargo tauri build`) avec les vraies données de test : fenêtre native affichant l'interface complète — en-tête, onglets de sous-collections, barre A→Z, liste paginée (1242/1242, 21 pages), fiche détail correcte pour un livre sélectionné (titre, auteur, éditeur, ISBN, format, genres). Capturé à l'écran à chaque étape.
+- Interaction par clic testée mais peu fiable dans cette fenêtre WebKit via automatisation d'accessibilité (même limite déjà rencontrée avec Chrome et Book Collector) — non bloquant : le rendu des données, lui, est confirmé visuellement.
+- Reste du projet (`bc_export`/`bc_add`, 12 tests) non affecté, revérifié.
+
+### Next (étape 3, pas encore commencée)
+- Remplacer les données statiques embarquées par de vrais appels IPC Tauri vers le moteur Rust existant (`lib.rs`, `bc_add`) — plus de fichier à régénérer à la main à ce moment-là.
+
 ## [0.27.0] - 2026-11-02
 
 ### Added
