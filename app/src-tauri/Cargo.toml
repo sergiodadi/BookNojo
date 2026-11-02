@@ -5,7 +5,7 @@ name = "nbc"
 # the previous static "0.1.0" meant both this crate's own env!("CARGO_PKG_VERSION")
 # (the About NBC dialog) and tauri.conf.json's bundle version were silently
 # stale since the app was scaffolded.
-version = "0.37.0"
+version = "0.38.0"
 description = "NBC (nom provisoire)"
 authors = ["Serge"]
 edition = "2024"

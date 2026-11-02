@@ -578,7 +578,16 @@ maintenant d'ouvrir d'autres collections, mais la portée reste **statique**
 cachera encore les couvertures ; ça restera le cas tant que cette portée
 n'est pas rendue dynamique.
 
-Étape suivante, pas encore commencée : icône et finitions (étape 5).
+**v0.38.0 — Supprimer un livre.** Bouton "🗑️ Supprimer ce livre" dans le
+panneau de détail (app NBC uniquement) — confirmation native, sauvegarde
+horodatée avant écriture, mêmes garde-fous que l'ajout (jamais la vraie
+collection, refus si Book Collector est lancé). Supprime la fiche et ses
+propres lignes (crédits, personnages, contenus, liens, jointures genres/
+sujets/tags) sans jamais toucher aux valeurs partagées (éditeur, genre,
+auteur...) même si le livre en était le seul utilisateur. **Modifier un
+livre existant n'est pas encore fait** — prochaine étape du même chantier.
+
+Étape suivante (visuelle), pas encore commencée : icône de l'app (étape 5).
 
 ## 9. Dépannage
 

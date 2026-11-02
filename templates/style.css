@@ -582,6 +582,24 @@
   button.primary:hover { background: var(--accent-dark); box-shadow: var(--shadow-md); }
   button.primary:disabled { opacity: .6; cursor: default; }
 
+  /* Destructive actions (delete a book) — distinct from .primary so the
+     two are never visually confusable. */
+  button.danger {
+    display: block;
+    margin-top: 16px;
+    background: #fdeceb;
+    color: #c0392b;
+    border: 1px solid #f3c6c2;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background .15s ease, border-color .15s ease;
+  }
+  button.danger:hover { background: #fbdad7; border-color: #e8a9a3; }
+
   /* "Ajouter un livre" confirmation step (NBC app only — see
      openAddConfirm/confirmAddBook in app.js): a review of every
      editor/genre/author/etc. field before commit_add_book actually writes,

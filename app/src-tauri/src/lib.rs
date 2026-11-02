@@ -79,6 +79,29 @@ fn commit_add_book(path: String, input: book_collector_export::NewBookInput) -> 
         .map_err(|e| format!("{e:#}"))
 }
 
+/// Supprime un livre (et uniquement ses propres lignes — crédits,
+/// personnages, contenus, liens, jointures genres/sujets/tags — jamais les
+/// valeurs partagées comme l'éditeur ou un genre). Mêmes garde-fous que
+/// `commit_add_book` : jamais la vraie collection, jamais si Book Collector
+/// est lancé. La confirmation ("es-tu sûr ?") est côté interface
+/// (`window.confirm`), pas ici — cette commande exécute dès qu'elle est
+/// appelée.
+#[tauri::command]
+fn delete_book(path: String, book_id: i64) -> Result<String, String> {
+    let db_path = book_collector_export::resolve_db_path(Path::new(&path)).map_err(|e| format!("{e:#}"))?;
+    refuse_if_real_collection(&db_path)?;
+    if book_collector_export::is_book_collector_running().map_err(|e| format!("{e:#}"))? {
+        return Err("Book Collector est actuellement lancé — fermez l'application avant de supprimer.".to_string());
+    }
+    let backup_dir = db_path
+        .parent()
+        .map(|p| p.join("backups"))
+        .unwrap_or_else(|| std::path::PathBuf::from("backups"));
+    book_collector_export::delete_book(&db_path, &backup_dir, book_id)
+        .map(|backup| format!("Livre supprimé. Sauvegarde : {}", backup.display()))
+        .map_err(|e| format!("{e:#}"))
+}
+
 /// Reads `kPreferencesApplicationVersion` out of a `.bkcp`'s
 /// `preferences.plist` (binary plist — shelled out to `plutil`, since this
 /// is macOS-only code anyway and avoids a new plist-parsing dependency for
@@ -225,6 +248,7 @@ pub fn run() {
             load_collection,
             prepare_add_book,
             commit_add_book,
+            delete_book,
             app_version
         ])
         .setup(|app| {

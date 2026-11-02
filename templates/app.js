@@ -390,6 +390,7 @@ function selectBook(id, scrollIntoView) {
         ${userTags ? `<div class="group"><div class="label">Tags</div><div class="tags">${userTags}</div></div>` : ''}
         ${b.plot ? '<div class="group"><div class="label">Résumé</div><div class="text-block plot"></div></div>' : ''}
         ${b.notes ? '<div class="group"><div class="label">Notes</div><div class="text-block notes"></div></div>' : ''}
+        ${window.__TAURI__ ? '<button type="button" id="deleteBookBtn" class="danger">🗑️ Supprimer ce livre</button>' : ''}
       </div>
     </div>`;
 
@@ -405,7 +406,30 @@ function selectBook(id, scrollIntoView) {
     el.addEventListener('click', () => filterByGenre(el.dataset.genre));
   });
 
+  const deleteBtn = document.getElementById('deleteBookBtn');
+  if (deleteBtn) {
+    deleteBtn.addEventListener('click', () => deleteBookWithConfirm(b));
+  }
+
   saveState();
+}
+
+// Tauri-only: delete the given book after a native confirm(), then reload
+// the whole collection (simplest correct way to reflect the removal —
+// matches the Add-book flow, which doesn't try to surgically patch
+// allBooks/collCounts either). Never reachable from bc_export's static
+// export (no window.__TAURI__, no button rendered in the first place).
+async function deleteBookWithConfirm(b) {
+  const label = b.title || '(sans titre)';
+  if (!window.confirm(`Supprimer « ${label} » ? Une sauvegarde est prise avant, mais cette action n'est pas réversible depuis NBC.`)) {
+    return;
+  }
+  try {
+    await window.__TAURI__.core.invoke('delete_book', { path: currentCollectionPath, bookId: b.id });
+    bootWithErrorHandling();
+  } catch (err) {
+    window.alert(`Échec de la suppression : ${err}`);
+  }
 }
 
 groupFieldEl.addEventListener('change', () => {

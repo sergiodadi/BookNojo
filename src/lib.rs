@@ -1461,13 +1461,21 @@ pub fn plan_book_sql(conn: &Connection, book: &ResolvedBook) -> Result<String> {
     //    livre elle-même puisque ZAUTHOR a besoin du Z_PK du livre.
     let author_person_pks = plan_person_list(&mut alloc, &AUTHOR_PERSON, &book.authors, &mut sql)?;
 
-    // 3) La fiche livre elle-même (ZCOLLECTIBLE, Z_ENT="Book").
+    // 3) La fiche livre elle-même (ZCOLLECTIBLE, Z_ENT="Book"). Chaque livre
+    //    réel possède sa propre ligne ZITEMDELEGATE compagnon (confirmé sur
+    //    100% des fiches de testdata/) — motif générique déjà vu pour ZLINK,
+    //    mais ici un seul wrapper par livre, sans ZONLINELINK renseigné.
     let book_ent = entity_ent_id(conn, "Book")?;
     let book_pk = alloc.alloc("Collectible")?; // Book partage le compteur de l'entité racine.
+    let book_itemdelegate_ent = entity_ent_id(conn, "ItemDelegate")?;
+    let book_itemdelegate_pk = alloc.alloc("ItemDelegate")?;
     sql.push('\n');
     sql.push_str(&format!(
+        "INSERT INTO ZITEMDELEGATE (Z_PK, Z_ENT, Z_OPT, ZUNIQUEID) VALUES ({book_itemdelegate_pk}, {book_itemdelegate_ent}, 1, 0);\n"
+    ));
+    sql.push_str(&format!(
         "INSERT INTO ZCOLLECTIBLE (\n\
-         \x20 Z_PK, Z_ENT, Z_OPT, ZCOLLECTION, ZCOLLECTIONSTATUS, ZQUANTITY, ZISSUENUMBER,\n\
+         \x20 Z_PK, Z_ENT, Z_OPT, ZITEMDELEGATE, ZCOLLECTION, ZCOLLECTIONSTATUS, ZQUANTITY, ZISSUENUMBER,\n\
          \x20 ZTITLE, ZTITLESORT, ZSUBTITLE, ZISBN,\n\
          \x20 ZPUBLISHER, ZFORMAT, ZLANGUAGE, ZCOUNTRY, ZLOCATION, ZLOCNR,\n\
          \x20 ZNUMBEROFPAGES, ZPUBLICATIONYEAR, ZPUBLICATIONMONTH, ZPUBLICATIONDAY,\n\
@@ -1482,7 +1490,7 @@ pub fn plan_book_sql(conn: &Connection, book: &ResolvedBook) -> Result<String> {
          \x20 ZUSERLOOKUP1, ZUSERLOOKUP2, ZUSERTEXT1, ZUSERTEXT2,\n\
          \x20 ZPLOT, ZNOTES\n\
          ) VALUES (\n\
-         \x20 {book_pk}, {book_ent}, 1, {collection_pk}, 2, {quantity}, {issue_number},\n\
+         \x20 {book_pk}, {book_ent}, 1, {book_itemdelegate_pk}, {collection_pk}, 2, {quantity}, {issue_number},\n\
          \x20 {title}, {title_sort}, {subtitle}, {isbn},\n\
          \x20 {publisher_fk}, {format_fk}, {language_fk}, {country_fk}, {location_fk}, {location_number},\n\
          \x20 {pages}, {year}, {month}, {day},\n\
@@ -1900,6 +1908,87 @@ pub fn commit_add_book(db_path: &Path, backup_dir: &Path, input: NewBookInput) -
             .with_context(|| format!("ouverture en lecture seule de {}", db_path.display()))?;
         let resolved = resolve_book(&conn, input)?;
         plan_book_sql(&conn, &resolved)?
+    };
+    write_plan_sql(db_path, backup_dir, &sql)
+}
+
+/// Builds the full set of DELETE statements for one book: its own join rows
+/// (authors, genres, subjects, tags), credits, characters, contents and
+/// their own authors, links and their `ZITEMDELEGATE` companions, the
+/// book's own `ZITEMDELEGATE` wrapper row (mirrors what `plan_book_sql`
+/// creates for a new book), and finally the `ZCOLLECTIBLE` row itself.
+///
+/// Deliberately does NOT delete shared "liste"/person values (Publisher,
+/// Genre, Author, ...) even if this book was their only user — left as
+/// unused-but-present entries, the same conservative choice a reference-
+/// counted system makes rather than risk deleting something another row
+/// still points at. Wrapped in its own `BEGIN TRANSACTION;`/`COMMIT;` like
+/// `plan_book_sql`, so `write_plan_sql` can strip and execute it the same way.
+pub fn plan_delete_book_sql(conn: &Connection, book_pk: i64) -> Result<String> {
+    let book_ent = entity_ent_id(conn, "Book")?;
+    let exists: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM ZCOLLECTIBLE WHERE Z_PK = ?1 AND Z_ENT = ?2",
+        rusqlite::params![book_pk, book_ent],
+        |row| row.get(0),
+    )?;
+    if exists == 0 {
+        bail!("aucun livre avec Z_PK={book_pk} dans cette collection");
+    }
+
+    let item_delegate_pk: Option<i64> =
+        conn.query_row("SELECT ZITEMDELEGATE FROM ZCOLLECTIBLE WHERE Z_PK = ?1", [book_pk], |row| row.get(0))?;
+
+    let story_pks: Vec<i64> = {
+        let mut stmt = conn.prepare("SELECT Z_PK FROM ZSTORY WHERE ZBOOK = ?1")?;
+        let rows = stmt.query_map([book_pk], |row| row.get(0))?.collect::<rusqlite::Result<_>>()?;
+        rows
+    };
+
+    let link_item_delegate_pks: Vec<i64> = {
+        let mut stmt = conn.prepare(
+            "SELECT ZITEMDELEGATE1 FROM ZLINK WHERE ZBASEBOOKCOLLECTIBLE1 = ?1 AND ZITEMDELEGATE1 IS NOT NULL",
+        )?;
+        let rows = stmt.query_map([book_pk], |row| row.get(0))?.collect::<rusqlite::Result<_>>()?;
+        rows
+    };
+
+    let mut sql = String::new();
+    sql.push_str("-- Plan de suppression — APERÇU, RIEN N'EST EXÉCUTÉ.\n");
+    sql.push_str("BEGIN TRANSACTION;\n\n");
+
+    for story_pk in &story_pks {
+        sql.push_str(&format!("DELETE FROM ZAUTHOR WHERE ZSTORY = {story_pk};\n"));
+    }
+    sql.push_str(&format!("DELETE FROM ZSTORY WHERE ZBOOK = {book_pk};\n"));
+    sql.push_str(&format!("DELETE FROM ZAUTHOR WHERE ZBOOK = {book_pk};\n"));
+    sql.push_str(&format!("DELETE FROM Z_7GENRES WHERE Z_7BASEBOOKCOLLECTIBLES1 = {book_pk};\n"));
+    sql.push_str(&format!("DELETE FROM Z_8SUBJECTS WHERE Z_8BOOKS1 = {book_pk};\n"));
+    sql.push_str(&format!("DELETE FROM Z_6TAGS WHERE Z_6COLLECTIBLES = {book_pk};\n"));
+    sql.push_str(&format!("DELETE FROM ZCREATOR WHERE ZBASEBOOKCOLLECTIBLE = {book_pk};\n"));
+    sql.push_str(&format!("DELETE FROM ZCHARACTER WHERE ZBASEBOOKCOLLECTIBLE = {book_pk};\n"));
+    for link_item_delegate_pk in &link_item_delegate_pks {
+        sql.push_str(&format!("DELETE FROM ZITEMDELEGATE WHERE Z_PK = {link_item_delegate_pk};\n"));
+    }
+    sql.push_str(&format!("DELETE FROM ZLINK WHERE ZBASEBOOKCOLLECTIBLE1 = {book_pk};\n"));
+    if let Some(pk) = item_delegate_pk {
+        sql.push_str(&format!("DELETE FROM ZITEMDELEGATE WHERE Z_PK = {pk};\n"));
+    }
+    sql.push_str(&format!("DELETE FROM ZCOLLECTIBLE WHERE Z_PK = {book_pk};\n"));
+
+    sql.push_str("\nCOMMIT;\n");
+    Ok(sql)
+}
+
+/// Read-build-write in one call: opens `db_path` read-only to build the
+/// delete plan, then backs up and executes it. Callers must have already
+/// checked `is_book_collector_running() == false` and refused `db_path` if
+/// `looks_like_real_collection` returns `Some` — same contract as
+/// `commit_add_book`/`write_plan_sql`. Returns the backup path.
+pub fn delete_book(db_path: &Path, backup_dir: &Path, book_pk: i64) -> Result<PathBuf> {
+    let sql = {
+        let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .with_context(|| format!("ouverture en lecture seule de {}", db_path.display()))?;
+        plan_delete_book_sql(&conn, book_pk)?
     };
     write_plan_sql(db_path, backup_dir, &sql)
 }

@@ -4,6 +4,17 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.38.0] - 2026-11-02
+
+### Added
+- **Supprimer un livre, depuis l'app NBC** — premier des deux chantiers de fiabilisation demandés par l'utilisateur ("modifier/supprimer un livre"), traité en deux temps : suppression maintenant, édition à suivre. Bouton "🗑️ Supprimer ce livre" dans le panneau de détail (visible uniquement dans l'app NBC, jamais dans l'export HTML statique), confirmation native avant d'agir.
+  - `plan_delete_book_sql`/`delete_book` dans `src/lib.rs` : supprime la fiche et **uniquement ses propres lignes** (jointures auteurs/genres/sujets/tags, crédits, personnages, contenus et leurs propres auteurs, liens et leur `ZITEMDELEGATE` compagnon, et le `ZITEMDELEGATE` propre au livre) — ne touche jamais aux valeurs partagées (éditeur, genre, auteur...) même si ce livre en était le seul utilisateur, par choix conservateur (comportement d'un système à comptage de références : une valeur non référencée reste présente mais inutilisée, plutôt que risquer de supprimer quelque chose qu'une autre fiche référence encore).
+  - Mêmes garde-fous que l'ajout : jamais sur un chemin qui ressemble à la vraie collection, refus si Book Collector est lancé, sauvegarde horodatée avant toute écriture.
+- **Correction annexe découverte en implémentant la suppression** : la création d'un livre (`plan_book_sql`) n'avait jamais créé sa propre ligne `ZITEMDELEGATE` compagnon, alors que 100% des fiches réelles de `testdata/` en ont une — corrigé pour que les livres créés par NBC aient exactement la même structure que ceux créés par Book Collector lui-même.
+
+### Verified
+- Testé end-to-end sur `testdata-rw/` : création d'un livre avec genre/sujet/crédit-avec-rôle/personnage/contenu/lien, suppression, puis vérification SQL directe — toutes les lignes liées disparues (0 partout), `PRAGMA integrity_check` toujours `ok`, et la valeur de genre partagée confirmée **non** supprimée (comportement attendu).
+
 ## [0.37.0] - 2026-11-02
 
 ### Added
