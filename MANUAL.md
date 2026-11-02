@@ -462,9 +462,13 @@ vraie commande Tauri (`load_collection`) qui appelle le même code que
 `bc_export` (`src/lib.rs`) — plus de fichier de données à régénérer à la
 main.
 
-**Étape 4/6 (faite)** : menus natifs — **File > Import a file…** ouvre le
-sélecteur macOS natif pour choisir une autre collection (`.bkcp`/`.col`),
-et **NBC Help > About NBC** affiche la version.
+**Étape 4/6 (faite)** : menus natifs — **File > Import a collection…**
+ouvre le sélecteur macOS natif pour choisir une autre collection
+(`.bkcp`/`.col`), et **NBC Help > About NBC** affiche la version. NBC
+permet d'importer une collection de livres gérée par Book Collector for
+Mac v20.3.1 — un `.bkcp` d'une autre version est refusé à l'import (sa
+version est lue dans `preferences.plist`), puisque le schéma SQL de ce
+projet ne cible que cette version précise.
 
 ⚠️ **Piège rencontré (corrigé en v0.32.1)** : le sélecteur utilisait
 d'abord `pick_folder()` (sélection de dossier) en pensant que `.bkcp`/

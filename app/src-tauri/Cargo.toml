@@ -1,7 +1,7 @@
 [package]
 name = "nbc"
 version = "0.1.0"
-description = "NBC — successeur de Book Collector (nom provisoire)"
+description = "NBC (nom provisoire)"
 authors = ["Serge"]
 edition = "2024"
 
@@ -20,7 +20,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-opener = "2"
-# Native "Importer un fichier..." picker (étape 4 : menu Files > Import a file...).
+# Native "Importer une collection..." picker (étape 4 : menu File > Import a collection...).
 tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

@@ -4,6 +4,17 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.32.2] - 2026-11-02
+
+### Added
+- **Vérification de version à l'import** : un `.bkcp` choisi dans "File > Import a collection…" est désormais vérifié (`preferences.plist` → `kPreferencesApplicationVersion`, lu via `plutil -convert json`) contre la version Book Collector `20.3.1` — celle que le schéma SQL de ce projet cible. Import refusé (boîte de dialogue d'erreur) si la version diffère, ou si elle est illisible (par précaution). Un `.col` (déjà propriété de NBC) n'est pas soumis à cette vérification.
+
+### Changed
+- **Dépoussiérage des références à "Book Collector" dans l'UI de l'app NBC**, à la demande de l'utilisateur — réservées désormais au menu Help/mode d'emploi, ou à un message fonctionnel qui en a réellement besoin (comme l'erreur de version ci-dessus) :
+  - Menu **File > "Import a file…"** renommé **"Import a collection…"**.
+  - Boîte **About NBC** : retrait de "successeur de Book Collector" → juste "NBC (nom provisoire)" + version.
+  - `app/src-tauri/Cargo.toml` : description du paquet nettoyée de même.
+
 ## [0.32.1] - 2026-11-02
 
 ### Fixed
