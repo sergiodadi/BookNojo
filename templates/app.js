@@ -699,6 +699,7 @@ function renderAddForm() {
             <label>Langue<input name="language" list="dl-language"></label>
             <label>Pays<input name="country" list="dl-country"></label>
             <label>Emplacement<input name="location" list="dl-location"></label>
+            <label>N° d'emplacement<input name="location_number"></label>
             <label>Quantité<input name="quantity" type="number" min="1" value="1"></label>
             <label>Sous-collection *<select name="collection" required>${collOptions}</select></label>
           </div>
@@ -721,6 +722,7 @@ function renderAddForm() {
 
         <div id="addtab-details" class="add-tab-panel hidden">
           <div class="add-grid">
+            <label>Issue N°<input name="issue_number" type="number" min="0"></label>
             <label>Édition<input name="edition" list="dl-edition"></label>
             <label>Imprimé par<input name="printed_by" list="dl-printedby"></label>
             <label>Série<input name="series" list="dl-series"></label>
@@ -737,6 +739,7 @@ function renderAddForm() {
           <div class="add-checkrow">
             <label class="add-check"><input type="checkbox" name="first_edition"> Première édition</label>
             <label class="add-check"><input type="checkbox" name="abridged"> Abrégé</label>
+            <label class="add-check"><input type="checkbox" name="box_set"> Coffret</label>
           </div>
           <h3 class="add-subhead">Édition originale</h3>
           <div class="add-grid">
@@ -799,6 +802,7 @@ function renderAddForm() {
               <label>Titre<input id="contentTitleInput"></label>
               <label>Sous-titre<input id="contentSubtitleInput"></label>
               <label>Nombre de pages<input id="contentPagesInput" type="number" min="0"></label>
+              <label>Page de début<input id="contentStartPageInput" type="number" min="0"></label>
             </div>
             <div class="add-list-field">
               <span class="label">Auteurs de ce contenu</span>
@@ -940,17 +944,20 @@ function renderAddForm() {
     const titleEl = document.getElementById('contentTitleInput');
     const subtitleEl = document.getElementById('contentSubtitleInput');
     const pagesEl = document.getElementById('contentPagesInput');
+    const startPageEl = document.getElementById('contentStartPageInput');
     const title = titleEl.value.trim();
     if (!title) return;
     addFormState.contents.push({
       title,
       subtitle: subtitleEl.value.trim() || null,
       number_of_pages: pagesEl.value ? parseInt(pagesEl.value, 10) : null,
+      start_page: startPageEl.value ? parseInt(startPageEl.value, 10) : null,
       authors: [...contentDraftAuthors],
     });
     titleEl.value = '';
     subtitleEl.value = '';
     pagesEl.value = '';
+    startPageEl.value = '';
     contentAuthorsChips.clear();
     contentsListHandle.render();
   });
@@ -1006,9 +1013,11 @@ function onAddFormSubmit(e) {
     genres: [...addFormState.genres],
     subjects: [...addFormState.subjects],
     location: str('location'),
+    location_number: str('location_number'),
     quantity: num('quantity') || 1,
     collection: collectionName,
 
+    issue_number: num('issue_number'),
     edition: str('edition'),
     printed_by: str('printed_by'),
     series: str('series'),
@@ -1022,6 +1031,7 @@ function onAddFormSubmit(e) {
     first_edition: bool('first_edition'),
     printing: num('printing'),
     abridged: bool('abridged'),
+    box_set: bool('box_set'),
     audio_length_minutes: num('audio_length_minutes'),
     original_title: str('original_title'),
     original_subtitle: str('original_subtitle'),

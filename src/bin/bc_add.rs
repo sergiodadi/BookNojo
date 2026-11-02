@@ -360,6 +360,24 @@ fn cmd_plan(db: PathBuf, resolved_path: PathBuf, output: Option<PathBuf>) -> Res
     println!("  pris comme motif par défaut le plus sûr en l'absence de preuve contraire.");
     println!("- Liens : ZTYPEID=4 repris tel quel (100% des 832 liens existants dans la");
     println!("  collection de test utilisent cette valeur) — sens exact non confirmé.");
+    println!();
+    println!("--- Field audit against the full ZCOLLECTIBLE/ZSTORY schema (not implemented) ---");
+    println!("- ZUSERTEXT1/2, ZUSERLOOKUP1/2, ZUSERDEFINEDVALUESXML (Personal tab \"User 1\"/\"User 2\"");
+    println!("  custom fields): present in the schema, but 0 non-null rows anywhere in testdata/");
+    println!("  (ZUSERDEFINEDVALUESXML is always an empty string) — no real data to confirm how a");
+    println!("  custom field's label/type is actually stored. Not implemented.");
+    println!("- ZSTORY (Contenus): ZSTARTPAGE is now covered. ZSERIES, ZPLOT, ZNOTES, ZMYRATING, and");
+    println!("  the whole ORIGINAL* group (title/subtitle/publisher/country/language/publication");
+    println!("  date) exist on ZSTORY too, mirroring the book-level fields — but ZSTORY has 0 rows");
+    println!("  in testdata/ (same as ZCREATOR/ZCHARACTER), so this is unverified by analogy only,");
+    println!("  and a 10+-field addition to each content entry's form felt disproportionate without");
+    println!("  real data to confirm it. Not implemented — flag if you actually use these.");
+    println!("- ZITEMDELEGATE on ZCOLLECTIBLE itself: populated on every real book row, but not a");
+    println!("  user-facing field in Add Book — inferred to be the same internal delegate-wrapper");
+    println!("  pattern already confirmed for ZLINK's companion row, not something to write to.");
+    println!("- ZLASTLOAN, ZSYNCFRONTCOVER/ZSYNCBACKCOVER, ZCLZLASTREVISION, ZLASTEDITDATE,");
+    println!("  ZLASTSUBMISSIONDATE: loan-tracking/sync metadata, set by other app actions — not");
+    println!("  part of Add Book, out of scope here.");
 
     if let Some(path) = &output {
         std::fs::write(path, &sql).with_context(|| format!("écriture de {}", path.display()))?;

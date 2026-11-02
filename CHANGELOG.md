@@ -4,6 +4,20 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.36.0] - 2026-11-02
+
+### Fixed
+- **Message d'erreur clair quand la base cible est en lecture seule** (ex. `testdata/`, `chmod 444` à dessein) : au lieu de laisser remonter une erreur SQLite brute ("attempt to write a readonly database: Error code 8"), `write_plan_sql` vérifie désormais les permissions avant toute tentative d'écriture et explique la cause + la solution (utiliser `testdata-rw/`). Signalé par l'utilisateur en testant "Ajouter un livre" contre `testdata/`.
+
+### Added
+- **Audit complet des colonnes `ZCOLLECTIBLE`/`ZSTORY`** contre ce que le formulaire "Ajouter un livre" couvrait déjà, suite à un champ manquant signalé par l'utilisateur ("Issue N°"). Champs ajoutés (tous avec des données réelles confirmées dans `testdata/`, sauf `box_set`) :
+  - `issue_number` (`ZISSUENUMBER`) — onglet Détails, "Issue N°".
+  - `location_number` (`ZLOCNR`) — onglet Principal, "N° d'emplacement" (texte libre, pas une liste — confirmé par les valeurs réelles).
+  - `box_set` (`ZBOXSET`) — onglet Détails, case "Coffret".
+  - `start_page` par contenu (`ZSTORY.ZSTARTPAGE`) — onglet Contenus, "Page de début".
+  - `ZAUDIOLENGTH` (variante texte de `ZAUDIOLENGTHMINUTES`, toujours identique dans les données réelles observées) écrit automatiquement en miroir — pas un nouveau champ de formulaire.
+  - Champs identifiés mais **volontairement non implémentés**, documentés en détail (en anglais, pour un repérage facile face aux noms de colonnes du schéma) dans la sortie de `bc_add plan` : les champs personnalisés `ZUSERTEXT1`/`2`/`ZUSERLOOKUP1`/`2` (aucune donnée réelle, sémantique non vérifiable) et le reste des champs de `ZSTORY` (Plot/Notes/Série/Édition originale par contenu — par analogie seule, `ZSTORY` vide dans `testdata/`, ampleur de formulaire disproportionnée sans preuve).
+
 ## [0.35.0] - 2026-11-02
 
 ### Added

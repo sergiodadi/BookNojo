@@ -310,6 +310,21 @@ Limites connues de cette étape (affichées aussi par `bc_add plan`) :
   visuellement fiche par fiche dans l'application (navigation par liste
   peu fiable en automatisation d'accessibilité sur cette fenêtre).
 
+**v0.36.0 — audit complet des colonnes `ZCOLLECTIBLE`/`ZSTORY`** (suite à
+un champ manquant signalé par l'utilisateur, "Issue N°") : comparaison de
+chaque colonne du schéma contre ce qui était déjà couvert. Ajoutés : `issue_number`
+(`ZISSUENUMBER`, confirmé par des données réelles — ~49% des fiches de
+`testdata/`), `box_set` (`ZBOXSET`, case à cocher Détails), `location_number`
+(`ZLOCNR`, champ texte Principal, confirmé par des données réelles — numéro
+d'emplacement libre, pas une liste), `start_page` par contenu (`ZSTORY.ZSTARTPAGE`).
+Volontairement **non implémentés** (listés en détail par `bc_add plan`,
+section "Field audit") : les champs personnalisés `ZUSERTEXT1`/`ZUSERTEXT2`/
+`ZUSERLOOKUP1`/`ZUSERLOOKUP2` (aucune ligne non vide dans `testdata/`, sémantique
+non vérifiable) ; le reste des champs de `ZSTORY` qui dupliquent la section
+"Édition originale" + Plot/Notes/Série/Note du livre (par analogie seulement,
+`ZSTORY` est vide dans `testdata/`, et ~10 champs supplémentaires par contenu
+semblaient disproportionnés sans données réelles pour les confirmer).
+
 ### Étape 6 — activation sur la vraie collection
 
 `bc_add commit` refuse par défaut tout chemin qui ressemble à

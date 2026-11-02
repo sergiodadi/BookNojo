@@ -700,6 +700,11 @@ pub struct NewBookInput {
     pub subjects: Vec<String>,
     #[serde(default)]
     pub location: Option<String>,
+    /// `ZLOCNR` — a free-form number/code tied to `location` (e.g. a shelf
+    /// or box number), not a lookup: real data in `testdata/` shows this as
+    /// plain text (`"2001274321"`, `"96144722"`), not a FK into any table.
+    #[serde(default)]
+    pub location_number: Option<String>,
     #[serde(default = "default_quantity")]
     pub quantity: i64,
     /// Nom de la sous-collection cible (table ZCOLLECTION) — obligatoire :
@@ -707,6 +712,12 @@ pub struct NewBookInput {
     pub collection: String,
 
     // ---- Onglet "Détails" ----
+    /// `ZISSUENUMBER` — populated on ~49% of real rows in `testdata/`
+    /// (periodicals/comics, e.g. the "Revues numéro 1" sous-collection) —
+    /// confirmed by the user as a real field they expected ("Issue N°")
+    /// that was missing from the first pass of this form.
+    #[serde(default)]
+    pub issue_number: Option<i64>,
     #[serde(default)]
     pub edition: Option<String>,
     #[serde(default)]
@@ -733,6 +744,11 @@ pub struct NewBookInput {
     pub printing: Option<i64>,
     #[serde(default)]
     pub abridged: Option<bool>,
+    /// `ZBOXSET` — unpopulated in `testdata/` (never used in that
+    /// collection), but an unambiguous boolean column name alongside
+    /// `first_edition`/`abridged`.
+    #[serde(default)]
+    pub box_set: Option<bool>,
     #[serde(default)]
     pub audio_length_minutes: Option<i64>,
     #[serde(default)]
@@ -825,6 +841,13 @@ pub struct ContentInput {
     pub subtitle: Option<String>,
     #[serde(default)]
     pub number_of_pages: Option<i64>,
+    /// `ZSTORY.ZSTARTPAGE` — the page this content starts on within the
+    /// book (meaningful for anthologies/periodicals). `ZSTORY` is entirely
+    /// empty in `testdata/`, like the rest of this struct, so this is
+    /// unverified against real rows — same confidence level as the other
+    /// content fields already here.
+    #[serde(default)]
+    pub start_page: Option<i64>,
     #[serde(default)]
     pub authors: Vec<String>,
 }
@@ -862,12 +885,14 @@ pub struct ResolvedBook {
     pub genres: Vec<ResolvedLookup>,
     pub subjects: Vec<ResolvedLookup>,
     pub location: Option<ResolvedLookup>,
+    pub location_number: Option<String>,
     pub quantity: i64,
     /// La sous-collection cible ; `existing_pk` est toujours `Some(...)`
     /// ici — on a déjà vérifié son existence avant de construire ce champ.
     pub collection: ResolvedLookup,
 
     // ---- Détails ----
+    pub issue_number: Option<i64>,
     pub edition: Option<ResolvedLookup>,
     pub printed_by: Option<ResolvedLookup>,
     pub series: Option<ResolvedLookup>,
@@ -881,6 +906,7 @@ pub struct ResolvedBook {
     pub first_edition: Option<bool>,
     pub printing: Option<i64>,
     pub abridged: Option<bool>,
+    pub box_set: Option<bool>,
     pub audio_length_minutes: Option<i64>,
     pub original_title: Option<String>,
     pub original_subtitle: Option<String>,
@@ -935,6 +961,7 @@ pub struct ResolvedContent {
     pub title: String,
     pub subtitle: Option<String>,
     pub number_of_pages: Option<i64>,
+    pub start_page: Option<i64>,
     pub authors: Vec<ResolvedLookup>,
 }
 
@@ -1031,6 +1058,7 @@ pub fn resolve_book(conn: &Connection, book: NewBookInput) -> Result<ResolvedBoo
                 title: c.title.clone(),
                 subtitle: c.subtitle.clone(),
                 number_of_pages: c.number_of_pages,
+                start_page: c.start_page,
                 authors: resolve_person_list(conn, "ZAUTHORPERSON", &c.authors)?,
             })
         })
@@ -1052,11 +1080,13 @@ pub fn resolve_book(conn: &Connection, book: NewBookInput) -> Result<ResolvedBoo
         genres,
         subjects,
         location,
+        location_number: book.location_number,
         quantity: book.quantity,
         collection: ResolvedLookup {
             value: book.collection,
             existing_pk: Some(collection_pk),
         },
+        issue_number: book.issue_number,
         edition,
         printed_by,
         series,
@@ -1070,6 +1100,7 @@ pub fn resolve_book(conn: &Connection, book: NewBookInput) -> Result<ResolvedBoo
         first_edition: book.first_edition,
         printing: book.printing,
         abridged: book.abridged,
+        box_set: book.box_set,
         audio_length_minutes: book.audio_length_minutes,
         original_title: book.original_title,
         original_subtitle: book.original_subtitle,
@@ -1349,13 +1380,13 @@ pub fn plan_book_sql(conn: &Connection, book: &ResolvedBook) -> Result<String> {
     sql.push('\n');
     sql.push_str(&format!(
         "INSERT INTO ZCOLLECTIBLE (\n\
-         \x20 Z_PK, Z_ENT, Z_OPT, ZCOLLECTION, ZCOLLECTIONSTATUS, ZQUANTITY,\n\
+         \x20 Z_PK, Z_ENT, Z_OPT, ZCOLLECTION, ZCOLLECTIONSTATUS, ZQUANTITY, ZISSUENUMBER,\n\
          \x20 ZTITLE, ZTITLESORT, ZSUBTITLE, ZISBN,\n\
-         \x20 ZPUBLISHER, ZFORMAT, ZLANGUAGE, ZCOUNTRY, ZLOCATION,\n\
+         \x20 ZPUBLISHER, ZFORMAT, ZLANGUAGE, ZCOUNTRY, ZLOCATION, ZLOCNR,\n\
          \x20 ZNUMBEROFPAGES, ZPUBLICATIONYEAR, ZPUBLICATIONMONTH, ZPUBLICATIONDAY,\n\
          \x20 ZEDITION, ZPRINTEDBY, ZSERIES, ZVOLUME, ZPAPERTYPE,\n\
          \x20 ZHEIGHT, ZWIDTH, ZDEWEY, ZLCCN, ZDEDICATION,\n\
-         \x20 ZFIRSTEDITION, ZPRINTING, ZABRIDGED, ZAUDIOLENGTHMINUTES,\n\
+         \x20 ZFIRSTEDITION, ZPRINTING, ZABRIDGED, ZBOXSET, ZAUDIOLENGTHMINUTES, ZAUDIOLENGTH,\n\
          \x20 ZORIGINALTITLE, ZORIGINALSUBTITLE, ZORIGINALPUBLISHER, ZORIGINALCOUNTRY, ZORIGINALLANGUAGE,\n\
          \x20 ZORIGINALPUBLICATIONYEAR, ZORIGINALPUBLICATIONMONTH, ZORIGINALPUBLICATIONDAY,\n\
          \x20 ZCONDITION, ZOWNER, ZSTORE, ZCURRENTVALUE, ZPURCHASEPRICE, ZCOVERPRICE,\n\
@@ -1363,13 +1394,13 @@ pub fn plan_book_sql(conn: &Connection, book: &ResolvedBook) -> Result<String> {
          \x20 ZRARE, ZREADIT, ZREADTIMES, ZREADYEAR, ZREADMONTH, ZREADDAY, ZMYRATING,\n\
          \x20 ZPLOT, ZNOTES\n\
          ) VALUES (\n\
-         \x20 {book_pk}, {book_ent}, 1, {collection_pk}, 2, {quantity},\n\
+         \x20 {book_pk}, {book_ent}, 1, {collection_pk}, 2, {quantity}, {issue_number},\n\
          \x20 {title}, {title_sort}, {subtitle}, {isbn},\n\
-         \x20 {publisher_fk}, {format_fk}, {language_fk}, {country_fk}, {location_fk},\n\
+         \x20 {publisher_fk}, {format_fk}, {language_fk}, {country_fk}, {location_fk}, {location_number},\n\
          \x20 {pages}, {year}, {month}, {day},\n\
          \x20 {edition_fk}, {printed_by_fk}, {series_fk}, {volume_fk}, {paper_type_fk},\n\
          \x20 {height}, {width}, {dewey}, {lccn}, {dedication},\n\
-         \x20 {first_edition}, {printing}, {abridged}, {audio_length_minutes},\n\
+         \x20 {first_edition}, {printing}, {abridged}, {box_set}, {audio_length_minutes}, {audio_length},\n\
          \x20 {original_title}, {original_subtitle}, {original_publisher_fk}, {original_country_fk}, {original_language_fk},\n\
          \x20 {original_year}, {original_month}, {original_day},\n\
          \x20 {condition_fk}, {owner_fk}, {store_fk}, {current_value}, {purchase_price}, {cover_price},\n\
@@ -1379,10 +1410,12 @@ pub fn plan_book_sql(conn: &Connection, book: &ResolvedBook) -> Result<String> {
          );\n",
         collection_pk = book.collection.existing_pk.context("sous-collection non résolue")?,
         quantity = book.quantity,
+        issue_number = sql_opt_i64(book.issue_number),
         title = sql_quote(&book.title),
         title_sort = sql_quote(&book.title), // simplification — voir note en bas de sortie
         subtitle = sql_opt_str(&book.subtitle),
         isbn = sql_opt_str(&book.isbn),
+        location_number = sql_opt_str(&book.location_number),
         pages = sql_opt_i64(book.number_of_pages),
         year = sql_opt_str(&book.publication_year),
         month = sql_opt_str(&book.publication_month),
@@ -1395,7 +1428,13 @@ pub fn plan_book_sql(conn: &Connection, book: &ResolvedBook) -> Result<String> {
         first_edition = sql_opt_bool(book.first_edition),
         printing = sql_opt_i64(book.printing),
         abridged = sql_opt_bool(book.abridged),
+        box_set = sql_opt_bool(book.box_set),
         audio_length_minutes = sql_opt_i64(book.audio_length_minutes),
+        // ZAUDIOLENGTH has no independent form field: every populated row in
+        // testdata/ mirrors ZAUDIOLENGTHMINUTES exactly (both "0" wherever
+        // sampled) — written here as the same value in string form rather
+        // than left NULL, to match the app's own observed convention.
+        audio_length = sql_opt_str(&book.audio_length_minutes.map(|m| m.to_string())),
         original_title = sql_opt_str(&book.original_title),
         original_subtitle = sql_opt_str(&book.original_subtitle),
         original_year = sql_opt_str(&book.original_publication_year),
@@ -1507,10 +1546,11 @@ pub fn plan_book_sql(conn: &Connection, book: &ResolvedBook) -> Result<String> {
     for (ci, c) in book.contents.iter().enumerate() {
         let story_pk = alloc.alloc("Story")?;
         sql.push_str(&format!(
-            "INSERT INTO ZSTORY (Z_PK, Z_ENT, Z_OPT, ZRANK, ZBOOK, ZNUMBEROFPAGES, ZTITLE, ZTITLESORT, ZSUBTITLE) \
-             VALUES ({story_pk}, {story_ent}, 1, {rank}, {book_pk}, {pages}, {title}, {title_sort}, {subtitle});\n",
+            "INSERT INTO ZSTORY (Z_PK, Z_ENT, Z_OPT, ZRANK, ZBOOK, ZNUMBEROFPAGES, ZSTARTPAGE, ZTITLE, ZTITLESORT, ZSUBTITLE) \
+             VALUES ({story_pk}, {story_ent}, 1, {rank}, {book_pk}, {pages}, {start_page}, {title}, {title_sort}, {subtitle});\n",
             rank = ci + 1,
             pages = sql_opt_i64(c.number_of_pages),
+            start_page = sql_opt_i64(c.start_page),
             title = sql_quote(&c.title),
             title_sort = sql_quote(&c.title),
             subtitle = sql_opt_str(&c.subtitle),
@@ -1604,6 +1644,21 @@ pub fn strip_plan_wrapper(raw_sql: &str) -> String {
 /// `is_book_collector_running() == false` — same contract as
 /// `run_write_transaction`, which this wraps. Returns the backup path.
 pub fn write_plan_sql(db_path: &Path, backup_dir: &Path, raw_sql: &str) -> Result<PathBuf> {
+    // Checked up front rather than left to surface as a raw SQLite error
+    // ("attempt to write a readonly database") once the write is already
+    // attempted — `testdata/` is deliberately `chmod 444` (see
+    // `refresh-testdata.sh`), so this is the expected, common case of
+    // someone testing against the wrong copy, not a corrupt-state bug.
+    let is_readonly = std::fs::metadata(db_path).map(|m| m.permissions().readonly()).unwrap_or(false);
+    if is_readonly {
+        bail!(
+            "{} est en lecture seule — impossible d'écrire. S'il s'agit d'une copie de test, \
+             utilisez une copie inscriptible (ex. testdata-rw/, via ./refresh-testdata-rw.sh) ; \
+             sinon, vérifiez les permissions du fichier.",
+            db_path.display()
+        );
+    }
+
     let backup_path =
         backup_sqlite_store(db_path, backup_dir).context("création de la sauvegarde avant écriture")?;
     let statements = strip_plan_wrapper(raw_sql);
