@@ -36,8 +36,7 @@
     z-index: 1;
   }
   header h1 { font-size: 15px; margin: 0; font-weight: 700; letter-spacing: -.01em; }
-  #appVersion {
-    margin-left: auto;
+  #fileBadge, #appVersion {
     border: 1px solid var(--border);
     background: var(--surface-alt);
     border-radius: 6px;
@@ -45,8 +44,16 @@
     font-size: 12px;
     font-weight: 500;
     color: var(--muted);
-    font-variant-numeric: tabular-nums;
   }
+  #fileBadge {
+    margin-left: auto;
+    max-width: 320px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  #fileBadge:empty { display: none; }
+  #appVersion { font-variant-numeric: tabular-nums; }
   #statsBtn, #addBtn {
     border: 1px solid var(--border);
     background: var(--surface);
@@ -76,16 +83,16 @@
     font-weight: 500;
     white-space: nowrap;
     cursor: pointer;
-    background: var(--surface);
-    border: 1px solid var(--border);
-    color: var(--text);
+    background: var(--accent-soft);
+    border: 1px solid #c3d2f7;
+    color: var(--accent-dark);
     transition: background .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease;
   }
-  #tabs .tab:hover { border-color: var(--accent); color: var(--accent); }
-  #tabs .tab .n { color: var(--muted); margin-left: 5px; }
+  #tabs .tab:hover { background: #dce5fb; border-color: var(--accent); }
+  #tabs .tab .n { color: var(--accent-dark); opacity: .7; margin-left: 5px; }
   #tabs .tab.active { background: var(--accent); border-color: var(--accent); color: white; font-weight: 600; box-shadow: var(--shadow-sm); }
-  #tabs .tab.active:hover { color: white; }
-  #tabs .tab.active .n { color: #dce8ff; }
+  #tabs .tab.active:hover { background: var(--accent); color: white; }
+  #tabs .tab.active .n { color: #dce8ff; opacity: 1; }
 
   main { flex: 1; display: flex; min-height: 0; }
 

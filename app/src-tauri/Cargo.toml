@@ -1,6 +1,11 @@
 [package]
 name = "nbc"
-version = "0.1.0"
+# Kept in sync with the root Cargo.toml's version from here on (one shared
+# version number for the whole project, one CHANGELOG.md entry per bump) —
+# the previous static "0.1.0" meant both this crate's own env!("CARGO_PKG_VERSION")
+# (the About NBC dialog) and tauri.conf.json's bundle version were silently
+# stale since the app was scaffolded.
+version = "0.35.0"
 description = "NBC (nom provisoire)"
 authors = ["Serge"]
 edition = "2024"

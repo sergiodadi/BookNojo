@@ -4,6 +4,15 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.35.0] - 2026-11-02
+
+### Added
+- **Badge "fichier ouvert"** dans l'en-tête, à côté du badge de version : nom du fichier + répertoire parent de la collection actuellement chargée (ex. "MyCollection.bkcp — testdata-sample"), mis à jour à chaque "File > Import a collection…". Nouvelle commande Tauri `app_version` pour que le badge de version de l'app NBC affiche le vrai numéro de version au lieu du texte figé "NBC — développement" (l'export HTML statique de `bc_export` avait déjà son propre numéro, inchangé).
+
+### Changed
+- **`app/src-tauri/Cargo.toml` et `tauri.conf.json` suivent désormais le même numéro de version que la racine du projet** à chaque bump — corrige un décalage silencieux découvert à cette occasion : la boîte "About NBC" affichait "Version 0.1.0" depuis l'étape 4 (figé au scaffold initial), jamais mis à jour depuis.
+- **Pastilles de sous-collections et badges du formulaire "Ajouter un livre"** : fond bleu clair (teinte de l'accent) au lieu de blanc/gris à peine distinct du fond — fond jugé pas assez lisible par l'utilisateur.
+
 ## [0.34.0] - 2026-11-02
 
 ### Added

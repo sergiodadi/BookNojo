@@ -1224,12 +1224,44 @@ function restoreState() {
   } catch (e) { /* ignore */ }
 }
 
+// Shows which file is actually open — relevant once "File > Import a
+// collection…" (step 4) lets the user switch collections at runtime, since
+// otherwise there's no on-screen way to tell which one is loaded.
+function updateFileBadge() {
+  const el = document.getElementById('fileBadge');
+  if (!el) return;
+  const parts = currentCollectionPath.replace(/\/+$/, '').split('/').filter(Boolean);
+  const file = parts[parts.length - 1] || currentCollectionPath;
+  const dir = parts.length > 1 ? parts[parts.length - 2] : '';
+  el.textContent = dir ? `📂 ${file} — ${dir}` : `📂 ${file}`;
+  el.title = currentCollectionPath;
+}
+
+// bc_export's static export already burns its own version into #appVersion
+// at generation time (see src/main.rs's __VERSION__ substitution) — nothing
+// to do there. The NBC app has no such build-time step for its HTML shell
+// (app/src/index.template.html is copied as-is), so it asks the Rust side
+// for its own Cargo.toml version instead, over the same IPC mechanism as
+// everything else.
+async function updateVersionBadge() {
+  if (!window.__TAURI__) return;
+  try {
+    const version = await window.__TAURI__.core.invoke('app_version');
+    const el = document.getElementById('appVersion');
+    if (el) el.textContent = `Ⓥ NBC v${version}`;
+  } catch (e) {
+    // Non-critical — leave the static placeholder label in place.
+  }
+}
+
 // One tab per sous-collection, largest first (ties broken alphabetically).
 // Runs only after allBooks has actually loaded — synchronously already
 // resolved for bc_export's static export, awaited for the NBC app's live
 // Tauri command — so every function above that closes over
 // allBooks/collCounts/collections only ever runs once they're populated.
 async function boot() {
+  updateFileBadge();
+  updateVersionBadge();
   allBooks = await loadAllBooks();
 
   collCounts = new Map();

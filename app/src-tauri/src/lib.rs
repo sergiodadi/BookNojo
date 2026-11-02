@@ -20,6 +20,16 @@ fn load_collection(path: String) -> Result<Vec<book_collector_export::PageBook>,
     book_collector_export::load_page_books(&db_path).map_err(|e| format!("{e:#}"))
 }
 
+/// The NBC app's HTML shell (`app/src/index.template.html`) is copied as-is
+/// at dev-data-sync time, with no build step to burn a version string into
+/// it the way `bc_export`'s static export does (`src/main.rs`'s
+/// `__VERSION__` substitution) — `templates/app.js` asks for it over IPC
+/// instead, same as everything else.
+#[tauri::command]
+fn app_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
 /// Refuses any write-bound operation against what looks like the real Book
 /// Collector collection — unlike `bc_add`'s CLI, there is no `--force`/"OUI"
 /// override reachable from the GUI at all. The standing project rule is
@@ -211,7 +221,12 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![load_collection, prepare_add_book, commit_add_book])
+        .invoke_handler(tauri::generate_handler![
+            load_collection,
+            prepare_add_book,
+            commit_add_book,
+            app_version
+        ])
         .setup(|app| {
             let menu = build_menu(app.handle())?;
             app.set_menu(menu)?;
