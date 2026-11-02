@@ -64,6 +64,32 @@ use std::path::PathBuf;
 struct Cli {
     #[command(subcommand)]
     command: Command,
+    /// Langue des messages ("fr" ou "en"). Pour l'instant, seule la
+    /// sous-commande `import` en tient compte — point de départ d'une
+    /// internationalisation étendue progressivement au reste de l'outil.
+    #[arg(long, global = true, default_value = "fr")]
+    lang: String,
+}
+
+/// Minimal i18n seed: a handful of message functions, picked by `Lang`,
+/// rather than a full localization framework — deliberately small so it's
+/// easy to extend command-by-command instead of retrofitting ~150 existing
+/// French `println!` calls in one pass. English is "en", anything else
+/// falls back to French.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Lang {
+    Fr,
+    En,
+}
+
+impl Lang {
+    fn parse(s: &str) -> Self {
+        if s.eq_ignore_ascii_case("en") {
+            Lang::En
+        } else {
+            Lang::Fr
+        }
+    }
 }
 
 #[derive(Subcommand, Debug)]
@@ -146,6 +172,21 @@ enum Command {
         /// s'applique quand même à chaque base concernée.
         #[arg(long)]
         force: bool,
+    },
+    /// Importe une collection existante (BC, ou une base NBC déjà créée)
+    /// vers un nouvel emplacement NBC indépendant — l'opération de
+    /// transfert "BC vers NBC". Copie simple de fichiers (base + images),
+    /// jamais écrasée si la destination existe déjà : ne sert qu'une fois,
+    /// pour amorcer une base qui vivra ensuite sa propre vie.
+    Import {
+        /// Chemin vers la collection source (dossier .bkcp/.col, ou
+        /// directement son fichier Book_data).
+        #[arg(long)]
+        source: PathBuf,
+        /// Dossier de destination (nouvelle extension .col). Par défaut :
+        /// "collection/<nom de la source>.col" dans le répertoire courant.
+        #[arg(long)]
+        dest: Option<PathBuf>,
     },
 }
 
@@ -1434,8 +1475,97 @@ fn cmd_add(
     Ok(())
 }
 
+// --------------------------------------------------------------- Import
+
+/// Default destination when `--dest` is omitted: `collection/<source
+/// basename>.col` in the current directory — `.col` is the chosen
+/// extension for the new, independent "NBC" database going forward.
+fn default_import_dest(source: &std::path::Path) -> PathBuf {
+    let name = source
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "MyCollection".to_string());
+    PathBuf::from("collection").join(format!("{name}.col"))
+}
+
+fn cmd_import(source: PathBuf, dest: Option<PathBuf>, lang: Lang) -> Result<()> {
+    let source_db = resolve_db_path(&source)?;
+    let source_pkg = source_db
+        .parent()
+        .context("dossier source introuvable (attendu : un .bkcp/.col contenant Book_data)")?;
+
+    let dest = dest.unwrap_or_else(|| default_import_dest(&source));
+    if dest.exists() {
+        bail!(match lang {
+            Lang::Fr => format!(
+                "{} existe déjà — l'import ne sert qu'à amorcer une nouvelle base, une seule \
+                 fois, pour ne jamais en écraser une existante. Choisissez un autre chemin \
+                 avec --dest, ou supprimez-le d'abord si vous êtes sûr.",
+                dest.display()
+            ),
+            Lang::En => format!(
+                "{} already exists — import only ever bootstraps a brand-new database, once, \
+                 so an existing one is never overwritten. Pick a different path with --dest, \
+                 or remove it first if you're sure.",
+                dest.display()
+            ),
+        });
+    }
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent).with_context(|| format!("création de {}", parent.display()))?;
+    }
+
+    match lang {
+        Lang::Fr => println!("Import de {} vers {}...", source_pkg.display(), dest.display()),
+        Lang::En => println!("Importing {} to {}...", source_pkg.display(), dest.display()),
+    }
+    let status = std::process::Command::new("cp")
+        .args(["-R", &source_pkg.to_string_lossy(), &dest.to_string_lossy()])
+        .status()
+        .context("exécution de cp -R")?;
+    if !status.success() {
+        bail!(match lang {
+            Lang::Fr => "échec de la copie (cp -R)".to_string(),
+            Lang::En => "copy failed (cp -R)".to_string(),
+        });
+    }
+    std::process::Command::new("chmod")
+        .args(["-R", "u+w", &dest.to_string_lossy()])
+        .status()
+        .context("exécution de chmod -R u+w")?;
+
+    let dest_book_data = dest.join("Book_data");
+    let conn = Connection::open_with_flags(&dest_book_data, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .with_context(|| format!("ouverture de {}", dest_book_data.display()))?;
+    let book_ent = entity_ent_id(&conn, "Book")?;
+    let book_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM ZCOLLECTIBLE WHERE Z_ENT = ?1",
+        [book_ent],
+        |row| row.get(0),
+    )?;
+
+    println!();
+    match lang {
+        Lang::Fr => {
+            println!("✅ Import terminé : {book_count} fiche(s) dans {}.", dest.display());
+            println!("   Cette base est désormais indépendante : plus aucune synchronisation");
+            println!("   automatique avec la source. Pour continuer à alimenter aussi la vraie");
+            println!("   collection pendant la transition, utilisez `bc_add add --also-db`.");
+        }
+        Lang::En => {
+            println!("✅ Import complete: {book_count} record(s) in {}.", dest.display());
+            println!("   This database is now independent: no further automatic sync with");
+            println!("   the source. To keep feeding the real collection too during the");
+            println!("   transition, use `bc_add add --also-db`.");
+        }
+    }
+
+    Ok(())
+}
+
 fn main() -> Result<()> {
     let cli = Cli::parse();
+    let lang = Lang::parse(&cli.lang);
     match cli.command {
         Command::Resolve { db, input, output } => cmd_resolve(db, input, output),
         Command::Plan { db, resolved, output } => cmd_plan(db, resolved, output),
@@ -1444,6 +1574,7 @@ fn main() -> Result<()> {
         Command::Add { db, input, also_db, backup_dir, runs_dir, force } => {
             cmd_add(db, input, also_db, backup_dir, runs_dir, force)
         }
+        Command::Import { source, dest } => cmd_import(source, dest, lang),
     }
 }
 
@@ -1452,6 +1583,26 @@ mod tests {
     use super::*;
     use std::io::Cursor;
     use std::path::Path;
+
+    #[test]
+    fn default_import_dest_uses_the_col_extension_under_collection() {
+        assert_eq!(
+            default_import_dest(Path::new("/Users/x/Documents/Collectorz/Book Collector/MyCollection.bkcp")),
+            PathBuf::from("collection/MyCollection.col")
+        );
+        assert_eq!(
+            default_import_dest(Path::new("Already.col")),
+            PathBuf::from("collection/Already.col")
+        );
+    }
+
+    #[test]
+    fn lang_parse_defaults_to_french_for_anything_but_en() {
+        assert_eq!(Lang::parse("en"), Lang::En);
+        assert_eq!(Lang::parse("EN"), Lang::En);
+        assert_eq!(Lang::parse("fr"), Lang::Fr);
+        assert_eq!(Lang::parse("anything-else"), Lang::Fr);
+    }
 
     fn confirm(answer: &str) -> Result<()> {
         let mut input = Cursor::new(answer.as_bytes());

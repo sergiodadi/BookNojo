@@ -4,6 +4,22 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.26.0] - 2026-11-02
+
+### Added
+- **Extension `.col`** choisie pour la future base NBC (le nom de projet provisoire pour "les scripts actuels + la future application", en remplacement progressif de Book Collector — "BC"). Confirmé que le format interne est inchangé : `.bkcp` et `.col` sont le même contenu (`Book_data` + `Images/`), seule l'extension diffère — `resolve_db_path` ne se souciait déjà pas de l'extension, donc aucun changement de code ailleurs n'a été nécessaire.
+- **`bc_add import --source <fichier> [--dest <dossier>]`** : réalise le transfert "BC vers NBC" — copie une collection existante (base + images) vers un nouvel emplacement `.col` indépendant. Refuse d'écraser une destination déjà existante (l'import n'amorce une base qu'une seule fois). Destination par défaut : `collection/<nom de la source>.col`.
+- **`--lang fr|en`** (option globale de `bc_add`) : amorce de l'internationalisation. Pour l'instant, seule la sous-commande `import` l'utilise (messages bilingues complets) — pas une reprise des ~150 `println!` existants, qui restent en français ; le patron (`Lang` + fonctions de message) est posé pour étendre progressivement.
+- `--version`/`--help` existaient déjà sur les deux binaires (fournis automatiquement par `clap`) — vérifiés et confirmés plutôt que redupliqués.
+
+### Planned (pas encore implémenté)
+- Menu graphique **Files > Import a file...** (ouvre un sélecteur de fichier macOS) et menu **Help** : prévus pour la future application macOS empaquetée (voir la note Rosetta de la v0.25.0) — nécessitent l'étape Tauri, pas encore commencée. Notés en mémoire du projet pour ne pas être perdus d'ici là.
+
+### Verified
+- Import testé deux fois (`--lang` fr par défaut et en explicite) depuis `testdata/` (lecture seule) vers des destinations jetables : 2237 fiches correctement copiées à chaque fois, `bc_export --list-collections` relit directement le `.col` obtenu sans aucune modification de code.
+- Tentative de réimport sur une destination déjà créée : refusée proprement, message bilingue.
+- 2 nouveaux tests unitaires (destination par défaut, analyse de `--lang`) ; 12 tests au total, tous au vert.
+
 ## [0.25.0] - 2026-11-01
 
 ### Added

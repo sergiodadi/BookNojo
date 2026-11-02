@@ -11,4 +11,14 @@
 # Sauvegardes horodatées créées par `bc_add guard`/`commit`.
 backups/
 
+# Intermédiaires de `bc_add add` (contiennent des données personnelles :
+# titres, noms...).
+/bc_add_runs
+
+# La future base persistante "NBC" (données personnelles), créée par
+# `bc_add import` — destination par défaut `collection/*.col`, mais toute
+# extension .col n'importe où est exclue par précaution.
+/collection
+*.col
+
 .DS_Store

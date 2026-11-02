@@ -384,7 +384,51 @@ une fois depuis la vraie collection, puis alimentée uniquement par ces
 outils, sans jamais dépendre de Book Collector pour continuer à grandir.
 `--also-db` sert la période de transition : continuer à alimenter la vraie
 application tant qu'elle tourne encore, en parallèle de la nouvelle base.
-L'emplacement et l'extension de cette base persistante restent à définir.
+
+Le nom de projet provisoire pour "les scripts actuels + la future
+application" est **NBC** (un nom définitif sera choisi plus tard) —
+remplacement progressif de Book Collector ("BC"). L'extension retenue
+pour cette base persistante est **`.col`**.
+
+### `bc_add import` — le transfert BC vers NBC
+
+Amorce une nouvelle base `.col` indépendante à partir d'une collection
+existante (base + dossier `Images/`). Ne sert qu'**une seule fois** :
+refuse d'écraser une destination qui existe déjà.
+
+```bash
+./target/release/bc_add import \
+  --source "~/Documents/Collectorz/Book Collector/MyCollection.bkcp"
+# -> collection/MyCollection.col (destination par défaut)
+
+# Ou avec une destination explicite :
+./target/release/bc_add import \
+  --source "~/Documents/Collectorz/Book Collector/MyCollection.bkcp" \
+  --dest ~/MaCollectionNBC.col
+```
+
+L'extension n'affecte aucun code : `resolve_db_path` ne regarde que la
+présence d'un fichier `Book_data` à l'intérieur, pas le nom du dossier.
+`bc_export`/`bc_add` fonctionnent sur un `.col` exactement comme sur un
+`.bkcp`.
+
+### Langue des messages (`--lang`)
+
+```bash
+./target/release/bc_add --lang en import --source ... --dest ...
+```
+
+Amorce d'internationalisation : pour l'instant, seule `import` a des
+messages en français et en anglais (`fr` par défaut). Le reste de l'outil
+reste en français — à étendre progressivement, pas tout d'un coup.
+
+### Prévu, pas encore fait : menus graphiques
+
+Pour la future application macOS (§ ci-dessus, empaquetage Tauri) : un
+menu **Files** avec un sous-menu **Import a file...** qui ouvrirait le
+sélecteur de fichier natif macOS (équivalent graphique de `bc_add
+import`), et un menu **Help**. Nécessitent que l'étape Tauri soit
+commencée — pas encore le cas.
 
 ## 8. Dépannage
 
