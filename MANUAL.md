@@ -310,6 +310,18 @@ Limites connues de cette étape (affichées aussi par `bc_add plan`) :
   visuellement fiche par fiche dans l'application (navigation par liste
   peu fiable en automatisation d'accessibilité sur cette fenêtre).
 
+**v0.37.0 — rôle des crédits et champs personnalisés.**
+Trois champs que l'audit de schéma seul ne pouvait pas résoudre (sans table
+de correspondance ni données réelles) sont désormais résolus :
+
+- **Rôle d'un crédit** (`ZROLEID`) : la correspondance nom↔identifiant
+  n'existe que comme constantes compilées dans l'app, désormais connue
+  (11 rôles). L'onglet Crédits
+  est désormais une liste (comme Personnages), avec un rôle optionnel.
+- **`user_lookup1`/`user_lookup2`** (Personnel) : confirmés comme des champs
+  de type liste standard, même motif que les autres champs de ce type.
+- **`user_text1`/`user_text2`** (Personnel) : confirmés comme texte libre.
+
 **v0.36.0 — audit complet des colonnes `ZCOLLECTIBLE`/`ZSTORY`** (suite à
 un champ manquant signalé par l'utilisateur, "Issue N°") : comparaison de
 chaque colonne du schéma contre ce qui était déjà couvert. Ajoutés : `issue_number`

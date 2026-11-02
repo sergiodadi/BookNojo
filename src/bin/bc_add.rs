@@ -291,7 +291,10 @@ fn cmd_resolve(db: PathBuf, input: PathBuf, output: PathBuf) -> Result<()> {
         print_lookup("Magasin", r);
     }
     for c in &resolved.credits {
-        print_lookup("Crédit", c);
+        print_lookup("Crédit", &c.person);
+        if let Some(role_id) = c.role_id {
+            println!("    (rôle -> ZROLEID={role_id})");
+        }
     }
     for c in &resolved.characters {
         print_lookup("Personnage", &c.person);
@@ -348,9 +351,6 @@ fn cmd_plan(db: PathBuf, resolved_path: PathBuf, output: Option<PathBuf>) -> Res
     println!("- ZINDEX, ZDATEADDED : non renseignés dans ce plan.");
     println!("- Personnes (auteurs, crédits, personnages, propriétaire) : nom entier mis");
     println!("  dans ZDISPLAYNAME/ZSORTNAME ; pas de découpage prénom/nom.");
-    println!("- Crédits : ZROLEID (rôle — Illustrateur, Éditeur, Traducteur...) n'est pas");
-    println!("  renseigné (laissé NULL) — la correspondance nom de rôle <-> identifiant");
-    println!("  numérique interne n'a pas été établie (table de rôles non trouvée en base).");
     println!("- Crédits/Personnages/Contenus (ZCREATOR, ZCHARACTER, ZSTORY) : ces tables");
     println!("  sont VIDES dans la collection de test — ce plan suit par analogie le motif");
     println!("  vérifié ailleurs (ZAUTHOR pour les jointures, ZLINK pour le compagnon");
@@ -362,10 +362,16 @@ fn cmd_plan(db: PathBuf, resolved_path: PathBuf, output: Option<PathBuf>) -> Res
     println!("  collection de test utilisent cette valeur) — sens exact non confirmé.");
     println!();
     println!("--- Field audit against the full ZCOLLECTIBLE/ZSTORY schema (not implemented) ---");
-    println!("- ZUSERTEXT1/2, ZUSERLOOKUP1/2, ZUSERDEFINEDVALUESXML (Personal tab \"User 1\"/\"User 2\"");
-    println!("  custom fields): present in the schema, but 0 non-null rows anywhere in testdata/");
-    println!("  (ZUSERDEFINEDVALUESXML is always an empty string) — no real data to confirm how a");
-    println!("  custom field's label/type is actually stored. Not implemented.");
+    println!("- ZROLEID is now resolved (see `role_id_for_role` in lib.rs) via a known mapping,");
+    println!("  since this table doesn't exist in Book_data itself.");
+    println!();
+    println!("- ZUSERLOOKUP1/2 (Personal tab) are now resolved as ordinary lookup fields — confirmed");
+    println!("  same pattern as every other resolved lookup here, confirmed against real");
+    println!("  resolved lookup here) and real UserLookup1/UserLookup2 entities in Z_PRIMARYKEY.");
+    println!("- ZUSERTEXT1/2 (Personal tab) are now covered as plain text.");
+    println!("- ZUSERDEFINEDVALUESXML: always an empty string in every row of testdata/ regardless of");
+    println!("  whether ZUSERTEXT1/2 or ZUSERLOOKUP1/2 are set — left NULL/untouched, no evidence it");
+    println!("  needs to be written for these fields to work correctly.");
     println!("- ZSTORY (Contenus): ZSTARTPAGE is now covered. ZSERIES, ZPLOT, ZNOTES, ZMYRATING, and");
     println!("  the whole ORIGINAL* group (title/subtitle/publisher/country/language/publication");
     println!("  date) exist on ZSTORY too, mirroring the book-level fields — but ZSTORY has 0 rows");

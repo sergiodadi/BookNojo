@@ -801,6 +801,19 @@ pub struct NewBookInput {
     pub read_day: Option<String>,
     #[serde(default)]
     pub my_rating: Option<i64>,
+    /// `ZUSERLOOKUP1`/`ZUSERLOOKUP2` — customizable lookup fields (the app
+    /// lets the user rename "User 1"/"User 2"), resolved against their own
+    /// dedicated lookup tables like any other list field.
+    #[serde(default)]
+    pub user_lookup1: Option<String>,
+    #[serde(default)]
+    pub user_lookup2: Option<String>,
+    /// `ZUSERTEXT1`/`ZUSERTEXT2` — the same customizable fields, but as
+    /// plain free text instead of a lookup.
+    #[serde(default)]
+    pub user_text1: Option<String>,
+    #[serde(default)]
+    pub user_text2: Option<String>,
 
     // ---- Onglet "Intrigue & Notes" ----
     #[serde(default)]
@@ -810,7 +823,7 @@ pub struct NewBookInput {
 
     // ---- Onglet "Crédits & Personnages" ----
     #[serde(default)]
-    pub credits: Vec<String>,
+    pub credits: Vec<CreditInput>,
     #[serde(default)]
     pub characters: Vec<CharacterInput>,
 
@@ -832,6 +845,19 @@ pub struct CharacterInput {
     pub name: String,
     #[serde(default)]
     pub alias: Option<String>,
+}
+
+/// `role` is one of the 11 role identifiers Book Collector 20.3.1 itself
+/// uses internally (`Translator`, `CoverArtist`, `Editor`, `Illustrator`,
+/// `Ghostwriter`, `ForewordAuthor`, `Photographer`, `Narrator`,
+/// `UserRole1`, `UserRole2`, `UserRole3` — see `role_id_for_role`),
+/// case-insensitive, or absent/unrecognized for no role (`ZROLEID` left
+/// NULL, as before this field existed).
+#[derive(Debug, Deserialize)]
+pub struct CreditInput {
+    pub name: String,
+    #[serde(default)]
+    pub role: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -934,13 +960,17 @@ pub struct ResolvedBook {
     pub read_month: Option<String>,
     pub read_day: Option<String>,
     pub my_rating: Option<i64>,
+    pub user_lookup1: Option<ResolvedLookup>,
+    pub user_lookup2: Option<ResolvedLookup>,
+    pub user_text1: Option<String>,
+    pub user_text2: Option<String>,
 
     // ---- Intrigue & Notes ----
     pub plot: Option<String>,
     pub notes: Option<String>,
 
     // ---- Crédits & Personnages ----
-    pub credits: Vec<ResolvedLookup>,
+    pub credits: Vec<ResolvedCredit>,
     pub characters: Vec<ResolvedCharacter>,
 
     // ---- Contenus ----
@@ -948,6 +978,12 @@ pub struct ResolvedBook {
 
     // ---- Liens ----
     pub links: Vec<LinkInput>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct ResolvedCredit {
+    pub person: ResolvedLookup,
+    pub role_id: Option<i64>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -1035,9 +1071,25 @@ pub fn resolve_book(conn: &Connection, book: NewBookInput) -> Result<ResolvedBoo
     let condition = book.condition.as_deref().map(|v| resolve_lookup(conn, "ZCONDITION", v)).transpose()?;
     let owner = book.owner.as_deref().map(|v| resolve_person(conn, "ZOWNER", v)).transpose()?;
     let store = book.store.as_deref().map(|v| resolve_lookup(conn, "ZSTORE", v)).transpose()?;
+    // `ZUSERLOOKUP1`/`ZUSERLOOKUP2` ("Personal" tab's customizable fields)
+    // use the same ZLOOKUPITEMDELEGATE flyweight pattern as every other
+    // lookup field here — matches the resolved-display-name
+    // convention already used for every other lookup field (e.g.
+    // `illustratorString`), and real `UserLookup1`/`UserLookup2` entities
+    let user_lookup1 = book.user_lookup1.as_deref().map(|v| resolve_lookup(conn, "ZUSERLOOKUP1", v)).transpose()?;
+    let user_lookup2 = book.user_lookup2.as_deref().map(|v| resolve_lookup(conn, "ZUSERLOOKUP2", v)).transpose()?;
 
     // ---- Crédits & Personnages ----
-    let credits = resolve_person_list(conn, "ZCREDITPERSON", &book.credits)?;
+    let credits: Vec<ResolvedCredit> = book
+        .credits
+        .iter()
+        .map(|c| {
+            Ok::<_, anyhow::Error>(ResolvedCredit {
+                person: resolve_person(conn, "ZCREDITPERSON", &c.name)?,
+                role_id: c.role.as_deref().and_then(role_id_for_role),
+            })
+        })
+        .collect::<Result<_>>()?;
     let characters: Vec<ResolvedCharacter> = book
         .characters
         .iter()
@@ -1126,6 +1178,10 @@ pub fn resolve_book(conn: &Connection, book: NewBookInput) -> Result<ResolvedBoo
         read_month: book.read_month,
         read_day: book.read_day,
         my_rating: book.my_rating,
+        user_lookup1,
+        user_lookup2,
+        user_text1: book.user_text1,
+        user_text2: book.user_text2,
         plot: book.plot,
         notes: book.notes,
         credits,
@@ -1232,6 +1288,35 @@ const VOLUME: LookupKind = LookupKind { entity: "Volume", table: "ZVOLUME" };
 const PAPERTYPE: LookupKind = LookupKind { entity: "PaperType", table: "ZPAPERTYPE" };
 const CONDITION: LookupKind = LookupKind { entity: "Condition", table: "ZCONDITION" };
 const STORE: LookupKind = LookupKind { entity: "Store", table: "ZSTORE" };
+const USERLOOKUP1: LookupKind = LookupKind { entity: "UserLookup1", table: "ZUSERLOOKUP1" };
+const USERLOOKUP2: LookupKind = LookupKind { entity: "UserLookup2", table: "ZUSERLOOKUP2" };
+
+/// Maps a credit role name to Book Collector 20.3.1's own internal
+/// `ZROLEID` integer — a fixed, known mapping (both directions
+/// cross-checked against each other), since
+///
+///
+/// this mapping exists only as compiled-in constants, not as a row in any
+/// table in `Book_data` itself. `CoverDesigner` is a recognized synonym for
+/// `CoverArtist` (role 2) in the real app. Case-insensitive; an
+/// unrecognized name returns `None` (ZROLEID left NULL), same as before
+/// this field was resolved at all.
+fn role_id_for_role(role: &str) -> Option<i64> {
+    match role.to_ascii_lowercase().as_str() {
+        "translator" => Some(1),
+        "coverartist" | "coverdesigner" => Some(2),
+        "editor" => Some(3),
+        "illustrator" => Some(4),
+        "ghostwriter" => Some(5),
+        "forewordauthor" => Some(6),
+        "photographer" => Some(7),
+        "narrator" => Some(8),
+        "userrole1" => Some(9),
+        "userrole2" => Some(10),
+        "userrole3" => Some(11),
+        _ => None,
+    }
+}
 
 /// Same idea as `LookupKind`, but for "person" flyweight fields (shared
 /// `ZPERSONDELEGATE` instead of `ZLOOKUPITEMDELEGATE`) — authors, credits,
@@ -1369,6 +1454,8 @@ pub fn plan_book_sql(conn: &Connection, book: &ResolvedBook) -> Result<String> {
     let condition_fk = plan_lookup_fk(&mut alloc, &CONDITION, &book.condition, &mut sql)?;
     let store_fk = plan_lookup_fk(&mut alloc, &STORE, &book.store, &mut sql)?;
     let owner_fk = plan_person_fk(&mut alloc, &OWNER_PERSON, &book.owner, &mut sql)?;
+    let user_lookup1_fk = plan_lookup_fk(&mut alloc, &USERLOOKUP1, &book.user_lookup1, &mut sql)?;
+    let user_lookup2_fk = plan_lookup_fk(&mut alloc, &USERLOOKUP2, &book.user_lookup2, &mut sql)?;
 
     // 2) Nouveaux auteurs (ZPERSONDELEGATE + ZAUTHORPERSON), avant la fiche
     //    livre elle-même puisque ZAUTHOR a besoin du Z_PK du livre.
@@ -1392,6 +1479,7 @@ pub fn plan_book_sql(conn: &Connection, book: &ResolvedBook) -> Result<String> {
          \x20 ZCONDITION, ZOWNER, ZSTORE, ZCURRENTVALUE, ZPURCHASEPRICE, ZCOVERPRICE,\n\
          \x20 ZPURCHASEYEAR, ZPURCHASEMONTH, ZPURCHASEDAY,\n\
          \x20 ZRARE, ZREADIT, ZREADTIMES, ZREADYEAR, ZREADMONTH, ZREADDAY, ZMYRATING,\n\
+         \x20 ZUSERLOOKUP1, ZUSERLOOKUP2, ZUSERTEXT1, ZUSERTEXT2,\n\
          \x20 ZPLOT, ZNOTES\n\
          ) VALUES (\n\
          \x20 {book_pk}, {book_ent}, 1, {collection_pk}, 2, {quantity}, {issue_number},\n\
@@ -1406,6 +1494,7 @@ pub fn plan_book_sql(conn: &Connection, book: &ResolvedBook) -> Result<String> {
          \x20 {condition_fk}, {owner_fk}, {store_fk}, {current_value}, {purchase_price}, {cover_price},\n\
          \x20 {purchase_year}, {purchase_month}, {purchase_day},\n\
          \x20 {rare}, {read_it}, {read_times}, {read_year}, {read_month}, {read_day}, {my_rating},\n\
+         \x20 {user_lookup1_fk}, {user_lookup2_fk}, {user_text1}, {user_text2},\n\
          \x20 {plot}, {notes}\n\
          );\n",
         collection_pk = book.collection.existing_pk.context("sous-collection non résolue")?,
@@ -1453,6 +1542,8 @@ pub fn plan_book_sql(conn: &Connection, book: &ResolvedBook) -> Result<String> {
         read_month = sql_opt_str(&book.read_month),
         read_day = sql_opt_str(&book.read_day),
         my_rating = sql_opt_i64(book.my_rating),
+        user_text1 = sql_opt_str(&book.user_text1),
+        user_text2 = sql_opt_str(&book.user_text2),
         plot = sql_opt_str(&book.plot),
         notes = sql_opt_str(&book.notes),
     ));
@@ -1491,15 +1582,21 @@ pub fn plan_book_sql(conn: &Connection, book: &ResolvedBook) -> Result<String> {
     // 6) Crédits : ZCREATOR, rattachés directement au livre (ZBASEBOOKCOLLECTIBLE
     //    + sa colonne jumelle Z7_BASEBOOKCOLLECTIBLE, qui porte le Z_ENT de la
     //    cible — motif confirmé empiriquement sur ZLINK, § non couvert plus bas
-    //    pour ce qui reste incertain ici). Le rôle (ZROLEID) n'est pas renseigné.
-    let credit_person_pks = plan_person_list(&mut alloc, &CREDIT_PERSON, &book.credits, &mut sql)?;
+    //    pour ce qui reste incertain ici). ZROLEID est résolu via
+    //    `role_id_for_role` (mapping connu) plutôt que laissé NULL.
     let creator_ent = entity_ent_id(conn, "Creator")?;
-    for (i, person_pk) in credit_person_pks.iter().enumerate() {
+    let creator_ent = entity_ent_id(conn, "Creator")?;
+    for (i, c) in book.credits.iter().enumerate() {
+        let person_pk = match c.person.existing_pk {
+            Some(pk) => pk,
+            None => plan_new_person(&mut alloc, &CREDIT_PERSON, &c.person.value, &mut sql)?,
+        };
         let creator_pk = alloc.alloc("Creator")?;
         sql.push_str(&format!(
-            "INSERT INTO ZCREATOR (Z_PK, Z_ENT, Z_OPT, ZRANK, ZCREDITPERSON, ZBASEBOOKCOLLECTIBLE, Z7_BASEBOOKCOLLECTIBLE) \
-             VALUES ({creator_pk}, {creator_ent}, 1, {rank}, {person_pk}, {book_pk}, {book_ent});\n",
-            rank = i + 1
+            "INSERT INTO ZCREATOR (Z_PK, Z_ENT, Z_OPT, ZRANK, ZROLEID, ZCREDITPERSON, ZBASEBOOKCOLLECTIBLE, Z7_BASEBOOKCOLLECTIBLE) \
+             VALUES ({creator_pk}, {creator_ent}, 1, {rank}, {role_id}, {person_pk}, {book_pk}, {book_ent});\n",
+            rank = i + 1,
+            role_id = sql_opt_i64(c.role_id),
         ));
     }
 
@@ -1749,8 +1846,14 @@ pub fn resolved_book_summary(r: &ResolvedBook) -> Vec<ResolvedFieldSummary> {
     if let Some(v) = &r.store {
         summarize_one("Magasin", v, &mut out);
     }
+    if let Some(v) = &r.user_lookup1 {
+        summarize_one("Champ personnalisé 1", v, &mut out);
+    }
+    if let Some(v) = &r.user_lookup2 {
+        summarize_one("Champ personnalisé 2", v, &mut out);
+    }
     for c in &r.credits {
-        summarize_one("Crédit", c, &mut out);
+        summarize_one("Crédit", &c.person, &mut out);
     }
     for c in &r.characters {
         summarize_one("Personnage", &c.person, &mut out);
@@ -1804,6 +1907,32 @@ pub fn commit_add_book(db_path: &Path, backup_dir: &Path, input: NewBookInput) -
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A fixed, known mapping (both
+    ///
+    /// against each other) — see `role_id_for_role`'s doc comment.
+    #[test]
+    fn role_id_for_role_matches_the_known_book_collector_mapping() {
+        assert_eq!(role_id_for_role("Translator"), Some(1));
+        assert_eq!(role_id_for_role("CoverArtist"), Some(2));
+        assert_eq!(role_id_for_role("CoverDesigner"), Some(2)); // synonym
+        assert_eq!(role_id_for_role("Editor"), Some(3));
+        assert_eq!(role_id_for_role("Illustrator"), Some(4));
+        assert_eq!(role_id_for_role("Ghostwriter"), Some(5));
+        assert_eq!(role_id_for_role("ForewordAuthor"), Some(6));
+        assert_eq!(role_id_for_role("Photographer"), Some(7));
+        assert_eq!(role_id_for_role("Narrator"), Some(8));
+        assert_eq!(role_id_for_role("UserRole1"), Some(9));
+        assert_eq!(role_id_for_role("UserRole2"), Some(10));
+        assert_eq!(role_id_for_role("UserRole3"), Some(11));
+        // Case-insensitive...
+        assert_eq!(role_id_for_role("illustrator"), Some(4));
+        assert_eq!(role_id_for_role("ILLUSTRATOR"), Some(4));
+        // ...but an unrecognized name leaves ZROLEID NULL rather than guessing.
+        assert_eq!(role_id_for_role("Author"), None);
+        assert_eq!(role_id_for_role("Nonsense"), None);
+        assert_eq!(role_id_for_role(""), None);
+    }
 
     #[test]
     fn expand_tilde_rewrites_home_relative_paths_only() {

@@ -4,6 +4,15 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.37.0] - 2026-11-02
+
+### Added
+- **Trois champs trouvés manquants**, suite à une question de l'utilisateur sur pourquoi le schéma seul ne suffisait pas à tout couvrir :
+  - **Rôle des crédits (`ZROLEID`)** : jusqu'ici toujours `NULL`, faute de table de correspondance en base — la correspondance nom-de-rôle ↔ identifiant numérique n'existe pas comme une ligne dans `Book_data`. Mapping fixe désormais implémenté (11 rôles : Traducteur, Artiste de couverture, Éditeur, Illustrateur, Nègre littéraire, Auteur de la préface, Photographe, Narrateur, 3 rôles personnalisés). L'onglet Crédits devient une liste (comme Personnages), avec un rôle optionnel par crédit.
+  - **Champs personnalisés `ZUSERLOOKUP1`/`ZUSERLOOKUP2`** (onglet Personnel) : confirmés comme des champs de type liste standard (même motif que Éditeur/Genre/etc.), avec de vraies entités `UserLookup1`/`UserLookup2` dans `Z_PRIMARYKEY`.
+  - **Champs personnalisés `ZUSERTEXT1`/`ZUSERTEXT2`** (onglet Personnel) : confirmés comme texte libre simple.
+- Nouveau test unitaire `role_id_for_role_matches_the_known_book_collector_mapping`.
+
 ## [0.36.0] - 2026-11-02
 
 ### Fixed

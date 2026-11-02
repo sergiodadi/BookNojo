@@ -775,13 +775,37 @@ function renderAddForm() {
             <label class="add-check"><input type="checkbox" name="rare"> Rare</label>
             <label class="add-check"><input type="checkbox" name="read_it"> Lu</label>
           </div>
+          <h3 class="add-subhead">Champs personnalisés</h3>
+          <div class="add-grid">
+            <label>Champ personnalisé 1 (liste)<input name="user_lookup1" list="dl-userlookup1"></label>
+            <label>Champ personnalisé 2 (liste)<input name="user_lookup2" list="dl-userlookup2"></label>
+            <label>Champ personnalisé 1 (texte)<input name="user_text1"></label>
+            <label>Champ personnalisé 2 (texte)<input name="user_text2"></label>
+          </div>
         </div>
 
         <div id="addtab-credits" class="add-tab-panel hidden">
-          <div class="add-list-field">
+          <div class="add-rep-field">
             <span class="label">Crédits (traducteur, illustrateur...)</span>
-            <div id="creditsChips" class="chip-input"></div>
-            <input id="creditInput" placeholder="Nom, puis Entrée">
+            <div id="creditsList" class="rep-list"></div>
+            <div class="rep-add-row">
+              <input id="creditNameInput" list="dl-credit" placeholder="Nom">
+              <select id="creditRoleInput">
+                <option value="">— Rôle (optionnel) —</option>
+                <option value="Translator">Traducteur</option>
+                <option value="CoverArtist">Artiste de couverture</option>
+                <option value="Editor">Éditeur (rôle)</option>
+                <option value="Illustrator">Illustrateur</option>
+                <option value="Ghostwriter">Nègre littéraire</option>
+                <option value="ForewordAuthor">Auteur de la préface</option>
+                <option value="Photographer">Photographe</option>
+                <option value="Narrator">Narrateur</option>
+                <option value="UserRole1">Rôle personnalisé 1</option>
+                <option value="UserRole2">Rôle personnalisé 2</option>
+                <option value="UserRole3">Rôle personnalisé 3</option>
+              </select>
+              <button type="button" id="creditAddBtn">Ajouter</button>
+            </div>
           </div>
           <div class="add-rep-field">
             <span class="label">Personnages</span>
@@ -843,6 +867,9 @@ function renderAddForm() {
         <datalist id="dl-papertype"></datalist>
         <datalist id="dl-owner"></datalist>
         <datalist id="dl-store"></datalist>
+        <datalist id="dl-credit"></datalist>
+        <datalist id="dl-userlookup1"></datalist>
+        <datalist id="dl-userlookup2"></datalist>
 
         <div class="add-actions">
           <button type="submit" class="primary">${window.__TAURI__ ? '💾 Enregistrer' : '⬇️ Générer new_book.json'}</button>
@@ -893,7 +920,10 @@ function renderAddForm() {
   setupChipField('authorInput', 'authorsChips', addFormState.authors);
   setupChipField('genreInput', 'genresChips', addFormState.genres);
   setupChipField('subjectInput', 'subjectsChips', addFormState.subjects);
-  setupChipField('creditInput', 'creditsChips', addFormState.credits);
+  // No dl-credit/dl-userlookup1/dl-userlookup2 autocomplete yet: bc_export
+  // doesn't currently export ZCREATOR credit names or ZUSERLOOKUP1/2
+  // values, so there's no client-side data to suggest from — the <datalist>
+  // elements stay present but empty rather than offering nothing useful.
 
   document.querySelectorAll('.add-tab-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -902,6 +932,27 @@ function renderAddForm() {
       document.querySelectorAll('.add-tab-panel').forEach(p => p.classList.add('hidden'));
       document.getElementById('addtab-' + btn.dataset.tab).classList.remove('hidden');
     });
+  });
+
+  const ROLE_LABELS = {
+    Translator: 'Traducteur', CoverArtist: 'Artiste de couverture', Editor: 'Éditeur (rôle)',
+    Illustrator: 'Illustrateur', Ghostwriter: 'Nègre littéraire', ForewordAuthor: 'Auteur de la préface',
+    Photographer: 'Photographe', Narrator: 'Narrateur',
+    UserRole1: 'Rôle personnalisé 1', UserRole2: 'Rôle personnalisé 2', UserRole3: 'Rôle personnalisé 3',
+  };
+  const creditsListHandle = setupRepeatableList(
+    'creditsList', addFormState.credits,
+    c => c.role ? `${c.name} (${ROLE_LABELS[c.role] || c.role})` : c.name,
+  );
+  document.getElementById('creditAddBtn').addEventListener('click', () => {
+    const nameEl = document.getElementById('creditNameInput');
+    const roleEl = document.getElementById('creditRoleInput');
+    const name = nameEl.value.trim();
+    if (!name) return;
+    addFormState.credits.push({ name, role: roleEl.value || null });
+    nameEl.value = '';
+    roleEl.value = '';
+    creditsListHandle.render();
   });
 
   const charactersListHandle = setupRepeatableList(
@@ -1058,11 +1109,15 @@ function onAddFormSubmit(e) {
     read_month: str('read_month'),
     read_day: str('read_day'),
     my_rating: num('my_rating'),
+    user_lookup1: str('user_lookup1'),
+    user_lookup2: str('user_lookup2'),
+    user_text1: str('user_text1'),
+    user_text2: str('user_text2'),
 
     plot: str('plot'),
     notes: str('notes'),
 
-    credits: [...addFormState.credits],
+    credits: addFormState.credits.map(c => ({ ...c })),
     characters: addFormState.characters.map(c => ({ ...c })),
     contents: addFormState.contents.map(c => ({ ...c, authors: [...c.authors] })),
     links: addFormState.links.map(l => ({ ...l })),
