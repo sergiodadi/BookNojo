@@ -4,6 +4,14 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.40.0] - 2026-11-02
+
+### Added
+- **Icône de l'app NBC** (étape 5/6 du plan NBC) — remplace le logo générique du scaffold Tauri par un glyphe de livre ouvert (blanc) sur fond bleu accent (`#2e5bd7`, la couleur d'accent déjà utilisée partout ailleurs dans l'app), pour une cohérence visuelle avec le reste de la refonte. Généré directement en Python (Pillow, dans un environnement virtuel jetable — ni `rsvg-convert`, ni `cairosvg`, ni `imagemagick` n'étaient disponibles sur la machine) à partir d'une source 1024×1024, puis `cargo tauri icon` a produit l'ensemble complet (`.icns`, `.ico`, tailles PNG, tuiles Windows) — les variantes iOS/Android générées au passage supprimées (projet macOS uniquement). Source conservée dans `app/app-icon.png` pour toute régénération future.
+
+### Verified
+- `cargo tauri build` complet : `.app` et `.dmg` réels produits, icône confirmée embarquée dans `Contents/Resources/icon.icns` du bundle final (extrait et inspecté visuellement, pas seulement vérifié par taille de fichier).
+
 ## [0.39.0] - 2026-11-02
 
 ### Added

@@ -595,7 +595,14 @@ les valeurs courantes — toute nouvelle valeur "liste" tapée dans le
 formulaire est créée exactement comme lors d'un ajout. **Le chantier
 "modifier/supprimer un livre" est maintenant complet.**
 
-Étape suivante (visuelle), pas encore commencée : icône de l'app (étape 5).
+**v0.40.0 — Icône de l'app (étape 5/6, faite).** Le logo générique du
+scaffold Tauri est remplacé par un glyphe de livre ouvert blanc sur fond
+bleu accent, cohérent avec le reste de la refonte visuelle. Régénérable
+via `cd app && cargo tauri icon app-icon.png` si le design doit changer
+(source 1024×1024 conservée dans `app/app-icon.png`).
+
+Étape suivante, pas encore commencée : signature/notarisation (étape 6 —
+pas urgent, ne compte que pour une distribution à quelqu'un d'autre).
 
 ## 9. Dépannage
 
