@@ -160,6 +160,9 @@
     white-space: nowrap;
   }
   #groupList .g .n { color: var(--muted); font-size: 11px; flex-shrink: 0; }
+  #groupList .g .n.sortable { cursor: pointer; padding: 1px 5px; border-radius: 3px; }
+  #groupList .g .n.sortable:hover { background: var(--accent-soft); color: var(--accent-dark); }
+  #groupList .g .n.sort-active { background: var(--accent); color: white; font-weight: 600; }
   #groupList .g:hover { background: var(--surface-alt); }
   #groupList .g.active { background: var(--accent-soft); color: var(--accent-dark); font-weight: 600; }
 

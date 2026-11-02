@@ -93,6 +93,11 @@ séparateurs entre les 3 zones se redimensionnent à la souris. La
 disposition et la dernière position de navigation sont mémorisées d'une
 ouverture à l'autre (stockage local du navigateur).
 
+Dans la colonne de gauche, cliquer sur le **nombre** à droite de la ligne
+"Tous" bascule la liste des valeurs en dessous (auteurs, genres, etc.)
+entre un tri alphabétique (défaut) et un tri par nombre de livres
+décroissant — recliquer y revient (v0.42.0).
+
 ## 6. Copie de travail et tests
 
 Pour ne jamais lire ni risquer de modifier le fichier original pendant les

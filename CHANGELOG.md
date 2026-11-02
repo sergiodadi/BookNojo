@@ -4,6 +4,14 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.42.0] - 2026-11-02
+
+### Added
+- **Tri numérique dans la liste de groupe (auteurs/genres/sujets/tags)** — en cliquant sur le nombre à droite de la ligne "Tous" (dans la colonne de gauche), la liste des valeurs en dessous (auteurs, genres, etc.) bascule d'un tri alphabétique à un tri par nombre de livres décroissant (égalité → ordre alphabétique), et inversement en recliquant. Préférence mémorisée (`localStorage`, par navigateur), indicateur visuel sur le nombre quand ce tri est actif.
+
+### Verified
+- **Clôture du point ouvert depuis la v0.41.0** : l'utilisateur a créé dans le vrai Book Collector un livre "NBC_Test" avec un Crédit et un Personnage, ce qui a permis de vérifier les sections "Crédits"/"Personnages" avec de vraies données pour la première fois. Export en lecture seule (`bc_export --db ...`, jamais d'écriture) de la vraie collection vers un fichier temporaire, confirmant dans le JSON produit `credits: [{"name": "NBC_Display_Name", "role": null}]` et `characters: [{"name": "NBC_FN NBC_LN", "alias": null}]` — correctement résolus malgré l'absence de rôle/alias. Revue manuelle du code de rendu (`repGroup`/`creditsSection`/`charactersSection` dans `templates/app.js`) confirmant que ces valeurs `null` sont bien gérées (pas de suffixe rôle/alias affiché, mais la section elle-même s'affiche puisque le tableau contient un élément) — vérification par capture d'écran navigateur non effectuée cette fois (lancement d'un serveur local refusé par le bac à sable), mais le code suit exactement le même motif déjà confirmé visuellement pour "Liens". Fichiers temporaires (contenant les vraies données personnelles de l'utilisateur) supprimés immédiatement après vérification, rien n'a été ajouté au dépôt.
+
 ## [0.41.0] - 2026-11-02
 
 ### Added

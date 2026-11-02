@@ -130,6 +130,7 @@ const state = {
   groupField: 'authors',
   groupValue: null, // null = "Tous"
   azLetter: null,
+  groupSortByCount: false, // false = alphabétique, true = par nombre de livres (décroissant) — bascule en cliquant sur le nombre de la ligne "Tous"
   query: '',
   sort: 'title',
   mode: 'list',
@@ -208,7 +209,10 @@ function computeGroupCounts() {
       counts.set(v, (counts.get(v) || 0) + 1);
     }
   }
-  return [...counts.entries()].sort((a, b) => collator.compare(a[0], b[0]));
+  const entries = [...counts.entries()];
+  return state.groupSortByCount
+    ? entries.sort((a, b) => b[1] - a[1] || collator.compare(a[0], b[0]))
+    : entries.sort((a, b) => collator.compare(a[0], b[0]));
 }
 
 function computeAvailableLetters() {
@@ -241,13 +245,13 @@ function renderGroupList() {
   groupListEl.innerHTML = '';
   const totalForCollection = collCounts.get(state.collection);
   groupListEl.appendChild(
-    makeGroupRow('Tous', totalForCollection, state.groupValue === null, () => selectGroup(null)));
+    makeGroupRow('Tous', totalForCollection, state.groupValue === null, () => selectGroup(null), true));
   for (const [key, count] of computeGroupCounts()) {
     groupListEl.appendChild(makeGroupRow(key, count, state.groupValue === key, () => selectGroup(key)));
   }
 }
 
-function makeGroupRow(label, count, active, onClick) {
+function makeGroupRow(label, count, active, onClick, countIsSortToggle) {
   const row = document.createElement('div');
   row.className = 'g' + (active ? ' active' : '');
   const l = document.createElement('span');
@@ -258,6 +262,19 @@ function makeGroupRow(label, count, active, onClick) {
   row.appendChild(l);
   row.appendChild(n);
   row.addEventListener('click', onClick);
+  if (countIsSortToggle) {
+    n.classList.add('sortable');
+    n.title = state.groupSortByCount
+      ? 'Trié par nombre de livres — cliquer pour revenir au tri alphabétique'
+      : 'Cliquer pour trier par nombre de livres';
+    if (state.groupSortByCount) n.classList.add('sort-active');
+    n.addEventListener('click', (e) => {
+      e.stopPropagation();
+      state.groupSortByCount = !state.groupSortByCount;
+      renderGroupList();
+      saveState();
+    });
+  }
   return row;
 }
 
@@ -1455,6 +1472,7 @@ function saveState() {
       groupField: state.groupField,
       groupValue: state.groupValue,
       azLetter: state.azLetter,
+      groupSortByCount: state.groupSortByCount,
       query: state.query,
       sort: state.sort,
       mode: state.mode,
@@ -1475,6 +1493,7 @@ function restoreState() {
     if (s.groupField && GROUP_FIELDS[s.groupField]) state.groupField = s.groupField;
     state.groupValue = (s.groupValue === undefined) ? null : s.groupValue;
     state.azLetter = s.azLetter || null;
+    state.groupSortByCount = !!s.groupSortByCount;
     state.query = s.query || '';
     if (s.sort && SORTERS[s.sort]) state.sort = s.sort;
     state.page = s.page || 1;
