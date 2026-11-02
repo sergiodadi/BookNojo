@@ -4,6 +4,18 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.39.0] - 2026-11-02
+
+### Added
+- **Modifier un livre existant, depuis l'app NBC** — second et dernier volet du chantier "modifier/supprimer un livre". Bouton "✏️ Modifier ce livre" (à côté de "🗑️ Supprimer") dans le panneau de détail, qui ouvre le même formulaire "Ajouter un livre", pré-rempli avec les valeurs actuelles de la fiche, en mode édition (titre "Modifier : …", bouton "Enregistrer les modifications"). Même étape de confirmation que l'ajout avant toute écriture.
+  - `load_book_for_edit` (`src/lib.rs`) : charge une fiche existante et la reconstruit dans la même forme que `NewBookInput` (noms affichés, pas les clés étrangères résolues) — l'inverse exact de `resolve_book`.
+  - `plan_update_book_sql`/`commit_update_book` : supprime les anciennes relations de la fiche (jointures, crédits, personnages, contenus, liens — mais jamais la fiche elle-même ni son `ZITEMDELEGATE` propre), fait un `UPDATE` sur `ZCOLLECTIBLE` au lieu d'un `INSERT`, puis recrée les relations avec les valeurs actuelles — en réutilisant `plan_book_relations_sql`, désormais partagée avec `plan_book_sql` (ajout), pour que toute nouvelle valeur "liste" soit résolue et créée exactement de la même façon que lors d'un ajout.
+  - Aucune nouvelle commande `prepare_update_book` : l'étape d'aperçu/confirmation réutilise `prepare_add_book` telle quelle, puisqu'elle ne dépend jamais de la fiche existante — seule l'écriture finale diffère.
+
+### Verified
+- Testé end-to-end sur `testdata-rw/` : création d'une fiche complète, rechargement via `load_book_for_edit` (comparaison exacte avec les valeurs d'origine, y compris le rôle d'un crédit), modification (titre, note, remplacement d'un genre, ajout d'un second crédit), puis vérification SQL directe — titre et note à jour, ancien genre bien délié (mais toujours présent, non supprimé), les deux crédits avec le bon `ZROLEID`, personnages/contenus/liens non modifiés intacts, et le `ZITEMDELEGATE` propre à la fiche resté identique (pas recréé). `PRAGMA integrity_check` toujours `ok`.
+- Vérification JS : `node --check` sur `templates/app.js`, puis un passage navigateur (sélection d'un livre, ouverture du formulaire, changement d'onglets Détails/Crédits) sans aucune erreur console JS — seules des erreurs attendues (images `file://` bloquées par le serveur de test HTTP local, favicon manquant).
+
 ## [0.38.0] - 2026-11-02
 
 ### Added

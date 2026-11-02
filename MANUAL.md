@@ -584,8 +584,16 @@ horodatée avant écriture, mêmes garde-fous que l'ajout (jamais la vraie
 collection, refus si Book Collector est lancé). Supprime la fiche et ses
 propres lignes (crédits, personnages, contenus, liens, jointures genres/
 sujets/tags) sans jamais toucher aux valeurs partagées (éditeur, genre,
-auteur...) même si le livre en était le seul utilisateur. **Modifier un
-livre existant n'est pas encore fait** — prochaine étape du même chantier.
+auteur...) même si le livre en était le seul utilisateur.
+
+**v0.39.0 — Modifier un livre.** Bouton "✏️ Modifier ce livre", à côté de
+"Supprimer", ouvre le même formulaire "Ajouter un livre" mais pré-rempli
+avec les valeurs actuelles de la fiche (titre "Modifier : …", bouton
+"Enregistrer les modifications"), avec la même étape de confirmation avant
+écriture. Supprime les anciennes relations de la fiche puis les recrée avec
+les valeurs courantes — toute nouvelle valeur "liste" tapée dans le
+formulaire est créée exactement comme lors d'un ajout. **Le chantier
+"modifier/supprimer un livre" est maintenant complet.**
 
 Étape suivante (visuelle), pas encore commencée : icône de l'app (étape 5).
 

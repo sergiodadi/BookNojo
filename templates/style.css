@@ -582,14 +582,9 @@
   button.primary:hover { background: var(--accent-dark); box-shadow: var(--shadow-md); }
   button.primary:disabled { opacity: .6; cursor: default; }
 
-  /* Destructive actions (delete a book) — distinct from .primary so the
-     two are never visually confusable. */
-  button.danger {
-    display: block;
-    margin-top: 16px;
-    background: #fdeceb;
-    color: #c0392b;
-    border: 1px solid #f3c6c2;
+  /* Edit/delete actions in the detail card (NBC app only). */
+  .detail-actions { display: flex; gap: 10px; margin-top: 16px; }
+  .detail-actions button {
     border-radius: 6px;
     padding: 8px 16px;
     font-size: 13px;
@@ -597,6 +592,19 @@
     cursor: pointer;
     font-family: inherit;
     transition: background .15s ease, border-color .15s ease;
+  }
+  button.secondary {
+    background: #2b2d35;
+    color: #e8edfc;
+    border: 1px solid #40434e;
+  }
+  button.secondary:hover { background: #3a3d47; border-color: var(--accent); }
+  /* Destructive actions (delete a book) — distinct from .primary/.secondary
+     so it's never visually confusable with them. */
+  button.danger {
+    background: #fdeceb;
+    color: #c0392b;
+    border: 1px solid #f3c6c2;
   }
   button.danger:hover { background: #fbdad7; border-color: #e8a9a3; }
 

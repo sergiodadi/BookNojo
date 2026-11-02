@@ -102,6 +102,34 @@ fn delete_book(path: String, book_id: i64) -> Result<String, String> {
         .map_err(|e| format!("{e:#}"))
 }
 
+/// Charge les valeurs actuelles d'un livre pour pré-remplir le formulaire
+/// "Ajouter un livre" en mode édition — lecture seule.
+#[tauri::command]
+fn load_book_for_edit(path: String, book_id: i64) -> Result<book_collector_export::NewBookInput, String> {
+    let db_path = book_collector_export::resolve_db_path(Path::new(&path)).map_err(|e| format!("{e:#}"))?;
+    book_collector_export::load_book_for_edit_at(&db_path, book_id).map_err(|e| format!("{e:#}"))
+}
+
+/// Write half of "Modifier ce livre" — appelé seulement après que
+/// l'utilisateur a validé l'aperçu renvoyé par `prepare_add_book` (la même
+/// commande que pour l'ajout : la résolution des champs ne dépend pas de
+/// la fiche existante). Mêmes garde-fous que `commit_add_book`.
+#[tauri::command]
+fn commit_update_book(path: String, book_id: i64, input: book_collector_export::NewBookInput) -> Result<String, String> {
+    let db_path = book_collector_export::resolve_db_path(Path::new(&path)).map_err(|e| format!("{e:#}"))?;
+    refuse_if_real_collection(&db_path)?;
+    if book_collector_export::is_book_collector_running().map_err(|e| format!("{e:#}"))? {
+        return Err("Book Collector est actuellement lancé — fermez l'application avant d'enregistrer.".to_string());
+    }
+    let backup_dir = db_path
+        .parent()
+        .map(|p| p.join("backups"))
+        .unwrap_or_else(|| std::path::PathBuf::from("backups"));
+    book_collector_export::commit_update_book(&db_path, &backup_dir, book_id, input)
+        .map(|backup| format!("Livre modifié. Sauvegarde : {}", backup.display()))
+        .map_err(|e| format!("{e:#}"))
+}
+
 /// Reads `kPreferencesApplicationVersion` out of a `.bkcp`'s
 /// `preferences.plist` (binary plist — shelled out to `plutil`, since this
 /// is macOS-only code anyway and avoids a new plist-parsing dependency for
@@ -249,6 +277,8 @@ pub fn run() {
             prepare_add_book,
             commit_add_book,
             delete_book,
+            load_book_for_edit,
+            commit_update_book,
             app_version
         ])
         .setup(|app| {

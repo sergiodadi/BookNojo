@@ -669,7 +669,7 @@ where
 /// base sont repris ici. Les noms de champs sont partagés tels quels avec
 /// le formulaire JS (`templates/app.js`, `onAddFormSubmit`) et avec le
 /// format `new_book.json` lu par `bc_add resolve`.
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct NewBookInput {
     pub title: String,
     #[serde(default)]
@@ -840,7 +840,7 @@ fn default_quantity() -> i64 {
     1
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CharacterInput {
     pub name: String,
     #[serde(default)]
@@ -853,14 +853,14 @@ pub struct CharacterInput {
 /// `UserRole1`, `UserRole2`, `UserRole3` — see `role_id_for_role`),
 /// case-insensitive, or absent/unrecognized for no role (`ZROLEID` left
 /// NULL, as before this field existed).
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct CreditInput {
     pub name: String,
     #[serde(default)]
     pub role: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ContentInput {
     pub title: String,
     #[serde(default)]
@@ -1318,6 +1318,27 @@ fn role_id_for_role(role: &str) -> Option<i64> {
     }
 }
 
+/// The exact inverse of `role_id_for_role`, for pre-filling the role
+/// dropdown when loading an existing credit for editing. `CoverDesigner`
+/// (a recognized synonym for role 2) is never produced here — `CoverArtist`
+/// is the canonical name the form's `<select>` actually offers.
+fn role_for_role_id(role_id: i64) -> Option<&'static str> {
+    match role_id {
+        1 => Some("Translator"),
+        2 => Some("CoverArtist"),
+        3 => Some("Editor"),
+        4 => Some("Illustrator"),
+        5 => Some("Ghostwriter"),
+        6 => Some("ForewordAuthor"),
+        7 => Some("Photographer"),
+        8 => Some("Narrator"),
+        9 => Some("UserRole1"),
+        10 => Some("UserRole2"),
+        11 => Some("UserRole3"),
+        _ => None,
+    }
+}
+
 /// Same idea as `LookupKind`, but for "person" flyweight fields (shared
 /// `ZPERSONDELEGATE` instead of `ZLOOKUPITEMDELEGATE`) — authors, credits,
 /// characters, owner.
@@ -1556,6 +1577,42 @@ pub fn plan_book_sql(conn: &Connection, book: &ResolvedBook) -> Result<String> {
         notes = sql_opt_str(&book.notes),
     ));
 
+    // 4-9) Tout ce qui se rattache au livre par Z_PK (auteurs, genres,
+    //    sujets, crédits, personnages, contenus, liens) — partagé avec
+    //    `plan_update_book_sql`, qui appelle la même fonction une fois
+    //    les anciennes relations supprimées et la fiche mise à jour.
+    plan_book_relations_sql(conn, &mut alloc, book, book_pk, book_ent, &author_person_pks, &mut sql)?;
+
+    // 10) Compteurs Z_PRIMARYKEY à mettre à jour pour chaque entité touchée.
+    sql.push('\n');
+    for (entity, new_max) in alloc.updates() {
+        sql.push_str(&format!(
+            "UPDATE Z_PRIMARYKEY SET Z_MAX = {new_max} WHERE Z_NAME = {};\n",
+            sql_quote(&entity)
+        ));
+    }
+
+    sql.push_str("\nCOMMIT;\n");
+
+    Ok(sql)
+}
+
+/// Emits every INSERT that attaches to a book purely by its `Z_PK`/`Z_ENT`:
+/// author join rows, genre/subject join rows (creating new lookup values
+/// first if needed), credits, characters, contents (and their own content-
+/// level authors), and links. Shared between `plan_book_sql` (a brand-new
+/// `book_pk`) and `plan_update_book_sql` (an existing `book_pk`, called
+/// after that function has already deleted the book's old relations) —
+/// this is everything that's identical between the two either way.
+fn plan_book_relations_sql(
+    conn: &Connection,
+    alloc: &mut PkAllocator,
+    book: &ResolvedBook,
+    book_pk: i64,
+    book_ent: i64,
+    author_person_pks: &[i64],
+    sql: &mut String,
+) -> Result<()> {
     // 4) Auteurs : lignes de jointure ZAUTHOR(ZBOOK, ZAUTHORPERSON, ZRANK).
     let author_ent = entity_ent_id(conn, "Author")?;
     for (i, person_pk) in author_person_pks.iter().enumerate() {
@@ -1571,7 +1628,7 @@ pub fn plan_book_sql(conn: &Connection, book: &ResolvedBook) -> Result<String> {
     for g in &book.genres {
         let genre_pk = match g.existing_pk {
             Some(pk) => pk,
-            None => plan_new_lookup(&mut alloc, &GENRE, &g.value, &mut sql)?,
+            None => plan_new_lookup(alloc, &GENRE, &g.value, sql)?,
         };
         sql.push_str(&format!(
             "INSERT INTO Z_7GENRES (Z_7BASEBOOKCOLLECTIBLES1, Z_18GENRES) VALUES ({book_pk}, {genre_pk});\n"
@@ -1580,7 +1637,7 @@ pub fn plan_book_sql(conn: &Connection, book: &ResolvedBook) -> Result<String> {
     for s in &book.subjects {
         let subject_pk = match s.existing_pk {
             Some(pk) => pk,
-            None => plan_new_lookup(&mut alloc, &SUBJECT, &s.value, &mut sql)?,
+            None => plan_new_lookup(alloc, &SUBJECT, &s.value, sql)?,
         };
         sql.push_str(&format!(
             "INSERT INTO Z_8SUBJECTS (Z_8BOOKS1, Z_38SUBJECTS) VALUES ({book_pk}, {subject_pk});\n"
@@ -1597,7 +1654,7 @@ pub fn plan_book_sql(conn: &Connection, book: &ResolvedBook) -> Result<String> {
     for (i, c) in book.credits.iter().enumerate() {
         let person_pk = match c.person.existing_pk {
             Some(pk) => pk,
-            None => plan_new_person(&mut alloc, &CREDIT_PERSON, &c.person.value, &mut sql)?,
+            None => plan_new_person(alloc, &CREDIT_PERSON, &c.person.value, sql)?,
         };
         let creator_pk = alloc.alloc("Creator")?;
         sql.push_str(&format!(
@@ -1661,7 +1718,7 @@ pub fn plan_book_sql(conn: &Connection, book: &ResolvedBook) -> Result<String> {
             subtitle = sql_opt_str(&c.subtitle),
         ));
 
-        let content_author_pks = plan_person_list(&mut alloc, &AUTHOR_PERSON, &c.authors, &mut sql)?;
+        let content_author_pks = plan_person_list(alloc, &AUTHOR_PERSON, &c.authors, sql)?;
         for (ai, person_pk) in content_author_pks.iter().enumerate() {
             let content_author_pk = alloc.alloc("Author")?;
             sql.push_str(&format!(
@@ -1693,18 +1750,7 @@ pub fn plan_book_sql(conn: &Connection, book: &ResolvedBook) -> Result<String> {
         ));
     }
 
-    // 10) Compteurs Z_PRIMARYKEY à mettre à jour pour chaque entité touchée.
-    sql.push('\n');
-    for (entity, new_max) in alloc.updates() {
-        sql.push_str(&format!(
-            "UPDATE Z_PRIMARYKEY SET Z_MAX = {new_max} WHERE Z_NAME = {};\n",
-            sql_quote(&entity)
-        ));
-    }
-
-    sql.push_str("\nCOMMIT;\n");
-
-    Ok(sql)
+    Ok(())
 }
 
 /// Refuses paths under `~/Documents/Collectorz/...` — the known location
@@ -1912,6 +1958,268 @@ pub fn commit_add_book(db_path: &Path, backup_dir: &Path, input: NewBookInput) -
     write_plan_sql(db_path, backup_dir, &sql)
 }
 
+/// Loads an existing book's current values back into a `NewBookInput`-
+/// shaped struct, for pre-filling the Add-book form in "edit" mode — the
+/// mirror image of `resolve_book`: instead of resolving user-typed strings
+/// against the database, this reads the database and reconstructs the
+/// strings the form should show (display names for every lookup/person
+/// field, not their resolved primary keys). Read-only. Errors if `book_pk`
+/// doesn't name an existing `Book` row.
+pub fn load_book_for_edit(conn: &Connection, book_pk: i64) -> Result<NewBookInput> {
+    let book_ent = entity_ent_id(conn, "Book")?;
+
+    let sql = "
+        SELECT
+            c.ZTITLE AS title, c.ZSUBTITLE AS subtitle, c.ZISBN AS isbn,
+            c.ZNUMBEROFPAGES AS number_of_pages,
+            c.ZPUBLICATIONYEAR AS publication_year, c.ZPUBLICATIONMONTH AS publication_month,
+            c.ZPUBLICATIONDAY AS publication_day,
+            c.ZLOCNR AS location_number, c.ZQUANTITY AS quantity, c.ZISSUENUMBER AS issue_number,
+            pub_l.ZDISPLAYNAME AS publisher, fmt_l.ZDISPLAYNAME AS format,
+            lang_l.ZDISPLAYNAME AS language, ctry_l.ZDISPLAYNAME AS country,
+            loc_l.ZDISPLAYNAME AS location, col.ZTITLE AS collection,
+            edit_l.ZDISPLAYNAME AS edition, prnt_l.ZDISPLAYNAME AS printed_by,
+            ser_l.ZDISPLAYNAME AS series, vol_l.ZDISPLAYNAME AS volume,
+            paper_l.ZDISPLAYNAME AS paper_type,
+            c.ZHEIGHT AS height, c.ZWIDTH AS width, c.ZDEWEY AS dewey, c.ZLCCN AS lccn,
+            c.ZDEDICATION AS dedication,
+            c.ZFIRSTEDITION AS first_edition, c.ZPRINTING AS printing, c.ZABRIDGED AS abridged,
+            c.ZBOXSET AS box_set, c.ZAUDIOLENGTHMINUTES AS audio_length_minutes,
+            c.ZORIGINALTITLE AS original_title, c.ZORIGINALSUBTITLE AS original_subtitle,
+            origpub_l.ZDISPLAYNAME AS original_publisher, origctry_l.ZDISPLAYNAME AS original_country,
+            origlang_l.ZDISPLAYNAME AS original_language,
+            c.ZORIGINALPUBLICATIONYEAR AS original_publication_year,
+            c.ZORIGINALPUBLICATIONMONTH AS original_publication_month,
+            c.ZORIGINALPUBLICATIONDAY AS original_publication_day,
+            cond_l.ZDISPLAYNAME AS condition, own_p.ZDISPLAYNAME AS owner, store_l.ZDISPLAYNAME AS store,
+            c.ZCURRENTVALUE AS current_value, c.ZPURCHASEPRICE AS purchase_price,
+            c.ZCOVERPRICE AS cover_price,
+            c.ZPURCHASEYEAR AS purchase_year, c.ZPURCHASEMONTH AS purchase_month,
+            c.ZPURCHASEDAY AS purchase_day,
+            c.ZRARE AS rare, c.ZREADIT AS read_it, c.ZREADTIMES AS read_times,
+            c.ZREADYEAR AS read_year, c.ZREADMONTH AS read_month, c.ZREADDAY AS read_day,
+            c.ZMYRATING AS my_rating,
+            ul1_l.ZDISPLAYNAME AS user_lookup1, ul2_l.ZDISPLAYNAME AS user_lookup2,
+            c.ZUSERTEXT1 AS user_text1, c.ZUSERTEXT2 AS user_text2,
+            c.ZPLOT AS plot, c.ZNOTES AS notes
+        FROM ZCOLLECTIBLE c
+        LEFT JOIN ZPUBLISHER pub ON pub.Z_PK = c.ZPUBLISHER
+        LEFT JOIN ZLOOKUPITEMDELEGATE pub_l ON pub_l.Z_PK = pub.ZDELEGATE
+        LEFT JOIN ZFORMAT fmt ON fmt.Z_PK = c.ZFORMAT
+        LEFT JOIN ZLOOKUPITEMDELEGATE fmt_l ON fmt_l.Z_PK = fmt.ZDELEGATE
+        LEFT JOIN ZLANGUAGE lang ON lang.Z_PK = c.ZLANGUAGE
+        LEFT JOIN ZLOOKUPITEMDELEGATE lang_l ON lang_l.Z_PK = lang.ZDELEGATE
+        LEFT JOIN ZCOUNTRY ctry ON ctry.Z_PK = c.ZCOUNTRY
+        LEFT JOIN ZLOOKUPITEMDELEGATE ctry_l ON ctry_l.Z_PK = ctry.ZDELEGATE
+        LEFT JOIN ZLOCATION loc ON loc.Z_PK = c.ZLOCATION
+        LEFT JOIN ZLOOKUPITEMDELEGATE loc_l ON loc_l.Z_PK = loc.ZDELEGATE
+        LEFT JOIN ZCOLLECTION col ON col.Z_PK = c.ZCOLLECTION
+        LEFT JOIN ZEDITION edit ON edit.Z_PK = c.ZEDITION
+        LEFT JOIN ZLOOKUPITEMDELEGATE edit_l ON edit_l.Z_PK = edit.ZDELEGATE
+        LEFT JOIN ZPRINTEDBY prnt ON prnt.Z_PK = c.ZPRINTEDBY
+        LEFT JOIN ZLOOKUPITEMDELEGATE prnt_l ON prnt_l.Z_PK = prnt.ZDELEGATE
+        LEFT JOIN ZSERIES ser ON ser.Z_PK = c.ZSERIES
+        LEFT JOIN ZLOOKUPITEMDELEGATE ser_l ON ser_l.Z_PK = ser.ZDELEGATE
+        LEFT JOIN ZVOLUME vol ON vol.Z_PK = c.ZVOLUME
+        LEFT JOIN ZLOOKUPITEMDELEGATE vol_l ON vol_l.Z_PK = vol.ZDELEGATE
+        LEFT JOIN ZPAPERTYPE paper ON paper.Z_PK = c.ZPAPERTYPE
+        LEFT JOIN ZLOOKUPITEMDELEGATE paper_l ON paper_l.Z_PK = paper.ZDELEGATE
+        LEFT JOIN ZPUBLISHER origpub ON origpub.Z_PK = c.ZORIGINALPUBLISHER
+        LEFT JOIN ZLOOKUPITEMDELEGATE origpub_l ON origpub_l.Z_PK = origpub.ZDELEGATE
+        LEFT JOIN ZCOUNTRY origctry ON origctry.Z_PK = c.ZORIGINALCOUNTRY
+        LEFT JOIN ZLOOKUPITEMDELEGATE origctry_l ON origctry_l.Z_PK = origctry.ZDELEGATE
+        LEFT JOIN ZLANGUAGE origlang ON origlang.Z_PK = c.ZORIGINALLANGUAGE
+        LEFT JOIN ZLOOKUPITEMDELEGATE origlang_l ON origlang_l.Z_PK = origlang.ZDELEGATE
+        LEFT JOIN ZCONDITION cond ON cond.Z_PK = c.ZCONDITION
+        LEFT JOIN ZLOOKUPITEMDELEGATE cond_l ON cond_l.Z_PK = cond.ZDELEGATE
+        LEFT JOIN ZOWNER own ON own.Z_PK = c.ZOWNER
+        LEFT JOIN ZPERSONDELEGATE own_p ON own_p.Z_PK = own.ZDELEGATE
+        LEFT JOIN ZSTORE store ON store.Z_PK = c.ZSTORE
+        LEFT JOIN ZLOOKUPITEMDELEGATE store_l ON store_l.Z_PK = store.ZDELEGATE
+        LEFT JOIN ZUSERLOOKUP1 ul1 ON ul1.Z_PK = c.ZUSERLOOKUP1
+        LEFT JOIN ZLOOKUPITEMDELEGATE ul1_l ON ul1_l.Z_PK = ul1.ZDELEGATE
+        LEFT JOIN ZUSERLOOKUP2 ul2 ON ul2.Z_PK = c.ZUSERLOOKUP2
+        LEFT JOIN ZLOOKUPITEMDELEGATE ul2_l ON ul2_l.Z_PK = ul2.ZDELEGATE
+        WHERE c.Z_PK = ?1 AND c.Z_ENT = ?2";
+
+    let mut input = conn
+        .query_row(sql, rusqlite::params![book_pk, book_ent], |row| {
+            Ok(NewBookInput {
+                title: row.get("title")?,
+                subtitle: row.get("subtitle")?,
+                isbn: row.get("isbn")?,
+                authors: Vec::new(),
+                publisher: row.get("publisher")?,
+                format: row.get("format")?,
+                language: row.get("language")?,
+                country: row.get("country")?,
+                number_of_pages: row.get("number_of_pages")?,
+                publication_year: row.get("publication_year")?,
+                publication_month: row.get("publication_month")?,
+                publication_day: row.get("publication_day")?,
+                genres: Vec::new(),
+                subjects: Vec::new(),
+                location: row.get("location")?,
+                location_number: row.get("location_number")?,
+                quantity: row.get::<_, Option<i64>>("quantity")?.unwrap_or(1),
+                collection: row.get::<_, Option<String>>("collection")?.unwrap_or_default(),
+                issue_number: row.get("issue_number")?,
+                edition: row.get("edition")?,
+                printed_by: row.get("printed_by")?,
+                series: row.get("series")?,
+                volume: row.get("volume")?,
+                paper_type: row.get("paper_type")?,
+                height: row.get("height")?,
+                width: row.get("width")?,
+                dewey: row.get("dewey")?,
+                lccn: row.get("lccn")?,
+                dedication: row.get("dedication")?,
+                first_edition: row.get("first_edition")?,
+                printing: row.get("printing")?,
+                abridged: row.get("abridged")?,
+                box_set: row.get("box_set")?,
+                audio_length_minutes: row.get("audio_length_minutes")?,
+                original_title: row.get("original_title")?,
+                original_subtitle: row.get("original_subtitle")?,
+                original_publisher: row.get("original_publisher")?,
+                original_country: row.get("original_country")?,
+                original_language: row.get("original_language")?,
+                original_publication_year: row.get("original_publication_year")?,
+                original_publication_month: row.get("original_publication_month")?,
+                original_publication_day: row.get("original_publication_day")?,
+                condition: row.get("condition")?,
+                owner: row.get("owner")?,
+                store: row.get("store")?,
+                current_value: row.get("current_value")?,
+                purchase_price: row.get("purchase_price")?,
+                cover_price: row.get("cover_price")?,
+                purchase_year: row.get("purchase_year")?,
+                purchase_month: row.get("purchase_month")?,
+                purchase_day: row.get("purchase_day")?,
+                rare: row.get("rare")?,
+                read_it: row.get("read_it")?,
+                read_times: row.get("read_times")?,
+                read_year: row.get("read_year")?,
+                read_month: row.get("read_month")?,
+                read_day: row.get("read_day")?,
+                my_rating: row.get("my_rating")?,
+                user_lookup1: row.get("user_lookup1")?,
+                user_lookup2: row.get("user_lookup2")?,
+                user_text1: row.get("user_text1")?,
+                user_text2: row.get("user_text2")?,
+                plot: row.get("plot")?,
+                notes: row.get("notes")?,
+                credits: Vec::new(),
+                characters: Vec::new(),
+                contents: Vec::new(),
+                links: Vec::new(),
+            })
+        })
+        .with_context(|| format!("aucun livre avec Z_PK={book_pk} dans cette collection"))?;
+
+    input.authors = {
+        let mut stmt = conn.prepare(
+            "SELECT pd.ZDISPLAYNAME FROM ZAUTHOR a \
+             JOIN ZAUTHORPERSON ap ON ap.Z_PK = a.ZAUTHORPERSON \
+             JOIN ZPERSONDELEGATE pd ON pd.Z_PK = ap.ZDELEGATE \
+             WHERE a.ZBOOK = ?1 ORDER BY a.ZRANK",
+        )?;
+        let rows = stmt.query_map([book_pk], |row| row.get(0))?.collect::<rusqlite::Result<_>>()?;
+        rows
+    };
+    input.genres = {
+        let mut stmt = conn.prepare(
+            "SELECT l.ZDISPLAYNAME FROM Z_7GENRES j \
+             JOIN ZGENRE g ON g.Z_PK = j.Z_18GENRES \
+             JOIN ZLOOKUPITEMDELEGATE l ON l.Z_PK = g.ZDELEGATE \
+             WHERE j.Z_7BASEBOOKCOLLECTIBLES1 = ?1 ORDER BY l.ZDISPLAYNAME",
+        )?;
+        let rows = stmt.query_map([book_pk], |row| row.get(0))?.collect::<rusqlite::Result<_>>()?;
+        rows
+    };
+    input.subjects = {
+        let mut stmt = conn.prepare(
+            "SELECT l.ZDISPLAYNAME FROM Z_8SUBJECTS j \
+             JOIN ZSUBJECT s ON s.Z_PK = j.Z_38SUBJECTS \
+             JOIN ZLOOKUPITEMDELEGATE l ON l.Z_PK = s.ZDELEGATE \
+             WHERE j.Z_8BOOKS1 = ?1 ORDER BY l.ZDISPLAYNAME",
+        )?;
+        let rows = stmt.query_map([book_pk], |row| row.get(0))?.collect::<rusqlite::Result<_>>()?;
+        rows
+    };
+    input.credits = {
+        let mut stmt = conn.prepare(
+            "SELECT pd.ZDISPLAYNAME, cr.ZROLEID FROM ZCREATOR cr \
+             JOIN ZCREDITPERSON cp ON cp.Z_PK = cr.ZCREDITPERSON \
+             JOIN ZPERSONDELEGATE pd ON pd.Z_PK = cp.ZDELEGATE \
+             WHERE cr.ZBASEBOOKCOLLECTIBLE = ?1 ORDER BY cr.ZRANK",
+        )?;
+        let rows = stmt
+            .query_map([book_pk], |row| {
+                let name: String = row.get(0)?;
+                let role_id: Option<i64> = row.get(1)?;
+                Ok(CreditInput { name, role: role_id.and_then(role_for_role_id).map(str::to_string) })
+            })?
+            .collect::<rusqlite::Result<_>>()?;
+        rows
+    };
+    input.characters = {
+        let mut stmt = conn.prepare(
+            "SELECT pd.ZDISPLAYNAME, cp.ZALIAS FROM ZCHARACTER ch \
+             JOIN ZCHARACTERPERSON cp ON cp.Z_PK = ch.ZCHARACTERPERSON \
+             JOIN ZPERSONDELEGATE pd ON pd.Z_PK = cp.ZDELEGATE \
+             WHERE ch.ZBASEBOOKCOLLECTIBLE = ?1 ORDER BY ch.ZRANK",
+        )?;
+        let rows = stmt
+            .query_map([book_pk], |row| Ok(CharacterInput { name: row.get(0)?, alias: row.get(1)? }))?
+            .collect::<rusqlite::Result<_>>()?;
+        rows
+    };
+    input.contents = {
+        let mut stmt = conn.prepare(
+            "SELECT Z_PK, ZTITLE, ZSUBTITLE, ZNUMBEROFPAGES, ZSTARTPAGE FROM ZSTORY \
+             WHERE ZBOOK = ?1 ORDER BY ZRANK",
+        )?;
+        let story_rows: Vec<(i64, String, Option<String>, Option<i64>, Option<i64>)> = stmt
+            .query_map([book_pk], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?))
+            })?
+            .collect::<rusqlite::Result<_>>()?;
+        let mut contents = Vec::with_capacity(story_rows.len());
+        for (story_pk, title, subtitle, number_of_pages, start_page) in story_rows {
+            let mut authors_stmt = conn.prepare(
+                "SELECT pd.ZDISPLAYNAME FROM ZAUTHOR a \
+                 JOIN ZAUTHORPERSON ap ON ap.Z_PK = a.ZAUTHORPERSON \
+                 JOIN ZPERSONDELEGATE pd ON pd.Z_PK = ap.ZDELEGATE \
+                 WHERE a.ZSTORY = ?1 ORDER BY a.ZRANK",
+            )?;
+            let authors = authors_stmt.query_map([story_pk], |row| row.get(0))?.collect::<rusqlite::Result<_>>()?;
+            contents.push(ContentInput { title, subtitle, number_of_pages, start_page, authors });
+        }
+        contents
+    };
+    input.links = {
+        let mut stmt = conn.prepare(
+            "SELECT ZURL, ZDESCRIPTION FROM ZLINK WHERE ZBASEBOOKCOLLECTIBLE1 = ?1 ORDER BY ZRANK",
+        )?;
+        let rows = stmt
+            .query_map([book_pk], |row| Ok(LinkInput { url: row.get(0)?, description: row.get(1)? }))?
+            .collect::<rusqlite::Result<_>>()?;
+        rows
+    };
+
+    Ok(input)
+}
+
+/// Path-based convenience wrapper around `load_book_for_edit`, opening the
+/// read-only connection itself — for callers (like the NBC Tauri command)
+/// that don't already have one open, same pattern as `prepare_add_book`.
+pub fn load_book_for_edit_at(db_path: &Path, book_pk: i64) -> Result<NewBookInput> {
+    let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .with_context(|| format!("ouverture en lecture seule de {}", db_path.display()))?;
+    load_book_for_edit(&conn, book_pk)
+}
+
 /// Builds the full set of DELETE statements for one book: its own join rows
 /// (authors, genres, subjects, tags), credits, characters, contents and
 /// their own authors, links and their `ZITEMDELEGATE` companions, the
@@ -1925,51 +2233,15 @@ pub fn commit_add_book(db_path: &Path, backup_dir: &Path, input: NewBookInput) -
 /// still points at. Wrapped in its own `BEGIN TRANSACTION;`/`COMMIT;` like
 /// `plan_book_sql`, so `write_plan_sql` can strip and execute it the same way.
 pub fn plan_delete_book_sql(conn: &Connection, book_pk: i64) -> Result<String> {
-    let book_ent = entity_ent_id(conn, "Book")?;
-    let exists: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM ZCOLLECTIBLE WHERE Z_PK = ?1 AND Z_ENT = ?2",
-        rusqlite::params![book_pk, book_ent],
-        |row| row.get(0),
-    )?;
-    if exists == 0 {
-        bail!("aucun livre avec Z_PK={book_pk} dans cette collection");
-    }
-
+    let (story_pks, link_item_delegate_pks) = book_relation_cleanup_targets(conn, book_pk)?;
     let item_delegate_pk: Option<i64> =
         conn.query_row("SELECT ZITEMDELEGATE FROM ZCOLLECTIBLE WHERE Z_PK = ?1", [book_pk], |row| row.get(0))?;
-
-    let story_pks: Vec<i64> = {
-        let mut stmt = conn.prepare("SELECT Z_PK FROM ZSTORY WHERE ZBOOK = ?1")?;
-        let rows = stmt.query_map([book_pk], |row| row.get(0))?.collect::<rusqlite::Result<_>>()?;
-        rows
-    };
-
-    let link_item_delegate_pks: Vec<i64> = {
-        let mut stmt = conn.prepare(
-            "SELECT ZITEMDELEGATE1 FROM ZLINK WHERE ZBASEBOOKCOLLECTIBLE1 = ?1 AND ZITEMDELEGATE1 IS NOT NULL",
-        )?;
-        let rows = stmt.query_map([book_pk], |row| row.get(0))?.collect::<rusqlite::Result<_>>()?;
-        rows
-    };
 
     let mut sql = String::new();
     sql.push_str("-- Plan de suppression — APERÇU, RIEN N'EST EXÉCUTÉ.\n");
     sql.push_str("BEGIN TRANSACTION;\n\n");
 
-    for story_pk in &story_pks {
-        sql.push_str(&format!("DELETE FROM ZAUTHOR WHERE ZSTORY = {story_pk};\n"));
-    }
-    sql.push_str(&format!("DELETE FROM ZSTORY WHERE ZBOOK = {book_pk};\n"));
-    sql.push_str(&format!("DELETE FROM ZAUTHOR WHERE ZBOOK = {book_pk};\n"));
-    sql.push_str(&format!("DELETE FROM Z_7GENRES WHERE Z_7BASEBOOKCOLLECTIBLES1 = {book_pk};\n"));
-    sql.push_str(&format!("DELETE FROM Z_8SUBJECTS WHERE Z_8BOOKS1 = {book_pk};\n"));
-    sql.push_str(&format!("DELETE FROM Z_6TAGS WHERE Z_6COLLECTIBLES = {book_pk};\n"));
-    sql.push_str(&format!("DELETE FROM ZCREATOR WHERE ZBASEBOOKCOLLECTIBLE = {book_pk};\n"));
-    sql.push_str(&format!("DELETE FROM ZCHARACTER WHERE ZBASEBOOKCOLLECTIBLE = {book_pk};\n"));
-    for link_item_delegate_pk in &link_item_delegate_pks {
-        sql.push_str(&format!("DELETE FROM ZITEMDELEGATE WHERE Z_PK = {link_item_delegate_pk};\n"));
-    }
-    sql.push_str(&format!("DELETE FROM ZLINK WHERE ZBASEBOOKCOLLECTIBLE1 = {book_pk};\n"));
+    plan_delete_book_relations_sql(book_pk, &story_pks, &link_item_delegate_pks, &mut sql);
     if let Some(pk) = item_delegate_pk {
         sql.push_str(&format!("DELETE FROM ZITEMDELEGATE WHERE Z_PK = {pk};\n"));
     }
@@ -1989,6 +2261,197 @@ pub fn delete_book(db_path: &Path, backup_dir: &Path, book_pk: i64) -> Result<Pa
         let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
             .with_context(|| format!("ouverture en lecture seule de {}", db_path.display()))?;
         plan_delete_book_sql(&conn, book_pk)?
+    };
+    write_plan_sql(db_path, backup_dir, &sql)
+}
+
+/// Verifies `book_pk` names an existing `Book` row, then finds everything
+/// needed to clean up its relations before a delete *or* an update: its
+/// `ZSTORY` rows (whose own `ZAUTHOR` rows need deleting first) and its
+/// `ZLINK` rows' `ZITEMDELEGATE` companions. Shared by
+/// `plan_delete_book_sql` and `plan_update_book_sql`.
+fn book_relation_cleanup_targets(conn: &Connection, book_pk: i64) -> Result<(Vec<i64>, Vec<i64>)> {
+    let book_ent = entity_ent_id(conn, "Book")?;
+    let exists: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM ZCOLLECTIBLE WHERE Z_PK = ?1 AND Z_ENT = ?2",
+        rusqlite::params![book_pk, book_ent],
+        |row| row.get(0),
+    )?;
+    if exists == 0 {
+        bail!("aucun livre avec Z_PK={book_pk} dans cette collection");
+    }
+
+    let story_pks: Vec<i64> = {
+        let mut stmt = conn.prepare("SELECT Z_PK FROM ZSTORY WHERE ZBOOK = ?1")?;
+        let rows = stmt.query_map([book_pk], |row| row.get(0))?.collect::<rusqlite::Result<_>>()?;
+        rows
+    };
+
+    let link_item_delegate_pks: Vec<i64> = {
+        let mut stmt = conn.prepare(
+            "SELECT ZITEMDELEGATE1 FROM ZLINK WHERE ZBASEBOOKCOLLECTIBLE1 = ?1 AND ZITEMDELEGATE1 IS NOT NULL",
+        )?;
+        let rows = stmt.query_map([book_pk], |row| row.get(0))?.collect::<rusqlite::Result<_>>()?;
+        rows
+    };
+
+    Ok((story_pks, link_item_delegate_pks))
+}
+
+/// Emits DELETEs for everything a book owns *except* the `ZCOLLECTIBLE`
+/// row itself and its own `ZITEMDELEGATE` wrapper — i.e. exactly what
+/// `plan_update_book_sql` needs cleared before re-inserting the current
+/// set of relations, and a strict subset of what `plan_delete_book_sql`
+/// needs (which also removes the book row and its own `ZITEMDELEGATE`).
+fn plan_delete_book_relations_sql(book_pk: i64, story_pks: &[i64], link_item_delegate_pks: &[i64], sql: &mut String) {
+    for story_pk in story_pks {
+        sql.push_str(&format!("DELETE FROM ZAUTHOR WHERE ZSTORY = {story_pk};\n"));
+    }
+    sql.push_str(&format!("DELETE FROM ZSTORY WHERE ZBOOK = {book_pk};\n"));
+    sql.push_str(&format!("DELETE FROM ZAUTHOR WHERE ZBOOK = {book_pk};\n"));
+    sql.push_str(&format!("DELETE FROM Z_7GENRES WHERE Z_7BASEBOOKCOLLECTIBLES1 = {book_pk};\n"));
+    sql.push_str(&format!("DELETE FROM Z_8SUBJECTS WHERE Z_8BOOKS1 = {book_pk};\n"));
+    sql.push_str(&format!("DELETE FROM Z_6TAGS WHERE Z_6COLLECTIBLES = {book_pk};\n"));
+    sql.push_str(&format!("DELETE FROM ZCREATOR WHERE ZBASEBOOKCOLLECTIBLE = {book_pk};\n"));
+    sql.push_str(&format!("DELETE FROM ZCHARACTER WHERE ZBASEBOOKCOLLECTIBLE = {book_pk};\n"));
+    for link_item_delegate_pk in link_item_delegate_pks {
+        sql.push_str(&format!("DELETE FROM ZITEMDELEGATE WHERE Z_PK = {link_item_delegate_pk};\n"));
+    }
+    sql.push_str(&format!("DELETE FROM ZLINK WHERE ZBASEBOOKCOLLECTIBLE1 = {book_pk};\n"));
+}
+
+/// Builds the full plan to update an existing book in place: deletes its
+/// current relations (everything `plan_delete_book_relations_sql` covers),
+/// `UPDATE`s the `ZCOLLECTIBLE` row's own columns (same column set
+/// `plan_book_sql` inserts, minus `Z_PK`/`Z_ENT`/`Z_OPT`/`ZITEMDELEGATE`,
+/// which never change), then re-creates every relation via the same
+/// `plan_book_relations_sql` helper `plan_book_sql` uses — so a value that
+/// was already a new "liste"/person entry when the user picked it is
+/// resolved and created exactly the same way it would be on a fresh add.
+/// Wrapped in `BEGIN TRANSACTION;`/`COMMIT;` like `plan_book_sql`.
+pub fn plan_update_book_sql(conn: &Connection, book_pk: i64, book: &ResolvedBook) -> Result<String> {
+    let book_ent = entity_ent_id(conn, "Book")?;
+    let (story_pks, link_item_delegate_pks) = book_relation_cleanup_targets(conn, book_pk)?;
+
+    let mut alloc = PkAllocator::new(conn);
+    let mut sql = String::new();
+    sql.push_str("-- Plan de modification — APERÇU, RIEN N'EST EXÉCUTÉ.\n");
+    sql.push_str("BEGIN TRANSACTION;\n\n");
+
+    plan_delete_book_relations_sql(book_pk, &story_pks, &link_item_delegate_pks, &mut sql);
+    sql.push('\n');
+
+    // Mêmes valeurs "liste" + nouveaux auteurs que plan_book_sql (étapes 1-2).
+    let publisher_fk = plan_lookup_fk(&mut alloc, &PUBLISHER, &book.publisher, &mut sql)?;
+    let format_fk = plan_lookup_fk(&mut alloc, &FORMAT, &book.format, &mut sql)?;
+    let language_fk = plan_lookup_fk(&mut alloc, &LANGUAGE, &book.language, &mut sql)?;
+    let country_fk = plan_lookup_fk(&mut alloc, &COUNTRY, &book.country, &mut sql)?;
+    let location_fk = plan_lookup_fk(&mut alloc, &LOCATION, &book.location, &mut sql)?;
+    let edition_fk = plan_lookup_fk(&mut alloc, &EDITION, &book.edition, &mut sql)?;
+    let printed_by_fk = plan_lookup_fk(&mut alloc, &PRINTEDBY, &book.printed_by, &mut sql)?;
+    let series_fk = plan_lookup_fk(&mut alloc, &SERIES, &book.series, &mut sql)?;
+    let volume_fk = plan_lookup_fk(&mut alloc, &VOLUME, &book.volume, &mut sql)?;
+    let paper_type_fk = plan_lookup_fk(&mut alloc, &PAPERTYPE, &book.paper_type, &mut sql)?;
+    let original_publisher_fk = plan_lookup_fk(&mut alloc, &PUBLISHER, &book.original_publisher, &mut sql)?;
+    let original_country_fk = plan_lookup_fk(&mut alloc, &COUNTRY, &book.original_country, &mut sql)?;
+    let original_language_fk = plan_lookup_fk(&mut alloc, &LANGUAGE, &book.original_language, &mut sql)?;
+    let condition_fk = plan_lookup_fk(&mut alloc, &CONDITION, &book.condition, &mut sql)?;
+    let store_fk = plan_lookup_fk(&mut alloc, &STORE, &book.store, &mut sql)?;
+    let owner_fk = plan_person_fk(&mut alloc, &OWNER_PERSON, &book.owner, &mut sql)?;
+    let user_lookup1_fk = plan_lookup_fk(&mut alloc, &USERLOOKUP1, &book.user_lookup1, &mut sql)?;
+    let user_lookup2_fk = plan_lookup_fk(&mut alloc, &USERLOOKUP2, &book.user_lookup2, &mut sql)?;
+    let author_person_pks = plan_person_list(&mut alloc, &AUTHOR_PERSON, &book.authors, &mut sql)?;
+
+    sql.push('\n');
+    sql.push_str(&format!(
+        "UPDATE ZCOLLECTIBLE SET\n\
+         \x20 ZCOLLECTION = {collection_pk}, ZQUANTITY = {quantity}, ZISSUENUMBER = {issue_number},\n\
+         \x20 ZTITLE = {title}, ZTITLESORT = {title_sort}, ZSUBTITLE = {subtitle}, ZISBN = {isbn},\n\
+         \x20 ZPUBLISHER = {publisher_fk}, ZFORMAT = {format_fk}, ZLANGUAGE = {language_fk}, ZCOUNTRY = {country_fk}, ZLOCATION = {location_fk}, ZLOCNR = {location_number},\n\
+         \x20 ZNUMBEROFPAGES = {pages}, ZPUBLICATIONYEAR = {year}, ZPUBLICATIONMONTH = {month}, ZPUBLICATIONDAY = {day},\n\
+         \x20 ZEDITION = {edition_fk}, ZPRINTEDBY = {printed_by_fk}, ZSERIES = {series_fk}, ZVOLUME = {volume_fk}, ZPAPERTYPE = {paper_type_fk},\n\
+         \x20 ZHEIGHT = {height}, ZWIDTH = {width}, ZDEWEY = {dewey}, ZLCCN = {lccn}, ZDEDICATION = {dedication},\n\
+         \x20 ZFIRSTEDITION = {first_edition}, ZPRINTING = {printing}, ZABRIDGED = {abridged}, ZBOXSET = {box_set}, ZAUDIOLENGTHMINUTES = {audio_length_minutes}, ZAUDIOLENGTH = {audio_length},\n\
+         \x20 ZORIGINALTITLE = {original_title}, ZORIGINALSUBTITLE = {original_subtitle}, ZORIGINALPUBLISHER = {original_publisher_fk}, ZORIGINALCOUNTRY = {original_country_fk}, ZORIGINALLANGUAGE = {original_language_fk},\n\
+         \x20 ZORIGINALPUBLICATIONYEAR = {original_year}, ZORIGINALPUBLICATIONMONTH = {original_month}, ZORIGINALPUBLICATIONDAY = {original_day},\n\
+         \x20 ZCONDITION = {condition_fk}, ZOWNER = {owner_fk}, ZSTORE = {store_fk}, ZCURRENTVALUE = {current_value}, ZPURCHASEPRICE = {purchase_price}, ZCOVERPRICE = {cover_price},\n\
+         \x20 ZPURCHASEYEAR = {purchase_year}, ZPURCHASEMONTH = {purchase_month}, ZPURCHASEDAY = {purchase_day},\n\
+         \x20 ZRARE = {rare}, ZREADIT = {read_it}, ZREADTIMES = {read_times}, ZREADYEAR = {read_year}, ZREADMONTH = {read_month}, ZREADDAY = {read_day}, ZMYRATING = {my_rating},\n\
+         \x20 ZUSERLOOKUP1 = {user_lookup1_fk}, ZUSERLOOKUP2 = {user_lookup2_fk}, ZUSERTEXT1 = {user_text1}, ZUSERTEXT2 = {user_text2},\n\
+         \x20 ZPLOT = {plot}, ZNOTES = {notes}\n\
+         WHERE Z_PK = {book_pk};\n",
+        collection_pk = book.collection.existing_pk.context("sous-collection non résolue")?,
+        quantity = book.quantity,
+        issue_number = sql_opt_i64(book.issue_number),
+        title = sql_quote(&book.title),
+        title_sort = sql_quote(&book.title),
+        subtitle = sql_opt_str(&book.subtitle),
+        isbn = sql_opt_str(&book.isbn),
+        location_number = sql_opt_str(&book.location_number),
+        pages = sql_opt_i64(book.number_of_pages),
+        year = sql_opt_str(&book.publication_year),
+        month = sql_opt_str(&book.publication_month),
+        day = sql_opt_str(&book.publication_day),
+        height = sql_opt_str(&book.height),
+        width = sql_opt_str(&book.width),
+        dewey = sql_opt_str(&book.dewey),
+        lccn = sql_opt_str(&book.lccn),
+        dedication = sql_opt_str(&book.dedication),
+        first_edition = sql_opt_bool(book.first_edition),
+        printing = sql_opt_i64(book.printing),
+        abridged = sql_opt_bool(book.abridged),
+        box_set = sql_opt_bool(book.box_set),
+        audio_length_minutes = sql_opt_i64(book.audio_length_minutes),
+        audio_length = sql_opt_str(&book.audio_length_minutes.map(|m| m.to_string())),
+        original_title = sql_opt_str(&book.original_title),
+        original_subtitle = sql_opt_str(&book.original_subtitle),
+        original_year = sql_opt_str(&book.original_publication_year),
+        original_month = sql_opt_str(&book.original_publication_month),
+        original_day = sql_opt_str(&book.original_publication_day),
+        current_value = sql_opt_f64(book.current_value),
+        purchase_price = sql_opt_f64(book.purchase_price),
+        cover_price = sql_opt_f64(book.cover_price),
+        purchase_year = sql_opt_str(&book.purchase_year),
+        purchase_month = sql_opt_str(&book.purchase_month),
+        purchase_day = sql_opt_str(&book.purchase_day),
+        rare = sql_opt_bool(book.rare),
+        read_it = sql_opt_bool(book.read_it),
+        read_times = sql_opt_i64(book.read_times),
+        read_year = sql_opt_str(&book.read_year),
+        read_month = sql_opt_str(&book.read_month),
+        read_day = sql_opt_str(&book.read_day),
+        my_rating = sql_opt_i64(book.my_rating),
+        user_text1 = sql_opt_str(&book.user_text1),
+        user_text2 = sql_opt_str(&book.user_text2),
+        plot = sql_opt_str(&book.plot),
+        notes = sql_opt_str(&book.notes),
+    ));
+
+    plan_book_relations_sql(conn, &mut alloc, book, book_pk, book_ent, &author_person_pks, &mut sql)?;
+
+    sql.push('\n');
+    for (entity, new_max) in alloc.updates() {
+        sql.push_str(&format!(
+            "UPDATE Z_PRIMARYKEY SET Z_MAX = {new_max} WHERE Z_NAME = {};\n",
+            sql_quote(&entity)
+        ));
+    }
+
+    sql.push_str("\nCOMMIT;\n");
+    Ok(sql)
+}
+
+/// Read-build-write in one call, the update equivalent of `commit_add_book`:
+/// opens `db_path` read-only to resolve `input` and build the update plan
+/// for `book_pk`, then backs up and executes it. Callers must have already
+/// checked `is_book_collector_running() == false` and refused `db_path` if
+/// `looks_like_real_collection` returns `Some`. Returns the backup path.
+pub fn commit_update_book(db_path: &Path, backup_dir: &Path, book_pk: i64, input: NewBookInput) -> Result<PathBuf> {
+    let sql = {
+        let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .with_context(|| format!("ouverture en lecture seule de {}", db_path.display()))?;
+        let resolved = resolve_book(&conn, input)?;
+        plan_update_book_sql(&conn, book_pk, &resolved)?
     };
     write_plan_sql(db_path, backup_dir, &sql)
 }

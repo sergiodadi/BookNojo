@@ -120,6 +120,18 @@ const addFormState = {
   links: [],      // { url, description }
 };
 
+function resetAddFormState() {
+  for (const key of Object.keys(addFormState)) addFormState[key].length = 0;
+}
+
+// Non-null while the Add-book panel is showing an existing book for
+// modification instead of a blank form — set by editBook(), cleared on
+// submit success or when the top "Ajouter un livre"/"Collection" button is
+// clicked. editingBookData is what load_book_for_edit returned (current
+// display-name values, same shape renderAddForm's inputs read).
+let editingBookId = null;
+let editingBookData = null;
+
 function renderTabs() {
   tabsEl.innerHTML = '';
   for (const name of collections) {
@@ -390,7 +402,7 @@ function selectBook(id, scrollIntoView) {
         ${userTags ? `<div class="group"><div class="label">Tags</div><div class="tags">${userTags}</div></div>` : ''}
         ${b.plot ? '<div class="group"><div class="label">Résumé</div><div class="text-block plot"></div></div>' : ''}
         ${b.notes ? '<div class="group"><div class="label">Notes</div><div class="text-block notes"></div></div>' : ''}
-        ${window.__TAURI__ ? '<button type="button" id="deleteBookBtn" class="danger">🗑️ Supprimer ce livre</button>' : ''}
+        ${window.__TAURI__ ? '<div class="detail-actions"><button type="button" id="editBookBtn" class="secondary">✏️ Modifier ce livre</button><button type="button" id="deleteBookBtn" class="danger">🗑️ Supprimer ce livre</button></div>' : ''}
       </div>
     </div>`;
 
@@ -410,8 +422,34 @@ function selectBook(id, scrollIntoView) {
   if (deleteBtn) {
     deleteBtn.addEventListener('click', () => deleteBookWithConfirm(b));
   }
+  const editBtn = document.getElementById('editBookBtn');
+  if (editBtn) {
+    editBtn.addEventListener('click', () => editBook(b));
+  }
 
   saveState();
+}
+
+// Tauri-only: fetch this book's current values (resolved display names,
+// not raw foreign keys — see load_book_for_edit in lib.rs) and switch to
+// the Add-book panel pre-filled with them, in "edit" mode.
+async function editBook(b) {
+  try {
+    const data = await window.__TAURI__.core.invoke('load_book_for_edit', { path: currentCollectionPath, bookId: b.id });
+    editingBookId = b.id;
+    editingBookData = data;
+    resetAddFormState();
+    addFormState.authors.push(...data.authors);
+    addFormState.genres.push(...data.genres);
+    addFormState.subjects.push(...data.subjects);
+    addFormState.credits.push(...data.credits.map(c => ({ ...c })));
+    addFormState.characters.push(...data.characters.map(c => ({ ...c })));
+    addFormState.contents.push(...data.contents.map(c => ({ ...c, authors: [...c.authors] })));
+    addFormState.links.push(...data.links.map(l => ({ ...l })));
+    setPanel('add');
+  } catch (err) {
+    window.alert(`Impossible de charger ce livre pour modification : ${err}`);
+  }
 }
 
 // Tauri-only: delete the given book after a native confirm(), then reload
@@ -595,6 +633,14 @@ statsBtn.addEventListener('click', () => {
   setPanel(state.panel === 'stats' ? 'library' : 'stats');
 });
 addBtn.addEventListener('click', () => {
+  // The only way into "edit" mode is editBook() (the detail pane's
+  // "Modifier" button) — this top button always means "start fresh" or
+  // "go back", so any in-progress edit is abandoned here.
+  if (editingBookId !== null) {
+    editingBookId = null;
+    editingBookData = null;
+    resetAddFormState();
+  }
   setPanel(state.panel === 'add' ? 'library' : 'add');
 });
 
@@ -702,11 +748,14 @@ function renderAddForm() {
 
   addPaneEl.innerHTML = `
     <div class="add-wrap">
-      <h2>Ajouter un livre (préparation — étapes 1 à 5)</h2>
-      <p class="add-hint">Ce formulaire ne modifie aucune donnée existante : il génère un
-        fichier <code>new_book.json</code> à télécharger, à passer ensuite à
-        <code>bc_add</code> pour vérifier ce qui existe déjà avant toute écriture réelle.
-        L'onglet Couvertures n'est pas repris ici (gestion de fichiers, hors périmètre).</p>
+      <h2>${window.__TAURI__ ? 'Ajouter un livre' : 'Ajouter un livre (préparation — étapes 1 à 5)'}</h2>
+      <p class="add-hint">${window.__TAURI__
+        ? `Ce formulaire écrit directement dans la collection ouverte, après confirmation.
+           L'onglet Couvertures n'est pas repris ici (gestion de fichiers, hors périmètre).`
+        : `Ce formulaire ne modifie aucune donnée existante : il génère un
+           fichier <code>new_book.json</code> à télécharger, à passer ensuite à
+           <code>bc_add</code> pour vérifier ce qui existe déjà avant toute écriture réelle.
+           L'onglet Couvertures n'est pas repris ici (gestion de fichiers, hors périmètre).`}</p>
       <div class="add-tabs">${tabButtons}</div>
       <form id="addForm">
         <div id="addtab-main" class="add-tab-panel">
@@ -1040,6 +1089,28 @@ function renderAddForm() {
   document.getElementById('addForm').addEventListener('submit', onAddFormSubmit);
   document.getElementById('addConfirmCancel').addEventListener('click', closeAddConfirm);
   document.getElementById('addConfirmOk').addEventListener('click', confirmAddBook);
+
+  // Edit mode: pre-fill every plain input/select/textarea from
+  // editingBookData (the chip/repeatable-list fields are already populated
+  // via addFormState, set up before this render in editBook()) and swap
+  // the heading/hint/submit label so it reads as "modifier", not "ajouter".
+  if (editingBookData) {
+    const form = document.getElementById('addForm');
+    for (const el of form.querySelectorAll('[name]')) {
+      const value = editingBookData[el.name];
+      if (value === undefined) continue;
+      if (el.type === 'checkbox') {
+        el.checked = !!value;
+      } else if (value !== null) {
+        el.value = value;
+      }
+    }
+    const wrap = document.querySelector('.add-wrap');
+    wrap.querySelector('h2').textContent = `Modifier : ${editingBookData.title}`;
+    wrap.querySelector('.add-hint').textContent =
+      'Les champs ci-dessous reflètent les valeurs actuelles de ce livre. Une confirmation sera demandée avant toute écriture.';
+    wrap.querySelector('.add-actions button[type="submit"]').textContent = '💾 Enregistrer les modifications';
+  }
 }
 
 function onAddFormSubmit(e) {
@@ -1175,6 +1246,9 @@ async function openAddConfirm(book, msgEl) {
   msgEl.textContent = '';
   msgEl.className = '';
   try {
+    // Same resolution logic whether adding or editing — the preview never
+    // touches the specific existing row, only the field values being
+    // resolved — so there's no "prepare_update_book", just this.
     const preview = await window.__TAURI__.core.invoke('prepare_add_book', { path: currentCollectionPath, input: book });
     pendingAddBook = book;
     document.getElementById('addConfirmTitle').textContent = preview.title;
@@ -1212,11 +1286,23 @@ async function confirmAddBook() {
   const msgEl = document.getElementById('addMsg');
   okBtn.disabled = true;
   okBtn.textContent = 'Enregistrement…';
+  const wasEditing = editingBookId !== null;
   try {
-    const result = await window.__TAURI__.core.invoke('commit_add_book', { path: currentCollectionPath, input: pendingAddBook });
+    const args = wasEditing
+      ? { path: currentCollectionPath, bookId: editingBookId, input: pendingAddBook }
+      : { path: currentCollectionPath, input: pendingAddBook };
+    const result = await window.__TAURI__.core.invoke(wasEditing ? 'commit_update_book' : 'commit_add_book', args);
     closeAddConfirm();
-    msgEl.textContent = result;
-    msgEl.className = 'add-msg-success';
+    if (wasEditing) {
+      editingBookId = null;
+      editingBookData = null;
+      resetAddFormState();
+      setPanel('library');
+      bootWithErrorHandling();
+    } else {
+      msgEl.textContent = result;
+      msgEl.className = 'add-msg-success';
+    }
   } catch (err) {
     closeAddConfirm();
     msgEl.textContent = String(err);
