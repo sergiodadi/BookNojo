@@ -45,6 +45,23 @@ const GROUP_FIELDS = {
   country: b => b.country ? [b.country] : [],
 };
 
+// `cover_url` is a raw `file://` URL (see HtmlBook::cover_url in
+// src/main.rs) — fine when this same template is opened as a standalone
+// file by bc_export's HTML export, but the NBC desktop app serves the page
+// through Tauri's own protocol, not file://, so a WebView security policy
+// blocks loading a raw file:// resource from it. `window.__TAURI__` only
+// exists inside that app (tauri.conf.json: withGlobalTauri), so it's a
+// reliable way to tell which context we're in and use Tauri's own asset
+// protocol (convertFileSrc) only when actually needed.
+function resolveCoverSrc(fileUrl) {
+  if (!fileUrl) return null;
+  if (window.__TAURI__) {
+    const path = decodeURIComponent(fileUrl.replace(/^file:\/\//, ''));
+    return window.__TAURI__.core.convertFileSrc(path);
+  }
+  return fileUrl;
+}
+
 function escapeHtml(s) {
   return String(s)
     .replace(/&/g, '&amp;')
@@ -237,7 +254,7 @@ function renderList() {
     const row = document.createElement('div');
     row.className = 'row' + (b.id === state.activeId ? ' active' : '');
 
-    const rowThumb = b.thumb_url || b.cover_url;
+    const rowThumb = b.thumb_url || resolveCoverSrc(b.cover_url);
     if (rowThumb) {
       const img = document.createElement('img');
       img.className = 'thumb';
@@ -311,8 +328,9 @@ function selectBook(id, scrollIntoView) {
   const b = allBooks.find(x => x.id === id);
   if (!b) { detailEl.innerHTML = '<div id="empty">Livre introuvable.</div>'; return; }
 
-  const cover = b.cover_url
-    ? `<img class="cover" src="${b.cover_url}" alt="">`
+  const coverSrc = resolveCoverSrc(b.cover_url);
+  const cover = coverSrc
+    ? `<img class="cover" src="${coverSrc}" alt="">`
     : `<div class="cover"></div>`;
 
   const props = [b.format, b.country, b.language].filter(Boolean)

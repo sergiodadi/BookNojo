@@ -16,7 +16,16 @@
       }
     ],
     "security": {
-      "csp": null
+      "csp": null,
+      "assetProtocol": {
+        "enable": true,
+        "scope": [
+          "$HOME/Developer/book_collector_export/testdata/**",
+          "$HOME/Developer/book_collector_export/testdata-rw/**",
+          "$HOME/Developer/book_collector_export/collection/**",
+          "$HOME/Documents/Collectorz/**"
+        ]
+      }
     }
   },
   "bundle": {

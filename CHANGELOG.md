@@ -4,6 +4,18 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.29.0] - 2026-11-02
+
+### Fixed
+- **Couvertures absentes de la fiche détail dans l'app NBC** (signalé par l'utilisateur après test de `cargo tauri dev`). Cause : `cover_url` (voir `HtmlBook` dans `src/main.rs`) est une URL `file://` brute — fonctionne dans l'export HTML classique (la page elle-même est ouverte en `file://`), mais la fenêtre Tauri charge la page via son propre protocole, pas `file://` : la WebView bloque alors cette ressource externe pour raisons de sécurité.
+  - `app/src-tauri/tauri.conf.json` : active le protocole `asset` de Tauri (`app.security.assetProtocol`), avec une portée couvrant `testdata/`, `testdata-rw/`, `collection/` et `~/Documents/Collectorz/` — à élargir/rendre dynamique à l'étape 3 selon la collection réellement ouverte.
+  - `templates/app.js` : nouvelle fonction `resolveCoverSrc()` — convertit `cover_url` via `window.__TAURI__.core.convertFileSrc()` **uniquement** si `window.__TAURI__` existe (donc seulement dans l'app ; l'export HTML classique de `bc_export`, ouvert dans un navigateur normal, continue d'utiliser l'URL `file://` telle quelle, inchangé). Appliquée à la fois à la fiche détail et au repli de la vignette de liste quand la miniature intégrée est absente.
+
+### Verified
+- Reproduit le bug (couverture absente dans `cargo tauri dev`), corrigé, puis revérifié : la fiche détail affiche maintenant une vraie couverture ("Atlas du Paris souterrain"), capturé à l'écran.
+- `bc_export --html` (export autonome classique) revérifié inchangé : `cover_url` reste une URL `file://` brute dans le HTML généré, comme avant — `window.__TAURI__` étant absent d'un navigateur normal, `resolveCoverSrc()` n'y change rien.
+- Reste du projet (`bc_export`/`bc_add`, 12 tests) non affecté, revérifié.
+
 ## [0.28.0] - 2026-11-02
 
 ### Added
