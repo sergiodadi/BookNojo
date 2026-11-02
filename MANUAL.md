@@ -486,11 +486,14 @@ URL `file://` brute (sandbox de sécurité de la WebView) — contrairement à
 l'export HTML classique, ouvert directement en `file://` dans un
 navigateur. Contournement : le protocole `asset` de Tauri, activé dans
 `app/src-tauri/tauri.conf.json` (portée actuelle : `testdata/`,
-`testdata-rw/`, `collection/`, `~/Documents/Collectorz/`) + une fonction
-`resolveCoverSrc()` dans `templates/app.js` qui ne s'active que si
-`window.__TAURI__` existe (donc jamais dans l'export HTML classique). Si
-une nouvelle collection est ouverte depuis un emplacement hors de cette
-portée, il faudra l'y ajouter — l'étape 4 devra rendre ça dynamique, en
+`testdata-rw/`, `testdata-sample/`, `collection/`,
+`~/Documents/Collectorz/`) + une fonction `resolveCoverSrc()` dans
+`templates/app.js` qui ne s'active que si `window.__TAURI__` existe (donc
+jamais dans l'export HTML classique). ⚠️ Si une nouvelle collection est
+ouverte depuis un emplacement hors de cette portée (ou un nouveau dossier
+de test est créé), il faudra l'y ajouter — oubli déjà fait une fois pour
+`testdata-sample/`, couvertures silencieusement absentes sans aucune
+erreur JS (v0.31.1). L'étape 4 devra rendre ça dynamique, en
 même temps que le sélecteur de fichier.
 
 Étapes suivantes, pas encore commencées : les menus natifs Files/Help

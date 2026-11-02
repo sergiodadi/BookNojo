@@ -4,6 +4,14 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.31.1] - 2026-11-02
+
+### Fixed
+- **Couvertures de nouveau absentes** (signalé par l'utilisateur) : régression introduite en passant à `testdata-sample/` (v0.30.0) sans mettre à jour la portée du protocole `asset` de Tauri, configurée un peu plus tôt (v0.29.0) avant que ce dossier existe. `testdata-sample/` en était donc absent — la WebView bloquait silencieusement le chargement des images (aucune erreur JS, juste une ressource refusée). Ajouté `$HOME/Developer/book_collector_export/testdata-sample/**` à `app/src-tauri/tauri.conf.json`.
+
+### Verified
+- Reproduit (couverture absente), corrigé, revérifié avec capture d'écran : couverture affichée correctement ("Nice Historique - l'île Saint Honorat et l'abbaye de Lérins"), vignettes de la liste également. 12 tests toujours au vert.
+
 ## [0.31.0] - 2026-11-02
 
 ### Added

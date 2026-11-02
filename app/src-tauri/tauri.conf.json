@@ -22,6 +22,7 @@
         "scope": [
           "$HOME/Developer/book_collector_export/testdata/**",
           "$HOME/Developer/book_collector_export/testdata-rw/**",
+          "$HOME/Developer/book_collector_export/testdata-sample/**",
           "$HOME/Developer/book_collector_export/collection/**",
           "$HOME/Documents/Collectorz/**"
         ]
