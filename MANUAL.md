@@ -103,6 +103,17 @@ tests, le projet garde une copie en lecture seule dans `testdata/` :
 cargo test --release       # lance les tests unitaires
 ```
 
+Pour des itérations plus rapides (notamment sur l'app NBC, § 8), un petit
+échantillon dérivé de `testdata/` — jamais directement la vraie collection :
+
+```bash
+./build-sample-testdata.sh   # crée testdata-sample/ (~100 fiches, dont tous
+                              # les livres de 1-2 auteurs bien fournis)
+```
+
+Structurellement valide (vérifié en l'ouvrant dans Book Collector), mais
+reste des données personnelles — jamais committé (`.gitignore`).
+
 ## 7. (Expérimental) Préparer l'ajout d'un livre — étapes 1 à 6 sur 6
 
 > ⚠️ En cours de construction, par étapes. `bc_add resolve`, `plan` et
@@ -449,18 +460,20 @@ mais encore **statiques** (régénérées à la main, pas en direct).
 
 ```bash
 cargo build --release        # si bc_export n'est pas déjà compilé (depuis la racine)
-./app/generate-dev-data.sh   # génère app/src/index.html depuis testdata/
+./build-sample-testdata.sh   # si testdata-sample/ n'existe pas encore (§ 6)
+./app/generate-dev-data.sh   # génère app/src/index.html depuis testdata-sample/
+                              # (--full pour testdata/ à la place, plus lent)
 cd app
 cargo tauri dev      # lance une fenêtre de développement (rechargement à chaud)
 cargo tauri build    # compile une vraie .app (et un .dmg), dans
                       # app/src-tauri/target/release/bundle/
 ```
 
-⚠️ `app/src/index.html` (généré par `generate-dev-data.sh`) contient les
-données de `testdata/` et n'est **jamais committé** (`.gitignore` de
+⚠️ `app/src/index.html` (généré par `generate-dev-data.sh`) contient des
+données personnelles et n'est **jamais committé** (`.gitignore` de
 `app/`) — seul `app/src/index.template.html`, sans données, l'est. À
-régénérer après `./refresh-testdata.sh`, ou après toute modification de
-`templates/app.js`/`style.css`.
+régénérer après `./refresh-testdata.sh`/`./build-sample-testdata.sh`, ou
+après toute modification de `templates/app.js`/`style.css`.
 
 **Couvertures** : la fenêtre Tauri ne peut pas charger une image via une
 URL `file://` brute (sandbox de sécurité de la WebView) — contrairement à

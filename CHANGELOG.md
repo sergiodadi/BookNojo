@@ -4,6 +4,19 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.30.0] - 2026-11-02
+
+### Added
+- **`build-sample-testdata.sh`/`.py`** : construit `testdata-sample/MyCollection.bkcp`, une petite base d'échantillon (~100 fiches, contre 2237 dans `testdata/`) à partir de `testdata/` — jamais directement la vraie collection. Sélection : 5 fiches par sous-collection (en priorisant celles avec couverture), plus, dans la sous-collection principale, tous les livres de 1 à 2 auteurs ayant plusieurs livres (les entrées "Collectif"/générique exclues). Copie la fermeture référentielle complète (éditeurs, genres, sujets, auteurs, crédits, personnages, contenus, liens, tables système) et les seules images de couverture référencées — résultat structurellement valide et indépendant.
+- `app/generate-dev-data.sh` utilise désormais `testdata-sample/` par défaut (régénération ~20× plus rapide, fichier généré ~1 Mo au lieu de ~20 Mo) ; `--full` revient à `testdata/` pour un test sur volume réaliste avant un commit.
+- `testdata-sample/` ajouté au `.gitignore` (données personnelles, comme `testdata/`/`testdata-rw/`).
+
+### Verified
+- `PRAGMA integrity_check` = `ok` sur l'échantillon généré.
+- **Ouvert dans la vraie application Book Collector** (le test le plus strict) : aucune erreur, "Total: 57 Books" pour la sous-collection principale, regroupement par auteur correct (Albert Uderzo 43, René Goscinny 52...), fiche détail avec couverture et métadonnées correctes — capturé à l'écran.
+- Rechargé dans l'app NBC (`cargo tauri dev`) avec l'échantillon : démarrage nettement plus rapide, onglets et comptages par auteur corrects.
+- Reste du projet (`bc_export`/`bc_add`, 12 tests) non affecté, revérifié.
+
 ## [0.29.0] - 2026-11-02
 
 ### Fixed

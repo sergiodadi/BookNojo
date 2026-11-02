@@ -1,9 +1,13 @@
 #!/usr/bin/env bash
 # Régénère app/src/index.html (gitignoré — données personnelles) depuis
-# app/src/index.template.html (committé, sans données) et testdata/ (jamais
-# la vraie collection). Nécessaire avant `cargo tauri dev`/`build`, et à
-# relancer après `./refresh-testdata.sh` ou toute modification du template
-# ou de templates/app.js|style.css.
+# app/src/index.template.html (committé, sans données) et une copie de test
+# (jamais la vraie collection). Nécessaire avant `cargo tauri dev`/`build`.
+#
+# Par défaut, utilise testdata-sample/ (~100 fiches, générées par
+# ./build-sample-testdata.sh) — beaucoup plus rapide à régénérer et à
+# inspecter que la collection de test complète. Passez --full pour utiliser
+# testdata/ (2237 fiches) à la place, avant un commit par exemple, histoire
+# de tester aussi sur un volume réaliste.
 #
 # Étape 2 du plan NBC : données statiques, pour prouver que l'interface
 # s'affiche correctement dans la fenêtre Tauri. L'étape 3 les remplacera
@@ -13,7 +17,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(dirname "$SCRIPT_DIR")"
-TESTDATA="$ROOT_DIR/testdata/MyCollection.bkcp"
+if [ "${1:-}" = "--full" ]; then
+  TESTDATA="$ROOT_DIR/testdata/MyCollection.bkcp"
+  REFRESH_HINT="./refresh-testdata.sh"
+else
+  TESTDATA="$ROOT_DIR/testdata-sample/MyCollection.bkcp"
+  REFRESH_HINT="./build-sample-testdata.sh"
+fi
 BC_EXPORT="$ROOT_DIR/target/release/bc_export"
 TEMPLATE="$SCRIPT_DIR/src/index.template.html"
 OUT_HTML="$SCRIPT_DIR/src/index.html"
@@ -25,7 +35,7 @@ cleanup() { rm -f "$TMP_JSON" "$TMP_CSV" "$TMP_SOURCE_HTML"; }
 trap cleanup EXIT
 
 if [ ! -d "$TESTDATA" ]; then
-  echo "Erreur: $TESTDATA introuvable — lancez d'abord ./refresh-testdata.sh" >&2
+  echo "Erreur: $TESTDATA introuvable — lancez d'abord $REFRESH_HINT" >&2
   exit 1
 fi
 if [ ! -x "$BC_EXPORT" ]; then
@@ -36,7 +46,7 @@ fi
 cp "$ROOT_DIR/templates/app.js" "$SCRIPT_DIR/src/app.js"
 cp "$ROOT_DIR/templates/style.css" "$SCRIPT_DIR/src/style.css"
 
-echo "Export des données de test (testdata/, jamais la vraie collection)..."
+echo "Export des données de test ($TESTDATA, jamais la vraie collection)..."
 "$BC_EXPORT" --db "$TESTDATA" --csv "$TMP_CSV" --json "$TMP_JSON" --html "$TMP_SOURCE_HTML" >/dev/null
 
 echo "Génération de $OUT_HTML..."

@@ -8,6 +8,12 @@
 # régénérée avec ./refresh-testdata-rw.sh. Jamais la vraie collection.
 /testdata-rw
 
+# Petit échantillon (une centaine de fiches, dérivé de testdata/ — jamais
+# la vraie collection) pour des itérations rapides, notamment l'app NBC.
+# Régénéré avec ./build-sample-testdata.sh. Toujours des données
+# personnelles malgré la taille réduite.
+/testdata-sample
+
 # Sauvegardes horodatées créées par `bc_add guard`/`commit`.
 backups/
 
