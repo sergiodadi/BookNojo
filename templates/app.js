@@ -1,4 +1,23 @@
-const allBooks = JSON.parse(document.getElementById('data').textContent);
+// In the NBC desktop app, there's no embedded `<script id="data">` block —
+// the collection is loaded live through a Tauri command instead (see
+// `boot()` at the bottom of this file). `window.__TAURI__` only exists
+// inside that app (tauri.conf.json: withGlobalTauri), so it reliably tells
+// apart that case from bc_export's static HTML export, which keeps working
+// exactly as before (synchronous, embedded JSON, opened in any browser).
+//
+// TEMPORARY until step 4 (a real Files > Import... file picker): hardcoded
+// to this dev machine's sample collection (see testdata-sample/,
+// build-sample-testdata.sh).
+const DEV_COLLECTION_PATH = '/Users/serge/Developer/book_collector_export/testdata-sample/MyCollection.bkcp';
+
+async function loadAllBooks() {
+  if (window.__TAURI__) {
+    return await window.__TAURI__.core.invoke('load_collection', { path: DEV_COLLECTION_PATH });
+  }
+  return JSON.parse(document.getElementById('data').textContent);
+}
+
+let allBooks, collCounts, collections;
 const mainEl = document.querySelector('main');
 const groupsEl = document.getElementById('groups');
 const splitterVEl = document.getElementById('splitterV');
@@ -70,14 +89,8 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
-// One tab per sous-collection, largest first (ties broken alphabetically).
-const collCounts = new Map();
-for (const b of allBooks) collCounts.set(b.collection, (collCounts.get(b.collection) || 0) + 1);
-const collections = [...collCounts.keys()].sort((a, b) =>
-  collCounts.get(b) - collCounts.get(a) || collator.compare(a, b));
-
 const state = {
-  collection: collections[0],
+  collection: null, // set once allBooks has loaded — see boot()
   groupField: 'authors',
   groupValue: null, // null = "Tous"
   azLetter: null,
@@ -1121,8 +1134,30 @@ function restoreState() {
   } catch (e) { /* ignore */ }
 }
 
-restoreState();
-renderTabs();
-refreshGroupPanel();
-recompute();
-updateColHeaderActive();
+// One tab per sous-collection, largest first (ties broken alphabetically).
+// Runs only after allBooks has actually loaded — synchronously already
+// resolved for bc_export's static export, awaited for the NBC app's live
+// Tauri command — so every function above that closes over
+// allBooks/collCounts/collections only ever runs once they're populated.
+async function boot() {
+  allBooks = await loadAllBooks();
+
+  collCounts = new Map();
+  for (const b of allBooks) collCounts.set(b.collection, (collCounts.get(b.collection) || 0) + 1);
+  collections = [...collCounts.keys()].sort((a, b) =>
+    collCounts.get(b) - collCounts.get(a) || collator.compare(a, b));
+  state.collection = collections[0];
+
+  restoreState();
+  renderTabs();
+  refreshGroupPanel();
+  recompute();
+  updateColHeaderActive();
+}
+
+boot().catch(err => {
+  console.error('NBC: échec du chargement de la collection', err);
+  document.body.innerHTML =
+    '<div style="padding:40px;font-family:sans-serif;color:#c0392b;">'
+    + '<h2>Impossible de charger la collection</h2><pre>' + escapeHtml(String(err)) + '</pre></div>';
+});

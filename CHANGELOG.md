@@ -4,6 +4,21 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.31.0] - 2026-11-02
+
+### Added
+- **Étape 3/6 du plan NBC : l'app charge la collection en direct**, via une vraie commande IPC Tauri (`load_collection`) plutôt que des données statiques régénérées à la main.
+  - `Book`, `PageBook`, `load_books`, `book_to_page_book`, `load_page_books`, `file_url`, et la conversion de date Core Data déplacés de `src/main.rs` vers `src/lib.rs` — `bc_export` et l'app NBC lisent désormais la collection via **exactement le même code**, au lieu de dupliquer ~150 lignes de jointures. Pur déplacement : comportement de `bc_export` vérifié strictement identique après coup (mêmes champs, mêmes valeurs, mêmes 12 tests).
+  - `app/src-tauri` dépend maintenant de `book_collector_export` (dépendance de chemin vers `../..`) ; sa commande `load_collection(path)` ouvre la base en lecture seule et renvoie `Vec<PageBook>` — aucune dépendance `rusqlite` propre à l'app, tout encapsulé dans la bibliothèque partagée.
+  - `templates/app.js` : la toute première ligne (lecture synchrone du JSON embarqué) devient `loadAllBooks()`, async, qui appelle `invoke('load_collection', ...)` **seulement** si `window.__TAURI__` existe (donc jamais pour l'export HTML classique de `bc_export`, qui garde son comportement synchrone exact). Le reste du fichier (~1100 lignes) est inchangé : seules les quelques lignes qui dépendaient de `allBooks` au niveau racine sont déplacées dans une fonction `boot()` appelée une fois les données chargées — pas de réécriture du fichier.
+  - `app/generate-dev-data.sh` simplifié : n'a plus besoin de générer de données (l'app les charge en direct) — synchronise seulement `app.js`/`style.css`/`index.html` depuis `templates/`.
+  - Chemin de la collection à charger **temporairement codé en dur** (`DEV_COLLECTION_PATH` dans `templates/app.js`, pointant vers `testdata-sample/`) en attendant le vrai sélecteur de fichier de l'étape 4.
+
+### Verified
+- `bc_export` revérifié strictement inchangé : mêmes champs JSON, mêmes valeurs, sur `testdata-sample/`.
+- App NBC relancée (`cargo tauri dev` puis `cargo tauri build`) avec le chargement live : mêmes données exactes que la version statique précédente (57 livres dans la sous-collection principale, mêmes comptages par auteur) — capturé à l'écran, aucune erreur.
+- 12 tests unitaires du projet principal toujours au vert (7 dans `lib.rs` après le déplacement, dont les tests de date/URL repris tels quels).
+
 ## [0.30.0] - 2026-11-02
 
 ### Added

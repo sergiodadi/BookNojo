@@ -455,25 +455,31 @@ réutiliser le code déjà écrit plutôt que tout réécrire.
 mécanique fonctionne.
 
 **Étape 2/6 (faite)** : l'interface existante (`templates/page.html`,
-`style.css`, `app.js`) s'affiche dans la fenêtre — avec de vraies données,
-mais encore **statiques** (régénérées à la main, pas en direct).
+`style.css`, `app.js`) s'affiche dans la fenêtre.
+
+**Étape 3/6 (faite)** : l'app charge la collection **en direct**, via une
+vraie commande Tauri (`load_collection`) qui appelle le même code que
+`bc_export` (`src/lib.rs`) — plus de fichier de données à régénérer à la
+main.
 
 ```bash
 cargo build --release        # si bc_export n'est pas déjà compilé (depuis la racine)
-./build-sample-testdata.sh   # si testdata-sample/ n'existe pas encore (§ 6)
-./app/generate-dev-data.sh   # génère app/src/index.html depuis testdata-sample/
-                              # (--full pour testdata/ à la place, plus lent)
+./app/generate-dev-data.sh   # synchronise app/src/{index.html,app.js,style.css}
 cd app
 cargo tauri dev      # lance une fenêtre de développement (rechargement à chaud)
 cargo tauri build    # compile une vraie .app (et un .dmg), dans
                       # app/src-tauri/target/release/bundle/
 ```
 
-⚠️ `app/src/index.html` (généré par `generate-dev-data.sh`) contient des
-données personnelles et n'est **jamais committé** (`.gitignore` de
-`app/`) — seul `app/src/index.template.html`, sans données, l'est. À
-régénérer après `./refresh-testdata.sh`/`./build-sample-testdata.sh`, ou
-après toute modification de `templates/app.js`/`style.css`.
+⚠️ Le chemin de la collection chargée est **temporairement codé en dur**
+(`DEV_COLLECTION_PATH` dans `templates/app.js`, pointant vers
+`testdata-sample/`) — l'étape 4 le remplacera par un vrai sélecteur de
+fichier (menu Files > Import a file...).
+
+`app/src/index.html` reste gitignoré (généré par `generate-dev-data.sh`
+depuis `app/src/index.template.html`, committé lui) mais ne contient plus
+de données personnelles depuis l'étape 3 — exclu par précaution tout de
+même, au cas où un futur changement y réintroduirait des données.
 
 **Couvertures** : la fenêtre Tauri ne peut pas charger une image via une
 URL `file://` brute (sandbox de sécurité de la WebView) — contrairement à
@@ -484,11 +490,11 @@ navigateur. Contournement : le protocole `asset` de Tauri, activé dans
 `resolveCoverSrc()` dans `templates/app.js` qui ne s'active que si
 `window.__TAURI__` existe (donc jamais dans l'export HTML classique). Si
 une nouvelle collection est ouverte depuis un emplacement hors de cette
-portée, il faudra l'y ajouter — l'étape 3 devra rendre ça dynamique.
+portée, il faudra l'y ajouter — l'étape 4 devra rendre ça dynamique, en
+même temps que le sélecteur de fichier.
 
-Étapes suivantes, pas encore commencées : le vrai moteur Rust via IPC
-Tauri (étape 3 — plus besoin de régénérer de fichier à la main), les
-menus natifs Files/Help (étape 4), icône et finitions (étape 5).
+Étapes suivantes, pas encore commencées : les menus natifs Files/Help
+(étape 4), icône et finitions (étape 5).
 
 ## 9. Dépannage
 

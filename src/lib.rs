@@ -184,6 +184,395 @@ impl<T> OptionalResult<T> for rusqlite::Result<T> {
 }
 
 // --------------------------------------------------------------------
+// Reading the collection (step 3 of the NBC app plan — shared between
+// `bc_export`'s CSV/JSON/HTML export and the NBC app's live Tauri command,
+// so both read the collection exactly the same way instead of duplicating
+// ~150 lines of joins.
+// --------------------------------------------------------------------
+
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+
+/// Seconds between the Unix epoch (1970-01-01) and the Core Data / NSDate
+/// reference date (2001-01-01), both UTC. Core Data TIMESTAMP columns store
+/// seconds relative to the latter.
+const CORE_DATA_EPOCH_OFFSET: i64 = 978_307_200;
+
+pub fn core_data_timestamp_to_iso8601(seconds: f64) -> String {
+    let unix_secs = seconds.round() as i64 + CORE_DATA_EPOCH_OFFSET;
+    let days = unix_secs.div_euclid(86_400);
+    let secs_of_day = unix_secs.rem_euclid(86_400);
+    let (y, m, d) = civil_from_days(days);
+    format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
+        y,
+        m,
+        d,
+        secs_of_day / 3600,
+        (secs_of_day % 3600) / 60,
+        secs_of_day % 60
+    )
+}
+
+/// Howard Hinnant's days-from-civil algorithm, used in reverse to turn a
+/// day count since the Unix epoch into a proleptic-Gregorian (y, m, d).
+fn civil_from_days(z: i64) -> (i64, u32, u32) {
+    let z = z + 719_468;
+    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
+    let doe = (z - era * 146_097) as u64;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe as i64 + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
+    let y = if m <= 2 { y + 1 } else { y };
+    (y, m, d)
+}
+
+/// Percent-encodes a filesystem path for use as a `file://` URL (spaces,
+/// accented bytes, parentheses, ... — everything but unreserved chars and
+/// the path separator).
+pub fn file_url(path: &str) -> String {
+    const UNRESERVED: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~";
+    let mut out = String::from("file://");
+    for byte in path.bytes() {
+        if byte == b'/' || UNRESERVED.contains(&byte) {
+            out.push(byte as char);
+        } else {
+            out.push_str(&format!("%{byte:02X}"));
+        }
+    }
+    out
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct Book {
+    pub id: i64,
+    pub title: Option<String>,
+    pub subtitle: Option<String>,
+    pub authors: Vec<String>,
+    pub isbn: Option<String>,
+    pub publisher: Option<String>,
+    pub series: Option<String>,
+    pub format: Option<String>,
+    pub language: Option<String>,
+    pub country: Option<String>,
+    pub condition: Option<String>,
+    pub location: Option<String>,
+    pub edition: Option<String>,
+    pub printed_by: Option<String>,
+    pub volume: Option<String>,
+    pub paper_type: Option<String>,
+    pub owner: Option<String>,
+    pub store: Option<String>,
+    pub publication_day: Option<String>,
+    pub publication_month: Option<String>,
+    pub publication_year: Option<String>,
+    pub number_of_pages: Option<i64>,
+    pub my_rating: Option<i64>,
+    pub read_it: Option<bool>,
+    pub date_added: Option<String>,
+    pub genres: Vec<String>,
+    pub subjects: Vec<String>,
+    pub tags: Vec<String>,
+    pub notes: Option<String>,
+    pub plot: Option<String>,
+    pub current_value: Option<f64>,
+    pub purchase_price: Option<f64>,
+    pub collection: Option<String>,
+    /// Nombre d'exemplaires (ZQUANTITY, 1 si absent). L'app additionne ce
+    /// champ sur toute une sous-collection pour afficher son compteur.
+    pub quantity: i64,
+    pub front_cover_file: Option<String>,
+    pub front_cover_path: Option<String>,
+    pub back_cover_file: Option<String>,
+    pub back_cover_path: Option<String>,
+}
+
+/// Groups rows of (book_pk, value) into book_pk -> ordered Vec<value>.
+fn group_by_book(conn: &Connection, sql: &str) -> Result<HashMap<i64, Vec<String>>> {
+    let mut stmt = conn.prepare(sql)?;
+    let mut map: HashMap<i64, Vec<String>> = HashMap::new();
+    let mut rows = stmt.query([])?;
+    while let Some(row) = rows.next()? {
+        let book_pk: i64 = row.get(0)?;
+        let value: String = row.get(1)?;
+        map.entry(book_pk).or_default().push(value);
+    }
+    Ok(map)
+}
+
+fn load_authors(conn: &Connection) -> Result<HashMap<i64, Vec<String>>> {
+    group_by_book(
+        conn,
+        "SELECT a.ZBOOK, pd.ZDISPLAYNAME
+         FROM ZAUTHOR a
+         JOIN ZAUTHORPERSON ap ON ap.Z_PK = a.ZAUTHORPERSON
+         JOIN ZPERSONDELEGATE pd ON pd.Z_PK = ap.ZDELEGATE
+         WHERE a.ZBOOK IS NOT NULL AND pd.ZDISPLAYNAME IS NOT NULL
+         ORDER BY a.ZBOOK, a.ZRANK",
+    )
+}
+
+fn load_genres(conn: &Connection) -> Result<HashMap<i64, Vec<String>>> {
+    group_by_book(
+        conn,
+        "SELECT j.Z_7BASEBOOKCOLLECTIBLES1, l.ZDISPLAYNAME
+         FROM Z_7GENRES j
+         JOIN ZGENRE g ON g.Z_PK = j.Z_18GENRES
+         JOIN ZLOOKUPITEMDELEGATE l ON l.Z_PK = g.ZDELEGATE
+         WHERE l.ZDISPLAYNAME IS NOT NULL
+         ORDER BY j.Z_7BASEBOOKCOLLECTIBLES1, l.ZDISPLAYNAME",
+    )
+}
+
+fn load_subjects(conn: &Connection) -> Result<HashMap<i64, Vec<String>>> {
+    group_by_book(
+        conn,
+        "SELECT j.Z_8BOOKS1, l.ZDISPLAYNAME
+         FROM Z_8SUBJECTS j
+         JOIN ZSUBJECT s ON s.Z_PK = j.Z_38SUBJECTS
+         JOIN ZLOOKUPITEMDELEGATE l ON l.Z_PK = s.ZDELEGATE
+         WHERE l.ZDISPLAYNAME IS NOT NULL
+         ORDER BY j.Z_8BOOKS1, l.ZDISPLAYNAME",
+    )
+}
+
+fn load_tags(conn: &Connection) -> Result<HashMap<i64, Vec<String>>> {
+    group_by_book(
+        conn,
+        "SELECT j.Z_6COLLECTIBLES, l.ZDISPLAYNAME
+         FROM Z_6TAGS j
+         JOIN ZTAG t ON t.Z_PK = j.Z_39TAGS
+         JOIN ZLOOKUPITEMDELEGATE l ON l.Z_PK = t.ZDELEGATE
+         WHERE l.ZDISPLAYNAME IS NOT NULL
+         ORDER BY j.Z_6COLLECTIBLES, l.ZDISPLAYNAME",
+    )
+}
+
+/// `collection_pk` filters to one sous-collection; pass `None` for every
+/// sous-collection (needed so a generated page's tab bar / an app's
+/// sidebar has something to switch between).
+pub fn load_books(conn: &Connection, images_dir: Option<&Path>, collection_pk: Option<i64>) -> Result<Vec<Book>> {
+    let book_ent = book_entity_id(conn)?;
+
+    let authors = load_authors(conn)?;
+    let genres = load_genres(conn)?;
+    let subjects = load_subjects(conn)?;
+    let tags = load_tags(conn)?;
+
+    let sql = "
+        SELECT
+            c.Z_PK, c.ZTITLE, c.ZSUBTITLE, c.ZISBN,
+            c.ZNUMBEROFPAGES, c.ZMYRATING, c.ZREADIT, c.ZDATEADDED,
+            c.ZNOTES, c.ZPLOT, c.ZCURRENTVALUE, c.ZPURCHASEPRICE,
+            c.ZPUBLICATIONDAY, c.ZPUBLICATIONMONTH, c.ZPUBLICATIONYEAR,
+            c.ZFRONTCOVER, c.ZBACKCOVER, COALESCE(c.ZQUANTITY, 1),
+            pub_l.ZDISPLAYNAME  AS publisher,
+            ser_l.ZDISPLAYNAME  AS series,
+            fmt_l.ZDISPLAYNAME  AS format,
+            lang_l.ZDISPLAYNAME AS language,
+            ctry_l.ZDISPLAYNAME AS country,
+            cond_l.ZDISPLAYNAME AS condition,
+            loc_l.ZDISPLAYNAME  AS location,
+            col.ZTITLE          AS collection_name,
+            edit_l.ZDISPLAYNAME  AS edition,
+            prnt_l.ZDISPLAYNAME  AS printed_by,
+            vol_l.ZDISPLAYNAME   AS volume,
+            paper_l.ZDISPLAYNAME AS paper_type,
+            own_p.ZDISPLAYNAME   AS owner,
+            store_l.ZDISPLAYNAME AS store
+        FROM ZCOLLECTIBLE c
+        LEFT JOIN ZPUBLISHER p   ON p.Z_PK = c.ZPUBLISHER
+        LEFT JOIN ZLOOKUPITEMDELEGATE pub_l  ON pub_l.Z_PK = p.ZDELEGATE
+        LEFT JOIN ZSERIES s      ON s.Z_PK = c.ZSERIES
+        LEFT JOIN ZLOOKUPITEMDELEGATE ser_l  ON ser_l.Z_PK = s.ZDELEGATE
+        LEFT JOIN ZFORMAT fo     ON fo.Z_PK = c.ZFORMAT
+        LEFT JOIN ZLOOKUPITEMDELEGATE fmt_l  ON fmt_l.Z_PK = fo.ZDELEGATE
+        LEFT JOIN ZLANGUAGE la   ON la.Z_PK = c.ZLANGUAGE
+        LEFT JOIN ZLOOKUPITEMDELEGATE lang_l ON lang_l.Z_PK = la.ZDELEGATE
+        LEFT JOIN ZCOUNTRY ctry  ON ctry.Z_PK = c.ZCOUNTRY
+        LEFT JOIN ZLOOKUPITEMDELEGATE ctry_l ON ctry_l.Z_PK = ctry.ZDELEGATE
+        LEFT JOIN ZCONDITION cond ON cond.Z_PK = c.ZCONDITION
+        LEFT JOIN ZLOOKUPITEMDELEGATE cond_l ON cond_l.Z_PK = cond.ZDELEGATE
+        LEFT JOIN ZLOCATION loc  ON loc.Z_PK = c.ZLOCATION
+        LEFT JOIN ZLOOKUPITEMDELEGATE loc_l  ON loc_l.Z_PK = loc.ZDELEGATE
+        LEFT JOIN ZCOLLECTION col ON col.Z_PK = c.ZCOLLECTION
+        LEFT JOIN ZEDITION edit  ON edit.Z_PK = c.ZEDITION
+        LEFT JOIN ZLOOKUPITEMDELEGATE edit_l ON edit_l.Z_PK = edit.ZDELEGATE
+        LEFT JOIN ZPRINTEDBY prnt ON prnt.Z_PK = c.ZPRINTEDBY
+        LEFT JOIN ZLOOKUPITEMDELEGATE prnt_l ON prnt_l.Z_PK = prnt.ZDELEGATE
+        LEFT JOIN ZVOLUME vol    ON vol.Z_PK = c.ZVOLUME
+        LEFT JOIN ZLOOKUPITEMDELEGATE vol_l  ON vol_l.Z_PK = vol.ZDELEGATE
+        LEFT JOIN ZPAPERTYPE paper ON paper.Z_PK = c.ZPAPERTYPE
+        LEFT JOIN ZLOOKUPITEMDELEGATE paper_l ON paper_l.Z_PK = paper.ZDELEGATE
+        LEFT JOIN ZOWNER own     ON own.Z_PK = c.ZOWNER
+        LEFT JOIN ZPERSONDELEGATE own_p ON own_p.Z_PK = own.ZDELEGATE
+        LEFT JOIN ZSTORE store   ON store.Z_PK = c.ZSTORE
+        LEFT JOIN ZLOOKUPITEMDELEGATE store_l ON store_l.Z_PK = store.ZDELEGATE
+        WHERE c.Z_ENT = ?1 AND (?2 IS NULL OR c.ZCOLLECTION = ?2)
+        ORDER BY c.Z_PK";
+
+    let mut stmt = conn.prepare(sql)?;
+    let mut rows = stmt.query((book_ent, collection_pk))?;
+
+    let mut books = Vec::new();
+    while let Some(row) = rows.next()? {
+        let id: i64 = row.get(0)?;
+
+        let front_cover_file: Option<String> = row.get(15)?;
+        let back_cover_file: Option<String> = row.get(16)?;
+        let front_cover_path = front_cover_file
+            .as_ref()
+            .and_then(|f| images_dir.map(|d| d.join(f)))
+            .map(|p| p.to_string_lossy().into_owned());
+        let back_cover_path = back_cover_file
+            .as_ref()
+            .and_then(|f| images_dir.map(|d| d.join(f)))
+            .map(|p| p.to_string_lossy().into_owned());
+
+        let date_added: Option<f64> = row.get(7)?;
+        let read_it: Option<i64> = row.get(6)?;
+
+        books.push(Book {
+            id,
+            title: row.get(1)?,
+            subtitle: row.get(2)?,
+            authors: authors.get(&id).cloned().unwrap_or_default(),
+            isbn: row.get(3)?,
+            publisher: row.get(18)?,
+            series: row.get(19)?,
+            format: row.get(20)?,
+            language: row.get(21)?,
+            country: row.get(22)?,
+            condition: row.get(23)?,
+            location: row.get(24)?,
+            edition: row.get(26)?,
+            printed_by: row.get(27)?,
+            volume: row.get(28)?,
+            paper_type: row.get(29)?,
+            owner: row.get(30)?,
+            store: row.get(31)?,
+            publication_day: row.get(12)?,
+            publication_month: row.get(13)?,
+            publication_year: row.get(14)?,
+            number_of_pages: row.get(4)?,
+            my_rating: row.get(5)?,
+            read_it: read_it.map(|v| v != 0),
+            date_added: date_added.map(core_data_timestamp_to_iso8601),
+            genres: genres.get(&id).cloned().unwrap_or_default(),
+            subjects: subjects.get(&id).cloned().unwrap_or_default(),
+            tags: tags.get(&id).cloned().unwrap_or_default(),
+            notes: row.get(8)?,
+            plot: row.get(9)?,
+            current_value: row.get(10)?,
+            purchase_price: row.get(11)?,
+            collection: row.get(25)?,
+            quantity: row.get(17)?,
+            front_cover_file,
+            front_cover_path,
+            back_cover_file,
+            back_cover_path,
+        });
+    }
+    Ok(books)
+}
+
+const EMPTY: &str = "";
+const SANS_COLLECTION: &str = "(sans sous-collection)";
+
+/// Minimal, owned subset of a `Book` for the interactive page — cover
+/// images as ready-to-use `file://` URLs instead of raw filesystem paths,
+/// since the consumer is a web page (whether a static export opened in a
+/// browser, or the NBC desktop app's live view). Shared by both, so the
+/// page's own JS (`templates/app.js`) only ever has to deal with one shape
+/// regardless of which one produced it.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PageBook {
+    pub id: i64,
+    pub title: String,
+    pub subtitle: String,
+    pub authors: Vec<String>,
+    pub isbn: String,
+    pub publisher: String,
+    pub format: String,
+    pub language: String,
+    pub country: String,
+    pub condition: String,
+    pub location: String,
+    pub publication_year: String,
+    pub number_of_pages: Option<i64>,
+    pub my_rating: i64,
+    pub genres: Vec<String>,
+    pub subjects: Vec<String>,
+    pub tags: Vec<String>,
+    pub notes: String,
+    pub plot: String,
+    pub current_value: Option<f64>,
+    pub purchase_price: Option<f64>,
+    pub collection: String,
+    pub quantity: i64,
+    /// Full-resolution cover, referenced by `file://` — used by the detail
+    /// card, where image quality matters.
+    pub cover_url: Option<String>,
+    /// Small embedded JPEG (data URI) — used by list/grid row thumbnails.
+    /// `None` when the caller skipped thumbnail generation (e.g. the NBC
+    /// app's live IPC path, where `templates/app.js` falls back to
+    /// `cover_url` through Tauri's asset protocol instead — see
+    /// `resolveCoverSrc()`).
+    pub thumb_url: Option<String>,
+}
+
+/// `thumb_url` is left to the caller (`bc_export` pre-generates a small
+/// embedded JPEG per book for its static export; the NBC app's live IPC
+/// path passes `None` and lets the page load the real file on demand
+/// through Tauri's asset protocol instead — cheaper, and no `image`/
+/// `base64` dependency needed on that path).
+pub fn book_to_page_book(b: &Book, thumb_url: Option<String>) -> PageBook {
+    PageBook {
+        id: b.id,
+        title: b.title.clone().unwrap_or_else(|| EMPTY.to_string()),
+        subtitle: b.subtitle.clone().unwrap_or_else(|| EMPTY.to_string()),
+        authors: b.authors.clone(),
+        isbn: b.isbn.clone().unwrap_or_else(|| EMPTY.to_string()),
+        publisher: b.publisher.clone().unwrap_or_else(|| EMPTY.to_string()),
+        format: b.format.clone().unwrap_or_else(|| EMPTY.to_string()),
+        language: b.language.clone().unwrap_or_else(|| EMPTY.to_string()),
+        country: b.country.clone().unwrap_or_else(|| EMPTY.to_string()),
+        condition: b.condition.clone().unwrap_or_else(|| EMPTY.to_string()),
+        location: b.location.clone().unwrap_or_else(|| EMPTY.to_string()),
+        publication_year: b.publication_year.clone().unwrap_or_else(|| EMPTY.to_string()),
+        number_of_pages: b.number_of_pages,
+        my_rating: b.my_rating.unwrap_or(0),
+        genres: b.genres.clone(),
+        subjects: b.subjects.clone(),
+        tags: b.tags.clone(),
+        notes: b.notes.clone().unwrap_or_else(|| EMPTY.to_string()),
+        plot: b.plot.clone().unwrap_or_else(|| EMPTY.to_string()),
+        current_value: b.current_value,
+        purchase_price: b.purchase_price,
+        collection: b.collection.clone().unwrap_or_else(|| SANS_COLLECTION.to_string()),
+        quantity: b.quantity,
+        cover_url: b.front_cover_path.as_deref().map(file_url),
+        thumb_url,
+    }
+}
+
+/// Convenience used by the NBC app's `load_collection` Tauri command: opens
+/// `db_path` read-only, loads every sous-collection, and converts straight
+/// to `PageBook` (no thumbnails — see `book_to_page_book`). Encapsulates
+/// the `Connection`/`images_dir` plumbing so the Tauri command itself stays
+/// a thin wrapper with no `rusqlite` dependency of its own.
+pub fn load_page_books(db_path: &Path) -> Result<Vec<PageBook>> {
+    let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .with_context(|| format!("ouverture en lecture seule de {}", db_path.display()))?;
+    let images_dir = resolve_images_dir(db_path);
+    let books = load_books(&conn, images_dir.as_deref(), None)?;
+    Ok(books.iter().map(|b| book_to_page_book(b, None)).collect())
+}
+
+// --------------------------------------------------------------------
 // Write guardrails (step 3 of the add-a-book plan — see `bc_add guard`).
 // Nothing in this crate calls `run_write_transaction` yet: the actual
 // INSERTs come in a later step, executed against a dedicated writable
@@ -286,5 +675,57 @@ mod tests {
             Some(home) => std::env::set_var("HOME", home),
             None => std::env::remove_var("HOME"),
         }
+    }
+
+    #[test]
+    fn core_data_epoch_matches_nsdate_reference_date() {
+        // 0 seconds since the Core Data/NSDate reference date is, by
+        // definition, 2001-01-01T00:00:00Z — the constant this whole
+        // conversion rests on.
+        assert_eq!(core_data_timestamp_to_iso8601(0.0), "2001-01-01T00:00:00Z");
+    }
+
+    #[test]
+    fn core_data_timestamp_before_reference_date_crosses_into_1970() {
+        assert_eq!(
+            core_data_timestamp_to_iso8601(-978_307_200.0),
+            "1970-01-01T00:00:00Z"
+        );
+    }
+
+    #[test]
+    fn core_data_timestamp_matches_a_real_zdateadded_value() {
+        // ZDATEADDED = 603278260 observed on a real row of the collection
+        // analysed in this project; cross-checked independently in Python.
+        assert_eq!(
+            core_data_timestamp_to_iso8601(603_278_260.0),
+            "2020-02-13T09:17:40Z"
+        );
+    }
+
+    #[test]
+    fn core_data_timestamp_rounds_fractional_seconds_and_rolls_the_day_over() {
+        // 86_399.6s past midnight rounds to 86_400s, i.e. the next day.
+        assert_eq!(
+            core_data_timestamp_to_iso8601(86_399.6),
+            "2001-01-02T00:00:00Z"
+        );
+    }
+
+    #[test]
+    fn file_url_keeps_ascii_path_segments_and_slashes_untouched() {
+        assert_eq!(
+            file_url("/Users/serge/Images/cover.jpg"),
+            "file:///Users/serge/Images/cover.jpg"
+        );
+    }
+
+    #[test]
+    fn file_url_percent_encodes_spaces_parens_and_utf8_bytes() {
+        // 'É' is U+00C9, encoded in UTF-8 as the two bytes 0xC3 0x89.
+        assert_eq!(
+            file_url("/Users/serge/My Folder/Évelyne (2).jpg"),
+            "file:///Users/serge/My%20Folder/%C3%89velyne%20%282%29.jpg"
+        );
     }
 }

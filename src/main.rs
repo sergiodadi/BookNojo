@@ -28,19 +28,13 @@
 use anyhow::{Context, Result};
 use base64::Engine;
 use book_collector_export::{
-    book_entity_id, expand_tilde, resolve_collection_pk, resolve_db_path, resolve_images_dir,
+    book_entity_id, book_to_page_book, expand_tilde, load_books, resolve_collection_pk,
+    resolve_db_path, resolve_images_dir, Book, PageBook,
 };
 use clap::Parser;
 use image::ImageEncoder;
 use rusqlite::{Connection, OpenFlags};
-use serde::Serialize;
-use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-
-/// Seconds between the Unix epoch (1970-01-01) and the Core Data / NSDate
-/// reference date (2001-01-01), both UTC. Core Data TIMESTAMP columns store
-/// seconds relative to the latter.
-const CORE_DATA_EPOCH_OFFSET: i64 = 978_307_200;
 
 #[derive(Parser, Debug)]
 #[command(
@@ -78,51 +72,6 @@ struct Args {
     list_collections: bool,
 }
 
-#[derive(Debug, Clone, Serialize)]
-struct Book {
-    id: i64,
-    title: Option<String>,
-    subtitle: Option<String>,
-    authors: Vec<String>,
-    isbn: Option<String>,
-    publisher: Option<String>,
-    series: Option<String>,
-    format: Option<String>,
-    language: Option<String>,
-    country: Option<String>,
-    condition: Option<String>,
-    location: Option<String>,
-    edition: Option<String>,
-    printed_by: Option<String>,
-    volume: Option<String>,
-    paper_type: Option<String>,
-    owner: Option<String>,
-    store: Option<String>,
-    publication_day: Option<String>,
-    publication_month: Option<String>,
-    publication_year: Option<String>,
-    number_of_pages: Option<i64>,
-    my_rating: Option<i64>,
-    read_it: Option<bool>,
-    date_added: Option<String>,
-    genres: Vec<String>,
-    subjects: Vec<String>,
-    tags: Vec<String>,
-    notes: Option<String>,
-    plot: Option<String>,
-    current_value: Option<f64>,
-    purchase_price: Option<f64>,
-    collection: Option<String>,
-    /// Nombre d'exemplaires (ZQUANTITY, 1 si absent). L'app additionne ce
-    /// champ sur toute une sous-collection pour afficher son compteur —
-    /// voir `sum_quantity`.
-    quantity: i64,
-    front_cover_file: Option<String>,
-    front_cover_path: Option<String>,
-    back_cover_file: Option<String>,
-    back_cover_path: Option<String>,
-}
-
 /// Prints every sous-collection with its number of fiches and the sum of
 /// their quantities (the number the app's own counter displays).
 fn print_collections(conn: &Connection) -> Result<()> {
@@ -143,228 +92,6 @@ fn print_collections(conn: &Connection) -> Result<()> {
         println!("{:<30} {:>10} {:>12}", name, fiches, qty);
     }
     Ok(())
-}
-
-fn core_data_timestamp_to_iso8601(seconds: f64) -> String {
-    let unix_secs = seconds.round() as i64 + CORE_DATA_EPOCH_OFFSET;
-    let days = unix_secs.div_euclid(86_400);
-    let secs_of_day = unix_secs.rem_euclid(86_400);
-    let (y, m, d) = civil_from_days(days);
-    format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}Z",
-        y,
-        m,
-        d,
-        secs_of_day / 3600,
-        (secs_of_day % 3600) / 60,
-        secs_of_day % 60
-    )
-}
-
-/// Howard Hinnant's days-from-civil algorithm, used in reverse to turn a
-/// day count since the Unix epoch into a proleptic-Gregorian (y, m, d).
-fn civil_from_days(z: i64) -> (i64, u32, u32) {
-    let z = z + 719_468;
-    let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
-    let doe = (z - era * 146_097) as u64;
-    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
-    let y = yoe as i64 + era * 400;
-    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
-    let mp = (5 * doy + 2) / 153;
-    let d = (doy - (153 * mp + 2) / 5 + 1) as u32;
-    let m = if mp < 10 { mp + 3 } else { mp - 9 } as u32;
-    let y = if m <= 2 { y + 1 } else { y };
-    (y, m, d)
-}
-
-/// Groups rows of (book_pk, value) into book_pk -> ordered Vec<value>.
-fn group_by_book(conn: &Connection, sql: &str) -> Result<HashMap<i64, Vec<String>>> {
-    let mut stmt = conn.prepare(sql)?;
-    let mut map: HashMap<i64, Vec<String>> = HashMap::new();
-    let mut rows = stmt.query([])?;
-    while let Some(row) = rows.next()? {
-        let book_pk: i64 = row.get(0)?;
-        let value: String = row.get(1)?;
-        map.entry(book_pk).or_default().push(value);
-    }
-    Ok(map)
-}
-
-fn load_authors(conn: &Connection) -> Result<HashMap<i64, Vec<String>>> {
-    group_by_book(
-        conn,
-        "SELECT a.ZBOOK, pd.ZDISPLAYNAME
-         FROM ZAUTHOR a
-         JOIN ZAUTHORPERSON ap ON ap.Z_PK = a.ZAUTHORPERSON
-         JOIN ZPERSONDELEGATE pd ON pd.Z_PK = ap.ZDELEGATE
-         WHERE a.ZBOOK IS NOT NULL AND pd.ZDISPLAYNAME IS NOT NULL
-         ORDER BY a.ZBOOK, a.ZRANK",
-    )
-}
-
-fn load_genres(conn: &Connection) -> Result<HashMap<i64, Vec<String>>> {
-    group_by_book(
-        conn,
-        "SELECT j.Z_7BASEBOOKCOLLECTIBLES1, l.ZDISPLAYNAME
-         FROM Z_7GENRES j
-         JOIN ZGENRE g ON g.Z_PK = j.Z_18GENRES
-         JOIN ZLOOKUPITEMDELEGATE l ON l.Z_PK = g.ZDELEGATE
-         WHERE l.ZDISPLAYNAME IS NOT NULL
-         ORDER BY j.Z_7BASEBOOKCOLLECTIBLES1, l.ZDISPLAYNAME",
-    )
-}
-
-fn load_subjects(conn: &Connection) -> Result<HashMap<i64, Vec<String>>> {
-    group_by_book(
-        conn,
-        "SELECT j.Z_8BOOKS1, l.ZDISPLAYNAME
-         FROM Z_8SUBJECTS j
-         JOIN ZSUBJECT s ON s.Z_PK = j.Z_38SUBJECTS
-         JOIN ZLOOKUPITEMDELEGATE l ON l.Z_PK = s.ZDELEGATE
-         WHERE l.ZDISPLAYNAME IS NOT NULL
-         ORDER BY j.Z_8BOOKS1, l.ZDISPLAYNAME",
-    )
-}
-
-fn load_tags(conn: &Connection) -> Result<HashMap<i64, Vec<String>>> {
-    group_by_book(
-        conn,
-        "SELECT j.Z_6COLLECTIBLES, l.ZDISPLAYNAME
-         FROM Z_6TAGS j
-         JOIN ZTAG t ON t.Z_PK = j.Z_39TAGS
-         JOIN ZLOOKUPITEMDELEGATE l ON l.Z_PK = t.ZDELEGATE
-         WHERE l.ZDISPLAYNAME IS NOT NULL
-         ORDER BY j.Z_6COLLECTIBLES, l.ZDISPLAYNAME",
-    )
-}
-
-fn load_books(
-    conn: &Connection,
-    images_dir: Option<&Path>,
-    collection_pk: Option<i64>,
-) -> Result<Vec<Book>> {
-    let book_ent = book_entity_id(conn)?;
-
-    let authors = load_authors(conn)?;
-    let genres = load_genres(conn)?;
-    let subjects = load_subjects(conn)?;
-    let tags = load_tags(conn)?;
-
-    let sql = "
-        SELECT
-            c.Z_PK, c.ZTITLE, c.ZSUBTITLE, c.ZISBN,
-            c.ZNUMBEROFPAGES, c.ZMYRATING, c.ZREADIT, c.ZDATEADDED,
-            c.ZNOTES, c.ZPLOT, c.ZCURRENTVALUE, c.ZPURCHASEPRICE,
-            c.ZPUBLICATIONDAY, c.ZPUBLICATIONMONTH, c.ZPUBLICATIONYEAR,
-            c.ZFRONTCOVER, c.ZBACKCOVER, COALESCE(c.ZQUANTITY, 1),
-            pub_l.ZDISPLAYNAME  AS publisher,
-            ser_l.ZDISPLAYNAME  AS series,
-            fmt_l.ZDISPLAYNAME  AS format,
-            lang_l.ZDISPLAYNAME AS language,
-            ctry_l.ZDISPLAYNAME AS country,
-            cond_l.ZDISPLAYNAME AS condition,
-            loc_l.ZDISPLAYNAME  AS location,
-            col.ZTITLE          AS collection_name,
-            edit_l.ZDISPLAYNAME  AS edition,
-            prnt_l.ZDISPLAYNAME  AS printed_by,
-            vol_l.ZDISPLAYNAME   AS volume,
-            paper_l.ZDISPLAYNAME AS paper_type,
-            own_p.ZDISPLAYNAME   AS owner,
-            store_l.ZDISPLAYNAME AS store
-        FROM ZCOLLECTIBLE c
-        LEFT JOIN ZPUBLISHER p   ON p.Z_PK = c.ZPUBLISHER
-        LEFT JOIN ZLOOKUPITEMDELEGATE pub_l  ON pub_l.Z_PK = p.ZDELEGATE
-        LEFT JOIN ZSERIES s      ON s.Z_PK = c.ZSERIES
-        LEFT JOIN ZLOOKUPITEMDELEGATE ser_l  ON ser_l.Z_PK = s.ZDELEGATE
-        LEFT JOIN ZFORMAT fo     ON fo.Z_PK = c.ZFORMAT
-        LEFT JOIN ZLOOKUPITEMDELEGATE fmt_l  ON fmt_l.Z_PK = fo.ZDELEGATE
-        LEFT JOIN ZLANGUAGE la   ON la.Z_PK = c.ZLANGUAGE
-        LEFT JOIN ZLOOKUPITEMDELEGATE lang_l ON lang_l.Z_PK = la.ZDELEGATE
-        LEFT JOIN ZCOUNTRY ctry  ON ctry.Z_PK = c.ZCOUNTRY
-        LEFT JOIN ZLOOKUPITEMDELEGATE ctry_l ON ctry_l.Z_PK = ctry.ZDELEGATE
-        LEFT JOIN ZCONDITION cond ON cond.Z_PK = c.ZCONDITION
-        LEFT JOIN ZLOOKUPITEMDELEGATE cond_l ON cond_l.Z_PK = cond.ZDELEGATE
-        LEFT JOIN ZLOCATION loc  ON loc.Z_PK = c.ZLOCATION
-        LEFT JOIN ZLOOKUPITEMDELEGATE loc_l  ON loc_l.Z_PK = loc.ZDELEGATE
-        LEFT JOIN ZCOLLECTION col ON col.Z_PK = c.ZCOLLECTION
-        LEFT JOIN ZEDITION edit  ON edit.Z_PK = c.ZEDITION
-        LEFT JOIN ZLOOKUPITEMDELEGATE edit_l ON edit_l.Z_PK = edit.ZDELEGATE
-        LEFT JOIN ZPRINTEDBY prnt ON prnt.Z_PK = c.ZPRINTEDBY
-        LEFT JOIN ZLOOKUPITEMDELEGATE prnt_l ON prnt_l.Z_PK = prnt.ZDELEGATE
-        LEFT JOIN ZVOLUME vol    ON vol.Z_PK = c.ZVOLUME
-        LEFT JOIN ZLOOKUPITEMDELEGATE vol_l  ON vol_l.Z_PK = vol.ZDELEGATE
-        LEFT JOIN ZPAPERTYPE paper ON paper.Z_PK = c.ZPAPERTYPE
-        LEFT JOIN ZLOOKUPITEMDELEGATE paper_l ON paper_l.Z_PK = paper.ZDELEGATE
-        LEFT JOIN ZOWNER own     ON own.Z_PK = c.ZOWNER
-        LEFT JOIN ZPERSONDELEGATE own_p ON own_p.Z_PK = own.ZDELEGATE
-        LEFT JOIN ZSTORE store   ON store.Z_PK = c.ZSTORE
-        LEFT JOIN ZLOOKUPITEMDELEGATE store_l ON store_l.Z_PK = store.ZDELEGATE
-        WHERE c.Z_ENT = ?1 AND (?2 IS NULL OR c.ZCOLLECTION = ?2)
-        ORDER BY c.Z_PK";
-
-    let mut stmt = conn.prepare(sql)?;
-    let mut rows = stmt.query((book_ent, collection_pk))?;
-
-    let mut books = Vec::new();
-    while let Some(row) = rows.next()? {
-        let id: i64 = row.get(0)?;
-
-        let front_cover_file: Option<String> = row.get(15)?;
-        let back_cover_file: Option<String> = row.get(16)?;
-        let front_cover_path = front_cover_file
-            .as_ref()
-            .and_then(|f| images_dir.map(|d| d.join(f)))
-            .map(|p| p.to_string_lossy().into_owned());
-        let back_cover_path = back_cover_file
-            .as_ref()
-            .and_then(|f| images_dir.map(|d| d.join(f)))
-            .map(|p| p.to_string_lossy().into_owned());
-
-        let date_added: Option<f64> = row.get(7)?;
-        let read_it: Option<i64> = row.get(6)?;
-
-        books.push(Book {
-            id,
-            title: row.get(1)?,
-            subtitle: row.get(2)?,
-            authors: authors.get(&id).cloned().unwrap_or_default(),
-            isbn: row.get(3)?,
-            publisher: row.get(18)?,
-            series: row.get(19)?,
-            format: row.get(20)?,
-            language: row.get(21)?,
-            country: row.get(22)?,
-            condition: row.get(23)?,
-            location: row.get(24)?,
-            edition: row.get(26)?,
-            printed_by: row.get(27)?,
-            volume: row.get(28)?,
-            paper_type: row.get(29)?,
-            owner: row.get(30)?,
-            store: row.get(31)?,
-            publication_day: row.get(12)?,
-            publication_month: row.get(13)?,
-            publication_year: row.get(14)?,
-            number_of_pages: row.get(4)?,
-            my_rating: row.get(5)?,
-            read_it: read_it.map(|v| v != 0),
-            date_added: date_added.map(core_data_timestamp_to_iso8601),
-            genres: genres.get(&id).cloned().unwrap_or_default(),
-            subjects: subjects.get(&id).cloned().unwrap_or_default(),
-            tags: tags.get(&id).cloned().unwrap_or_default(),
-            notes: row.get(8)?,
-            plot: row.get(9)?,
-            current_value: row.get(10)?,
-            purchase_price: row.get(11)?,
-            collection: row.get(25)?,
-            quantity: row.get(17)?,
-            front_cover_file,
-            front_cover_path,
-            back_cover_file,
-            back_cover_path,
-        });
-    }
-    Ok(books)
 }
 
 fn write_csv(path: &Path, books: &[Book]) -> Result<()> {
@@ -465,22 +192,6 @@ fn write_json(path: &Path, books: &[Book]) -> Result<()> {
     Ok(())
 }
 
-/// Percent-encodes a filesystem path for use as a `file://` URL (spaces,
-/// accented bytes, parentheses, ... — everything but unreserved chars and
-/// the path separator).
-fn file_url(path: &str) -> String {
-    let mut out = String::from("file://");
-    for byte in path.bytes() {
-        match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' | b'/' => {
-                out.push(byte as char)
-            }
-            _ => out.push_str(&format!("%{byte:02X}")),
-        }
-    }
-    out
-}
-
 /// Decodes a cover image, downsizes it to fit within `max_dim`×`max_dim`
 /// (aspect preserved), re-encodes as a modest-quality JPEG, and returns it
 /// as a `data:` URI. Embedding small thumbnails directly in the page avoids
@@ -507,41 +218,6 @@ fn make_thumbnail_data_uri(path: &Path, max_dim: u32) -> Option<String> {
 /// paths, since the browser needs a URL, not a path. `collection` is kept
 /// per-book (rather than splitting into separate datasets) so the page's
 /// own JS can switch between sous-collections without re-running the tool.
-#[derive(Serialize)]
-struct HtmlBook<'a> {
-    id: i64,
-    title: &'a str,
-    subtitle: &'a str,
-    authors: &'a [String],
-    isbn: &'a str,
-    publisher: &'a str,
-    format: &'a str,
-    language: &'a str,
-    country: &'a str,
-    condition: &'a str,
-    location: &'a str,
-    publication_year: &'a str,
-    number_of_pages: Option<i64>,
-    my_rating: i64,
-    genres: &'a [String],
-    subjects: &'a [String],
-    tags: &'a [String],
-    notes: &'a str,
-    plot: &'a str,
-    current_value: Option<f64>,
-    purchase_price: Option<f64>,
-    collection: &'a str,
-    quantity: i64,
-    /// Full-resolution cover, referenced by `file://` — used by the detail
-    /// card, where image quality matters.
-    cover_url: Option<String>,
-    /// Small embedded JPEG (data URI) — used by list/grid row thumbnails.
-    thumb_url: Option<String>,
-}
-
-const EMPTY: &str = "";
-const SANS_COLLECTION: &str = "(sans sous-collection)";
-
 /// `books` should be the UNFILTERED set (every sous-collection) so the
 /// generated page's tab bar has something to switch between — pass the
 /// result of `load_books(..., None)` regardless of any `--collection` CLI
@@ -557,7 +233,7 @@ fn write_html(path: &Path, books: &[Book]) -> Result<()> {
     let with_cover = books.iter().filter(|b| b.front_cover_path.is_some()).count();
     println!("Génération de {with_cover} miniatures (max {THUMB_MAX_DIM}px)…");
 
-    let mut html_books: Vec<HtmlBook> = Vec::with_capacity(books.len());
+    let mut html_books: Vec<PageBook> = Vec::with_capacity(books.len());
     let mut thumbnailed = 0usize;
     for b in books {
         let thumb_url = b
@@ -570,34 +246,7 @@ fn write_html(path: &Path, books: &[Book]) -> Result<()> {
                 println!("  … {thumbnailed}/{with_cover}");
             }
         }
-
-        html_books.push(HtmlBook {
-            id: b.id,
-            title: b.title.as_deref().unwrap_or(EMPTY),
-            subtitle: b.subtitle.as_deref().unwrap_or(EMPTY),
-            authors: &b.authors,
-            isbn: b.isbn.as_deref().unwrap_or(EMPTY),
-            publisher: b.publisher.as_deref().unwrap_or(EMPTY),
-            format: b.format.as_deref().unwrap_or(EMPTY),
-            language: b.language.as_deref().unwrap_or(EMPTY),
-            country: b.country.as_deref().unwrap_or(EMPTY),
-            condition: b.condition.as_deref().unwrap_or(EMPTY),
-            location: b.location.as_deref().unwrap_or(EMPTY),
-            publication_year: b.publication_year.as_deref().unwrap_or(EMPTY),
-            number_of_pages: b.number_of_pages,
-            my_rating: b.my_rating.unwrap_or(0),
-            genres: &b.genres,
-            subjects: &b.subjects,
-            tags: &b.tags,
-            notes: b.notes.as_deref().unwrap_or(EMPTY),
-            plot: b.plot.as_deref().unwrap_or(EMPTY),
-            current_value: b.current_value,
-            purchase_price: b.purchase_price,
-            collection: b.collection.as_deref().unwrap_or(SANS_COLLECTION),
-            quantity: b.quantity,
-            cover_url: b.front_cover_path.as_deref().map(file_url),
-            thumb_url,
-        });
+        html_books.push(book_to_page_book(b, thumb_url));
     }
     println!("Miniatures générées: {thumbnailed}/{with_cover}");
 
@@ -684,62 +333,4 @@ fn main() -> Result<()> {
     }
 
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn core_data_epoch_matches_nsdate_reference_date() {
-        // 0 seconds since the Core Data/NSDate reference date is, by
-        // definition, 2001-01-01T00:00:00Z — the constant this whole
-        // conversion rests on.
-        assert_eq!(core_data_timestamp_to_iso8601(0.0), "2001-01-01T00:00:00Z");
-    }
-
-    #[test]
-    fn core_data_timestamp_before_reference_date_crosses_into_1970() {
-        assert_eq!(
-            core_data_timestamp_to_iso8601(-978_307_200.0),
-            "1970-01-01T00:00:00Z"
-        );
-    }
-
-    #[test]
-    fn core_data_timestamp_matches_a_real_zdateadded_value() {
-        // ZDATEADDED = 603278260 observed on a real row of the collection
-        // analysed in this project; cross-checked independently in Python.
-        assert_eq!(
-            core_data_timestamp_to_iso8601(603_278_260.0),
-            "2020-02-13T09:17:40Z"
-        );
-    }
-
-    #[test]
-    fn core_data_timestamp_rounds_fractional_seconds_and_rolls_the_day_over() {
-        // 86_399.6s past midnight rounds to 86_400s, i.e. the next day.
-        assert_eq!(
-            core_data_timestamp_to_iso8601(86_399.6),
-            "2001-01-02T00:00:00Z"
-        );
-    }
-
-    #[test]
-    fn file_url_keeps_ascii_path_segments_and_slashes_untouched() {
-        assert_eq!(
-            file_url("/Users/serge/Images/cover.jpg"),
-            "file:///Users/serge/Images/cover.jpg"
-        );
-    }
-
-    #[test]
-    fn file_url_percent_encodes_spaces_parens_and_utf8_bytes() {
-        // 'É' is U+00C9, encoded in UTF-8 as the two bytes 0xC3 0x89.
-        assert_eq!(
-            file_url("/Users/serge/My Folder/Évelyne (2).jpg"),
-            "file:///Users/serge/My%20Folder/%C3%89velyne%20%282%29.jpg"
-        );
-    }
-
 }
