@@ -4,6 +4,19 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.27.0] - 2026-11-02
+
+### Added
+- **`app/` — squelette de la future application macOS "NBC"** (étape 1/6 du plan d'empaquetage) : projet Tauri 2 scaffoldé avec `npm create tauri-app` (gestionnaire `cargo`, gabarit `vanilla` — pas de framework JS, cohérent avec le reste du projet), package Rust renommé `nbc`/`nbc_lib`, nom de produit et titre de fenêtre "NBC". Indépendant du crate `book_collector_export` existant (son propre `Cargo.toml` sous `app/src-tauri/`) — rien ne change pour `bc_export`/`bc_add`.
+- Code et fichiers source du scaffold committés ; `app/src-tauri/target/` (~1,1 Go) exclu via le `.gitignore` propre au scaffold.
+
+### Verified
+- `cargo tauri build` compile sans erreur et produit `app/src-tauri/target/release/bundle/macos/NBC.app` (exécutable arm64 natif) et un `.dmg`.
+- L'app a été réellement ouverte (`open NBC.app`) et capturée à l'écran : fenêtre native fonctionnelle, barre de menu macOS complète (NBC/File/Edit/View/Window/Help déjà présents nativement), contenu par défaut du gabarit Tauri affiché correctement. Fermée proprement après vérification.
+
+### Next (étape 2, pas encore commencée)
+- Remplacer le contenu par défaut de `app/src/` par l'interface déjà construite (`templates/page.html`/`style.css`/`app.js`).
+
 ## [0.26.0] - 2026-11-02
 
 ### Added

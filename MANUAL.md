@@ -430,7 +430,31 @@ sélecteur de fichier natif macOS (équivalent graphique de `bc_add
 import`), et un menu **Help**. Nécessitent que l'étape Tauri soit
 commencée — pas encore le cas.
 
-## 8. Dépannage
+## 8. (Expérimental) Application macOS "NBC"
+
+> ⚠️ Tout début. Projet séparé, dans `app/` — n'affecte pas `bc_export`/
+> `bc_add` ni leur propre `Cargo.toml`.
+
+Le but à terme (voir § 7, "Pourquoi une base indépendante") est une
+application macOS installée, à icône, dans `/Applications` — construite
+avec [Tauri](https://tauri.app) (backend Rust + interface web), pour
+réutiliser le code déjà écrit plutôt que tout réécrire.
+
+**Étape 1/6 (faite)** : squelette vide, juste pour prouver que la
+mécanique fonctionne.
+
+```bash
+cd app
+cargo tauri dev      # lance une fenêtre de développement (rechargement à chaud)
+cargo tauri build    # compile une vraie .app (et un .dmg), dans
+                      # app/src-tauri/target/release/bundle/
+```
+
+Étapes suivantes, pas encore commencées : brancher l'interface HTML/CSS/JS
+existante (étape 2), puis le vrai moteur Rust (étape 3), les menus natifs
+Files/Help (étape 4), icône et finitions (étape 5).
+
+## 9. Dépannage
 
 - **`--db "~/Documents/..."` échoue** : si le chemin est entre guillemets,
   le shell n'étend pas `~` lui-même — l'outil le fait à votre place depuis
@@ -442,7 +466,7 @@ commencée — pas encore le cas.
 - **Erreur de verrou SQLite** : fermez Book Collector avant de lancer un
   export, ou utilisez `testdata/` qui est une copie indépendante.
 
-## 9. Pour aller plus loin
+## 10. Pour aller plus loin
 
 - `CHANGELOG.md` : historique détaillé, version par version.
 - `./target/release/bc_export --help` : liste complète des options.
