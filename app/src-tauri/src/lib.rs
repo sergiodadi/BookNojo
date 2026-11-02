@@ -16,19 +16,24 @@ fn load_collection(path: String) -> Result<Vec<book_collector_export::PageBook>,
     book_collector_export::load_page_books(&db_path).map_err(|e| format!("{e:#}"))
 }
 
-/// "Files > Import a file..." — opens the native macOS file picker scoped to
-/// folders (a `.bkcp`/`.col` is a directory; macOS treats it as a single
-/// selectable package rather than something to navigate into, since Book
-/// Collector registers that extension as a package type). The chosen path
-/// is sent to the frontend as an `import-collection` event rather than
-/// returned directly, since the picker itself is asynchronous/callback-based.
+/// "Files > Import a file..." — opens the native macOS file picker. A
+/// `.bkcp`/`.col` is a directory on disk, but macOS/LaunchServices registers
+/// `.bkcp` (via Book Collector) as a package — NSOpenPanel treats a
+/// recognized package as a *file*, not a folder, so a folder-only picker
+/// (`canChooseFiles: false`) grays it out entirely. Using `pick_file` with
+/// an extension filter instead lets the package be selected as a single
+/// atomic item, matching how Finder/Open dialogs normally handle `.bkcp`-
+/// style bundles. The chosen path is sent to the frontend as an
+/// `import-collection` event rather than returned directly, since the
+/// picker itself is asynchronous/callback-based.
 fn open_import_dialog(app: &tauri::AppHandle) {
     let app_handle = app.clone();
     app.dialog()
         .file()
         .set_title("Importer une collection")
-        .pick_folder(move |folder| {
-            let Some(path) = folder else { return };
+        .add_filter("Collection", &["bkcp", "col"])
+        .pick_file(move |file| {
+            let Some(path) = file else { return };
             let _ = app_handle.emit("import-collection", path.to_string());
         });
 }

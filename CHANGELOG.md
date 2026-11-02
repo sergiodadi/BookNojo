@@ -4,6 +4,14 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.32.1] - 2026-11-02
+
+### Fixed
+- **`MyCollection.bkcp` grisé dans le sélecteur "Import a file…"** (signalé par l'utilisateur en testant lui-même). Cause réelle : rien à voir avec l'extension (`.bkcp` vs `.col`) — c'est `pick_folder()` qui posait problème. macOS/LaunchServices enregistre `.bkcp` (via Book Collector) comme un paquet, donc NSOpenPanel le traite comme un *fichier*, pas un dossier ; avec un sélecteur limité aux dossiers (`canChooseFiles: false`), un paquet reconnu est grisé — impossible à sélectionner. Corrigé en passant à `pick_file()` avec un filtre d'extensions (`bkcp`, `col`), qui permet de sélectionner le paquet comme un élément unique, cohérent avec le comportement standard de Finder/sélecteurs sur ce type de paquet.
+
+### Verified
+- `cargo build --release` propre (app + lib), aucune régression attendue sur le reste de la chaîne (menu → dialogue → évènement → `load_collection`), déjà vérifiée en v0.32.0.
+
 ## [0.32.0] - 2026-11-02
 
 ### Added

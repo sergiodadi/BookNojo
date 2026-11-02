@@ -466,6 +466,17 @@ main.
 sélecteur macOS natif pour choisir une autre collection (`.bkcp`/`.col`),
 et **NBC Help > About NBC** affiche la version.
 
+⚠️ **Piège rencontré (corrigé en v0.32.1)** : le sélecteur utilisait
+d'abord `pick_folder()` (sélection de dossier) en pensant que `.bkcp`/
+`.col` devait être traité comme un dossier. En réalité macOS enregistre
+`.bkcp` comme un **paquet** (type document), donc NSOpenPanel le traite
+comme un *fichier* — avec un sélecteur limité aux dossiers
+(`canChooseFiles: false`), le paquet apparaît grisé, impossible à
+sélectionner. Rien à voir avec le choix d'extension `.col` vs `.bkcp` :
+le même problème se serait posé avec `.col`. Corrigé en passant à
+`pick_file()` avec un filtre d'extensions (`bkcp`, `col`) — le paquet
+devient sélectionnable comme un élément unique, comme dans Finder.
+
 ```bash
 cargo build --release        # si bc_export n'est pas déjà compilé (depuis la racine)
 ./app/generate-dev-data.sh   # synchronise app/src/{index.html,app.js,style.css}
