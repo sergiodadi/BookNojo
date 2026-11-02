@@ -604,6 +604,29 @@ via `cd app && cargo tauri icon app-icon.png` si le design doit changer
 Étape suivante, pas encore commencée : signature/notarisation (étape 6 —
 pas urgent, ne compte que pour une distribution à quelqu'un d'autre).
 
+**v0.41.0 — Fiche détail complétée ("Détails produit"/"Détails
+personnels"/"Crédits"/"Personnages"/"Contenus").** Déclenché par une
+comparaison directe NBC/Book Collector sur un même livre : "Product
+Details" et "Personal Details" manquaient entièrement de la fiche NBC.
+L'audit a aussi mis à jour ~9 champs (série, édition, imprimeur, volume,
+type de papier, propriétaire, magasin, lu, date d'ajout) déjà résolus en
+SQL depuis des travaux antérieurs mais jamais branchés sur l'affichage —
+silencieusement invisibles jusqu'ici. La fiche détail affiche maintenant
+trois groupes clé/valeur ("Détails produit", "Édition originale",
+"Détails personnels", champs vides omis) et quatre listes répétables
+("Crédits", "Personnages", "Contenus", "Liens").
+
+⚠️ **Limite de vérification connue** : les sections Crédits/Personnages/
+Contenus n'ont pas pu être confirmées à l'écran faute de données — aucune
+fiche de `testdata/` n'a de crédit/personnage/contenu (`ZCREATOR`/
+`ZCHARACTER`/`ZSTORY` vides), et créer une fiche de test dans
+`testdata-rw/` était bloqué par le garde-fou "Book Collector est
+actuellement lancé" au moment des travaux. Le chargement Rust réutilise
+les mêmes jointures déjà vérifiées pour l'édition de fiche, et le rendu
+JS suit le même motif que "Liens" (confirmé) — à vérifier dès qu'une
+fiche réelle avec ce type de données sera disponible, ou en créant une
+fiche de test dans `testdata-rw/` une fois Book Collector fermé.
+
 ## 9. Dépannage
 
 - **`--db "~/Documents/..."` échoue** : si le chemin est entre guillemets,

@@ -4,6 +4,20 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.41.0] - 2026-11-02
+
+### Added
+- **"Détails produit", "Édition originale", "Détails personnels", "Crédits", "Personnages", "Contenus" dans la fiche détail de NBC** — l'utilisateur a comparé l'affichage NBC et Book Collector côte à côte pour un même livre et signalé que "Product Details" et "Personal Details" manquaient dans NBC. Un audit complet de `Book`/`PageBook`/`NewBookInput` a montré que ces deux groupes n'existaient dans aucune structure de données (ni dans la fiche, ni dans le formulaire), et a aussi révélé **~9 champs déjà résolus en SQL depuis des travaux précédents sur le projet mais jamais branchés sur `PageBook`** et donc invisibles dans NBC alors même que la donnée était déjà disponible : `series`, `edition`, `printed_by`, `volume`, `paper_type`, `owner`, `store`, `read_it`, `date_added`.
+  - `Book` étendu d'une trentaine de champs (dimensions, Dewey/LCCN, dédicace, première édition/tirage, coffret, durée audio piste, édition originale complète, numéro d'emplacement, prix de couverture, date d'achat, rare, nombre/date de lecture, champs personnalisés utilisateur) ainsi que de 4 listes : crédits, personnages, contenus, liens.
+  - `load_books()` réécrit pour utiliser l'accès aux colonnes par nom (`row.get("alias")`) plutôt que par position, plus adapté à une requête aussi large ; 4 nouveaux chargeurs par lots (`load_credits`, `load_characters`, `load_contents`, `load_links`), sur le même principe que les chargeurs existants (auteurs/genres/sujets/tags).
+  - `PageBook` et `book_to_page_book()` étendus en miroir avec tous ces champs, y compris les ~9 champs orphelins ci-dessus.
+  - Côté interface (`app.js`/`style.css`) : nouveaux groupes "Détails produit", "Édition originale", "Détails personnels" (clé/valeur, champs vides omis automatiquement) et nouvelles sections répétables "Crédits" (nom + rôle), "Personnages", "Contenus", "Liens" dans la fiche détail — nouveaux styles `.kv-list`/`.kv-row`/`.kv-key`/`.kv-val` et `.rep-list-view`/`.rep-item`/`.rep-sub`.
+
+### Verified
+- Rechargement direct en Rust de la fiche réelle "Atlas du Paris souterrain" (`testdata/`) : hauteur/largeur, Dewey, LCCN, numéro d'emplacement, prix de couverture, nombre de lectures et un lien, tous correctement résolus.
+- Vérification visuelle (export HTML statique + scénario navigateur automatisé) sur cette même fiche : "DÉTAILS PRODUIT" (dimensions, Dewey, LCCN), "DÉTAILS PERSONNELS" (propriétaire, numéro d'emplacement, prix de couverture, lu, nombre de lectures, date d'ajout) et "LIENS" (lien cliquable) s'affichent correctement, avec les champs sans donnée omis comme prévu.
+- **Non vérifié visuellement** : les sections "Crédits", "Personnages" et "Contenus" n'ont pas pu être confirmées à l'écran — `testdata/` ne contient aucune ligne dans `ZCREATOR`/`ZCHARACTER`/`ZSTORY` (confirmé par requête directe), et la création d'une fiche de test dans `testdata-rw/` a été bloquée par le garde-fou "Book Collector est actuellement lancé" pendant que l'utilisateur comparait les deux apps. Le code de chargement Rust réutilise exactement les mêmes jointures déjà vérifiées pour l'édition de fiche (`load_book_for_edit`), et le rendu JS suit exactement le même motif que "Liens" (déjà confirmé) — confiance raisonnable, mais à confirmer dès qu'une fiche réelle avec ce type de données sera disponible.
+
 ## [0.40.1] - 2026-11-02
 
 ### Fixed

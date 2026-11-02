@@ -294,6 +294,48 @@ pub struct Book {
     pub front_cover_path: Option<String>,
     pub back_cover_file: Option<String>,
     pub back_cover_path: Option<String>,
+
+    // ---- "Product Details" (onglet Détails de l'app, étape 5) ----
+    pub issue_number: Option<i64>,
+    pub height: Option<String>,
+    pub width: Option<String>,
+    pub dewey: Option<String>,
+    pub lccn: Option<String>,
+    pub dedication: Option<String>,
+    pub first_edition: Option<bool>,
+    pub printing: Option<i64>,
+    pub box_set: Option<bool>,
+    pub audio_length_minutes: Option<i64>,
+    pub original_title: Option<String>,
+    pub original_subtitle: Option<String>,
+    pub original_publisher: Option<String>,
+    pub original_country: Option<String>,
+    pub original_language: Option<String>,
+    pub original_publication_year: Option<String>,
+    pub original_publication_month: Option<String>,
+    pub original_publication_day: Option<String>,
+
+    // ---- "Personal Details" (onglet Personnel de l'app) ----
+    pub location_number: Option<String>,
+    pub cover_price: Option<f64>,
+    pub purchase_year: Option<String>,
+    pub purchase_month: Option<String>,
+    pub purchase_day: Option<String>,
+    pub rare: Option<bool>,
+    pub read_times: Option<i64>,
+    pub read_year: Option<String>,
+    pub read_month: Option<String>,
+    pub read_day: Option<String>,
+    pub user_lookup1: Option<String>,
+    pub user_lookup2: Option<String>,
+    pub user_text1: Option<String>,
+    pub user_text2: Option<String>,
+
+    // ---- Crédits & Personnages, Contenus, Liens ----
+    pub credits: Vec<CreditInput>,
+    pub characters: Vec<CharacterInput>,
+    pub contents: Vec<ContentInput>,
+    pub links: Vec<LinkInput>,
 }
 
 /// Groups rows of (book_pk, value) into book_pk -> ordered Vec<value>.
@@ -357,6 +399,100 @@ fn load_tags(conn: &Connection) -> Result<HashMap<i64, Vec<String>>> {
     )
 }
 
+/// `ZROLEID` is resolved to the same canonical English key the Add/Edit
+/// form's role `<select>` uses (`role_for_role_id` — see the add-a-book
+/// section below), not a French label: the frontend already has its own
+/// `ROLE_LABELS` translation table for display, reused for both forms and
+/// the read-only detail view.
+fn load_credits(conn: &Connection) -> Result<HashMap<i64, Vec<CreditInput>>> {
+    let mut stmt = conn.prepare(
+        "SELECT c.ZBASEBOOKCOLLECTIBLE, pd.ZDISPLAYNAME, c.ZROLEID
+         FROM ZCREATOR c
+         JOIN ZCREDITPERSON cp ON cp.Z_PK = c.ZCREDITPERSON
+         JOIN ZPERSONDELEGATE pd ON pd.Z_PK = cp.ZDELEGATE
+         WHERE c.ZBASEBOOKCOLLECTIBLE IS NOT NULL AND pd.ZDISPLAYNAME IS NOT NULL
+         ORDER BY c.ZBASEBOOKCOLLECTIBLE, c.ZRANK",
+    )?;
+    let mut map: HashMap<i64, Vec<CreditInput>> = HashMap::new();
+    let mut rows = stmt.query([])?;
+    while let Some(row) = rows.next()? {
+        let book_pk: i64 = row.get(0)?;
+        let name: String = row.get(1)?;
+        let role_id: Option<i64> = row.get(2)?;
+        map.entry(book_pk)
+            .or_default()
+            .push(CreditInput { name, role: role_id.and_then(role_for_role_id).map(str::to_string) });
+    }
+    Ok(map)
+}
+
+fn load_characters(conn: &Connection) -> Result<HashMap<i64, Vec<CharacterInput>>> {
+    let mut stmt = conn.prepare(
+        "SELECT ch.ZBASEBOOKCOLLECTIBLE, pd.ZDISPLAYNAME, cp.ZALIAS
+         FROM ZCHARACTER ch
+         JOIN ZCHARACTERPERSON cp ON cp.Z_PK = ch.ZCHARACTERPERSON
+         JOIN ZPERSONDELEGATE pd ON pd.Z_PK = cp.ZDELEGATE
+         WHERE ch.ZBASEBOOKCOLLECTIBLE IS NOT NULL AND pd.ZDISPLAYNAME IS NOT NULL
+         ORDER BY ch.ZBASEBOOKCOLLECTIBLE, ch.ZRANK",
+    )?;
+    let mut map: HashMap<i64, Vec<CharacterInput>> = HashMap::new();
+    let mut rows = stmt.query([])?;
+    while let Some(row) = rows.next()? {
+        let book_pk: i64 = row.get(0)?;
+        map.entry(book_pk).or_default().push(CharacterInput { name: row.get(1)?, alias: row.get(2)? });
+    }
+    Ok(map)
+}
+
+/// Content-level authors are grouped by `ZSTORY` (not by book — a story's
+/// authors can differ from the book's own), same `group_by_book` helper
+/// re-used with a different grouping key.
+fn load_contents(conn: &Connection) -> Result<HashMap<i64, Vec<ContentInput>>> {
+    let content_authors = group_by_book(
+        conn,
+        "SELECT a.ZSTORY, pd.ZDISPLAYNAME
+         FROM ZAUTHOR a
+         JOIN ZAUTHORPERSON ap ON ap.Z_PK = a.ZAUTHORPERSON
+         JOIN ZPERSONDELEGATE pd ON pd.Z_PK = ap.ZDELEGATE
+         WHERE a.ZSTORY IS NOT NULL AND pd.ZDISPLAYNAME IS NOT NULL
+         ORDER BY a.ZSTORY, a.ZRANK",
+    )?;
+
+    let mut stmt = conn.prepare(
+        "SELECT ZBOOK, Z_PK, ZTITLE, ZSUBTITLE, ZNUMBEROFPAGES, ZSTARTPAGE
+         FROM ZSTORY WHERE ZBOOK IS NOT NULL ORDER BY ZBOOK, ZRANK",
+    )?;
+    let mut map: HashMap<i64, Vec<ContentInput>> = HashMap::new();
+    let mut rows = stmt.query([])?;
+    while let Some(row) = rows.next()? {
+        let book_pk: i64 = row.get(0)?;
+        let story_pk: i64 = row.get(1)?;
+        map.entry(book_pk).or_default().push(ContentInput {
+            title: row.get(2)?,
+            subtitle: row.get(3)?,
+            number_of_pages: row.get(4)?,
+            start_page: row.get(5)?,
+            authors: content_authors.get(&story_pk).cloned().unwrap_or_default(),
+        });
+    }
+    Ok(map)
+}
+
+fn load_links(conn: &Connection) -> Result<HashMap<i64, Vec<LinkInput>>> {
+    let mut stmt = conn.prepare(
+        "SELECT ZBASEBOOKCOLLECTIBLE1, ZURL, ZDESCRIPTION
+         FROM ZLINK WHERE ZBASEBOOKCOLLECTIBLE1 IS NOT NULL
+         ORDER BY ZBASEBOOKCOLLECTIBLE1, ZRANK",
+    )?;
+    let mut map: HashMap<i64, Vec<LinkInput>> = HashMap::new();
+    let mut rows = stmt.query([])?;
+    while let Some(row) = rows.next()? {
+        let book_pk: i64 = row.get(0)?;
+        map.entry(book_pk).or_default().push(LinkInput { url: row.get(1)?, description: row.get(2)? });
+    }
+    Ok(map)
+}
+
 /// `collection_pk` filters to one sous-collection; pass `None` for every
 /// sous-collection (needed so a generated page's tab bar / an app's
 /// sidebar has something to switch between).
@@ -367,56 +503,90 @@ pub fn load_books(conn: &Connection, images_dir: Option<&Path>, collection_pk: O
     let genres = load_genres(conn)?;
     let subjects = load_subjects(conn)?;
     let tags = load_tags(conn)?;
+    let credits = load_credits(conn)?;
+    let characters = load_characters(conn)?;
+    let contents = load_contents(conn)?;
+    let links = load_links(conn)?;
 
+    // Named columns (`row.get("alias")`, via rusqlite's `&str` RowIndex)
+    // throughout — this query has too many columns to keep track of safely
+    // by position. Every lookup/person FK gets its own small join pair
+    // (entity table -> its delegate, for the display name), same pattern
+    // as `load_book_for_edit`'s single-book equivalent of this query.
     let sql = "
         SELECT
-            c.Z_PK, c.ZTITLE, c.ZSUBTITLE, c.ZISBN,
-            c.ZNUMBEROFPAGES, c.ZMYRATING, c.ZREADIT, c.ZDATEADDED,
-            c.ZNOTES, c.ZPLOT, c.ZCURRENTVALUE, c.ZPURCHASEPRICE,
-            c.ZPUBLICATIONDAY, c.ZPUBLICATIONMONTH, c.ZPUBLICATIONYEAR,
-            c.ZFRONTCOVER, c.ZBACKCOVER, COALESCE(c.ZQUANTITY, 1),
-            pub_l.ZDISPLAYNAME  AS publisher,
-            ser_l.ZDISPLAYNAME  AS series,
-            fmt_l.ZDISPLAYNAME  AS format,
-            lang_l.ZDISPLAYNAME AS language,
-            ctry_l.ZDISPLAYNAME AS country,
-            cond_l.ZDISPLAYNAME AS condition,
-            loc_l.ZDISPLAYNAME  AS location,
-            col.ZTITLE          AS collection_name,
-            edit_l.ZDISPLAYNAME  AS edition,
-            prnt_l.ZDISPLAYNAME  AS printed_by,
-            vol_l.ZDISPLAYNAME   AS volume,
-            paper_l.ZDISPLAYNAME AS paper_type,
-            own_p.ZDISPLAYNAME   AS owner,
-            store_l.ZDISPLAYNAME AS store
+            c.Z_PK AS id, c.ZTITLE AS title, c.ZSUBTITLE AS subtitle, c.ZISBN AS isbn,
+            c.ZNUMBEROFPAGES AS number_of_pages, c.ZMYRATING AS my_rating,
+            c.ZREADIT AS read_it, c.ZDATEADDED AS date_added,
+            c.ZNOTES AS notes, c.ZPLOT AS plot,
+            c.ZCURRENTVALUE AS current_value, c.ZPURCHASEPRICE AS purchase_price,
+            c.ZPUBLICATIONDAY AS publication_day, c.ZPUBLICATIONMONTH AS publication_month,
+            c.ZPUBLICATIONYEAR AS publication_year,
+            c.ZFRONTCOVER AS front_cover, c.ZBACKCOVER AS back_cover,
+            COALESCE(c.ZQUANTITY, 1) AS quantity,
+            pub_l.ZDISPLAYNAME AS publisher, ser_l.ZDISPLAYNAME AS series,
+            fmt_l.ZDISPLAYNAME AS format, lang_l.ZDISPLAYNAME AS language,
+            ctry_l.ZDISPLAYNAME AS country, cond_l.ZDISPLAYNAME AS condition,
+            loc_l.ZDISPLAYNAME AS location, col.ZTITLE AS collection_name,
+            edit_l.ZDISPLAYNAME AS edition, prnt_l.ZDISPLAYNAME AS printed_by,
+            vol_l.ZDISPLAYNAME AS volume, paper_l.ZDISPLAYNAME AS paper_type,
+            own_p.ZDISPLAYNAME AS owner, store_l.ZDISPLAYNAME AS store,
+            c.ZISSUENUMBER AS issue_number,
+            c.ZHEIGHT AS height, c.ZWIDTH AS width, c.ZDEWEY AS dewey, c.ZLCCN AS lccn,
+            c.ZDEDICATION AS dedication,
+            c.ZFIRSTEDITION AS first_edition, c.ZPRINTING AS printing, c.ZBOXSET AS box_set,
+            c.ZAUDIOLENGTHMINUTES AS audio_length_minutes,
+            c.ZORIGINALTITLE AS original_title, c.ZORIGINALSUBTITLE AS original_subtitle,
+            origpub_l.ZDISPLAYNAME AS original_publisher, origctry_l.ZDISPLAYNAME AS original_country,
+            origlang_l.ZDISPLAYNAME AS original_language,
+            c.ZORIGINALPUBLICATIONYEAR AS original_publication_year,
+            c.ZORIGINALPUBLICATIONMONTH AS original_publication_month,
+            c.ZORIGINALPUBLICATIONDAY AS original_publication_day,
+            c.ZLOCNR AS location_number, c.ZCOVERPRICE AS cover_price,
+            c.ZPURCHASEYEAR AS purchase_year, c.ZPURCHASEMONTH AS purchase_month,
+            c.ZPURCHASEDAY AS purchase_day,
+            c.ZRARE AS rare, c.ZREADTIMES AS read_times,
+            c.ZREADYEAR AS read_year, c.ZREADMONTH AS read_month, c.ZREADDAY AS read_day,
+            ul1_l.ZDISPLAYNAME AS user_lookup1, ul2_l.ZDISPLAYNAME AS user_lookup2,
+            c.ZUSERTEXT1 AS user_text1, c.ZUSERTEXT2 AS user_text2
         FROM ZCOLLECTIBLE c
-        LEFT JOIN ZPUBLISHER p   ON p.Z_PK = c.ZPUBLISHER
-        LEFT JOIN ZLOOKUPITEMDELEGATE pub_l  ON pub_l.Z_PK = p.ZDELEGATE
-        LEFT JOIN ZSERIES s      ON s.Z_PK = c.ZSERIES
-        LEFT JOIN ZLOOKUPITEMDELEGATE ser_l  ON ser_l.Z_PK = s.ZDELEGATE
-        LEFT JOIN ZFORMAT fo     ON fo.Z_PK = c.ZFORMAT
-        LEFT JOIN ZLOOKUPITEMDELEGATE fmt_l  ON fmt_l.Z_PK = fo.ZDELEGATE
-        LEFT JOIN ZLANGUAGE la   ON la.Z_PK = c.ZLANGUAGE
-        LEFT JOIN ZLOOKUPITEMDELEGATE lang_l ON lang_l.Z_PK = la.ZDELEGATE
-        LEFT JOIN ZCOUNTRY ctry  ON ctry.Z_PK = c.ZCOUNTRY
+        LEFT JOIN ZPUBLISHER pub ON pub.Z_PK = c.ZPUBLISHER
+        LEFT JOIN ZLOOKUPITEMDELEGATE pub_l ON pub_l.Z_PK = pub.ZDELEGATE
+        LEFT JOIN ZSERIES ser ON ser.Z_PK = c.ZSERIES
+        LEFT JOIN ZLOOKUPITEMDELEGATE ser_l ON ser_l.Z_PK = ser.ZDELEGATE
+        LEFT JOIN ZFORMAT fmt ON fmt.Z_PK = c.ZFORMAT
+        LEFT JOIN ZLOOKUPITEMDELEGATE fmt_l ON fmt_l.Z_PK = fmt.ZDELEGATE
+        LEFT JOIN ZLANGUAGE lang ON lang.Z_PK = c.ZLANGUAGE
+        LEFT JOIN ZLOOKUPITEMDELEGATE lang_l ON lang_l.Z_PK = lang.ZDELEGATE
+        LEFT JOIN ZCOUNTRY ctry ON ctry.Z_PK = c.ZCOUNTRY
         LEFT JOIN ZLOOKUPITEMDELEGATE ctry_l ON ctry_l.Z_PK = ctry.ZDELEGATE
         LEFT JOIN ZCONDITION cond ON cond.Z_PK = c.ZCONDITION
         LEFT JOIN ZLOOKUPITEMDELEGATE cond_l ON cond_l.Z_PK = cond.ZDELEGATE
-        LEFT JOIN ZLOCATION loc  ON loc.Z_PK = c.ZLOCATION
-        LEFT JOIN ZLOOKUPITEMDELEGATE loc_l  ON loc_l.Z_PK = loc.ZDELEGATE
+        LEFT JOIN ZLOCATION loc ON loc.Z_PK = c.ZLOCATION
+        LEFT JOIN ZLOOKUPITEMDELEGATE loc_l ON loc_l.Z_PK = loc.ZDELEGATE
         LEFT JOIN ZCOLLECTION col ON col.Z_PK = c.ZCOLLECTION
-        LEFT JOIN ZEDITION edit  ON edit.Z_PK = c.ZEDITION
+        LEFT JOIN ZEDITION edit ON edit.Z_PK = c.ZEDITION
         LEFT JOIN ZLOOKUPITEMDELEGATE edit_l ON edit_l.Z_PK = edit.ZDELEGATE
         LEFT JOIN ZPRINTEDBY prnt ON prnt.Z_PK = c.ZPRINTEDBY
         LEFT JOIN ZLOOKUPITEMDELEGATE prnt_l ON prnt_l.Z_PK = prnt.ZDELEGATE
-        LEFT JOIN ZVOLUME vol    ON vol.Z_PK = c.ZVOLUME
-        LEFT JOIN ZLOOKUPITEMDELEGATE vol_l  ON vol_l.Z_PK = vol.ZDELEGATE
+        LEFT JOIN ZVOLUME vol ON vol.Z_PK = c.ZVOLUME
+        LEFT JOIN ZLOOKUPITEMDELEGATE vol_l ON vol_l.Z_PK = vol.ZDELEGATE
         LEFT JOIN ZPAPERTYPE paper ON paper.Z_PK = c.ZPAPERTYPE
         LEFT JOIN ZLOOKUPITEMDELEGATE paper_l ON paper_l.Z_PK = paper.ZDELEGATE
-        LEFT JOIN ZOWNER own     ON own.Z_PK = c.ZOWNER
+        LEFT JOIN ZOWNER own ON own.Z_PK = c.ZOWNER
         LEFT JOIN ZPERSONDELEGATE own_p ON own_p.Z_PK = own.ZDELEGATE
-        LEFT JOIN ZSTORE store   ON store.Z_PK = c.ZSTORE
+        LEFT JOIN ZSTORE store ON store.Z_PK = c.ZSTORE
         LEFT JOIN ZLOOKUPITEMDELEGATE store_l ON store_l.Z_PK = store.ZDELEGATE
+        LEFT JOIN ZPUBLISHER origpub ON origpub.Z_PK = c.ZORIGINALPUBLISHER
+        LEFT JOIN ZLOOKUPITEMDELEGATE origpub_l ON origpub_l.Z_PK = origpub.ZDELEGATE
+        LEFT JOIN ZCOUNTRY origctry ON origctry.Z_PK = c.ZORIGINALCOUNTRY
+        LEFT JOIN ZLOOKUPITEMDELEGATE origctry_l ON origctry_l.Z_PK = origctry.ZDELEGATE
+        LEFT JOIN ZLANGUAGE origlang ON origlang.Z_PK = c.ZORIGINALLANGUAGE
+        LEFT JOIN ZLOOKUPITEMDELEGATE origlang_l ON origlang_l.Z_PK = origlang.ZDELEGATE
+        LEFT JOIN ZUSERLOOKUP1 ul1 ON ul1.Z_PK = c.ZUSERLOOKUP1
+        LEFT JOIN ZLOOKUPITEMDELEGATE ul1_l ON ul1_l.Z_PK = ul1.ZDELEGATE
+        LEFT JOIN ZUSERLOOKUP2 ul2 ON ul2.Z_PK = c.ZUSERLOOKUP2
+        LEFT JOIN ZLOOKUPITEMDELEGATE ul2_l ON ul2_l.Z_PK = ul2.ZDELEGATE
         WHERE c.Z_ENT = ?1 AND (?2 IS NULL OR c.ZCOLLECTION = ?2)
         ORDER BY c.Z_PK";
 
@@ -425,10 +595,10 @@ pub fn load_books(conn: &Connection, images_dir: Option<&Path>, collection_pk: O
 
     let mut books = Vec::new();
     while let Some(row) = rows.next()? {
-        let id: i64 = row.get(0)?;
+        let id: i64 = row.get("id")?;
 
-        let front_cover_file: Option<String> = row.get(15)?;
-        let back_cover_file: Option<String> = row.get(16)?;
+        let front_cover_file: Option<String> = row.get("front_cover")?;
+        let back_cover_file: Option<String> = row.get("back_cover")?;
         let front_cover_path = front_cover_file
             .as_ref()
             .and_then(|f| images_dir.map(|d| d.join(f)))
@@ -438,48 +608,87 @@ pub fn load_books(conn: &Connection, images_dir: Option<&Path>, collection_pk: O
             .and_then(|f| images_dir.map(|d| d.join(f)))
             .map(|p| p.to_string_lossy().into_owned());
 
-        let date_added: Option<f64> = row.get(7)?;
-        let read_it: Option<i64> = row.get(6)?;
+        let date_added: Option<f64> = row.get("date_added")?;
+        let read_it: Option<i64> = row.get("read_it")?;
+        let first_edition: Option<i64> = row.get("first_edition")?;
+        let box_set: Option<i64> = row.get("box_set")?;
+        let rare: Option<i64> = row.get("rare")?;
 
         books.push(Book {
             id,
-            title: row.get(1)?,
-            subtitle: row.get(2)?,
+            title: row.get("title")?,
+            subtitle: row.get("subtitle")?,
             authors: authors.get(&id).cloned().unwrap_or_default(),
-            isbn: row.get(3)?,
-            publisher: row.get(18)?,
-            series: row.get(19)?,
-            format: row.get(20)?,
-            language: row.get(21)?,
-            country: row.get(22)?,
-            condition: row.get(23)?,
-            location: row.get(24)?,
-            edition: row.get(26)?,
-            printed_by: row.get(27)?,
-            volume: row.get(28)?,
-            paper_type: row.get(29)?,
-            owner: row.get(30)?,
-            store: row.get(31)?,
-            publication_day: row.get(12)?,
-            publication_month: row.get(13)?,
-            publication_year: row.get(14)?,
-            number_of_pages: row.get(4)?,
-            my_rating: row.get(5)?,
+            isbn: row.get("isbn")?,
+            publisher: row.get("publisher")?,
+            series: row.get("series")?,
+            format: row.get("format")?,
+            language: row.get("language")?,
+            country: row.get("country")?,
+            condition: row.get("condition")?,
+            location: row.get("location")?,
+            edition: row.get("edition")?,
+            printed_by: row.get("printed_by")?,
+            volume: row.get("volume")?,
+            paper_type: row.get("paper_type")?,
+            owner: row.get("owner")?,
+            store: row.get("store")?,
+            publication_day: row.get("publication_day")?,
+            publication_month: row.get("publication_month")?,
+            publication_year: row.get("publication_year")?,
+            number_of_pages: row.get("number_of_pages")?,
+            my_rating: row.get("my_rating")?,
             read_it: read_it.map(|v| v != 0),
             date_added: date_added.map(core_data_timestamp_to_iso8601),
             genres: genres.get(&id).cloned().unwrap_or_default(),
             subjects: subjects.get(&id).cloned().unwrap_or_default(),
             tags: tags.get(&id).cloned().unwrap_or_default(),
-            notes: row.get(8)?,
-            plot: row.get(9)?,
-            current_value: row.get(10)?,
-            purchase_price: row.get(11)?,
-            collection: row.get(25)?,
-            quantity: row.get(17)?,
+            notes: row.get("notes")?,
+            plot: row.get("plot")?,
+            current_value: row.get("current_value")?,
+            purchase_price: row.get("purchase_price")?,
+            collection: row.get("collection_name")?,
+            quantity: row.get("quantity")?,
             front_cover_file,
             front_cover_path,
             back_cover_file,
             back_cover_path,
+            issue_number: row.get("issue_number")?,
+            height: row.get("height")?,
+            width: row.get("width")?,
+            dewey: row.get("dewey")?,
+            lccn: row.get("lccn")?,
+            dedication: row.get("dedication")?,
+            first_edition: first_edition.map(|v| v != 0),
+            printing: row.get("printing")?,
+            box_set: box_set.map(|v| v != 0),
+            audio_length_minutes: row.get("audio_length_minutes")?,
+            original_title: row.get("original_title")?,
+            original_subtitle: row.get("original_subtitle")?,
+            original_publisher: row.get("original_publisher")?,
+            original_country: row.get("original_country")?,
+            original_language: row.get("original_language")?,
+            original_publication_year: row.get("original_publication_year")?,
+            original_publication_month: row.get("original_publication_month")?,
+            original_publication_day: row.get("original_publication_day")?,
+            location_number: row.get("location_number")?,
+            cover_price: row.get("cover_price")?,
+            purchase_year: row.get("purchase_year")?,
+            purchase_month: row.get("purchase_month")?,
+            purchase_day: row.get("purchase_day")?,
+            rare: rare.map(|v| v != 0),
+            read_times: row.get("read_times")?,
+            read_year: row.get("read_year")?,
+            read_month: row.get("read_month")?,
+            read_day: row.get("read_day")?,
+            user_lookup1: row.get("user_lookup1")?,
+            user_lookup2: row.get("user_lookup2")?,
+            user_text1: row.get("user_text1")?,
+            user_text2: row.get("user_text2")?,
+            credits: credits.get(&id).cloned().unwrap_or_default(),
+            characters: characters.get(&id).cloned().unwrap_or_default(),
+            contents: contents.get(&id).cloned().unwrap_or_default(),
+            links: links.get(&id).cloned().unwrap_or_default(),
         });
     }
     Ok(books)
@@ -528,6 +737,64 @@ pub struct PageBook {
     /// `cover_url` through Tauri's asset protocol instead — see
     /// `resolveCoverSrc()`).
     pub thumb_url: Option<String>,
+
+    // ---- "Product Details" — matches Book Collector's own detail-view
+    // section name, which the user explicitly compared NBC against. ----
+    /// Already resolved on `Book` (added earlier for form autocomplete) but
+    /// never previously carried through to `PageBook` — found while adding
+    /// the rest of "Product Details".
+    pub series: String,
+    pub edition: String,
+    pub printed_by: String,
+    pub volume: String,
+    pub paper_type: String,
+    pub issue_number: Option<i64>,
+    pub height: String,
+    pub width: String,
+    pub dewey: String,
+    pub lccn: String,
+    pub dedication: String,
+    pub first_edition: bool,
+    pub printing: Option<i64>,
+    pub box_set: bool,
+    pub audio_length_minutes: Option<i64>,
+    pub original_title: String,
+    pub original_subtitle: String,
+    pub original_publisher: String,
+    pub original_country: String,
+    pub original_language: String,
+    pub original_publication_year: String,
+    pub original_publication_month: String,
+    pub original_publication_day: String,
+
+    // ---- "Personal Details" ----
+    /// Same gap as `series`/`edition`/etc. above — already resolved on
+    /// `Book`, never carried through to `PageBook` until now.
+    pub owner: String,
+    pub store: String,
+    pub location_number: String,
+    pub cover_price: Option<f64>,
+    pub purchase_year: String,
+    pub purchase_month: String,
+    pub purchase_day: String,
+    pub rare: bool,
+    pub read_it: bool,
+    pub read_times: Option<i64>,
+    pub read_year: String,
+    pub read_month: String,
+    pub read_day: String,
+    pub user_lookup1: String,
+    pub user_lookup2: String,
+    pub user_text1: String,
+    pub user_text2: String,
+    /// ISO 8601, already converted from the Core Data timestamp by `Book`.
+    pub date_added: String,
+
+    // ---- Crédits & Personnages, Contenus, Liens ----
+    pub credits: Vec<CreditInput>,
+    pub characters: Vec<CharacterInput>,
+    pub contents: Vec<ContentInput>,
+    pub links: Vec<LinkInput>,
 }
 
 /// `thumb_url` is left to the caller (`bc_export` pre-generates a small
@@ -562,6 +829,54 @@ pub fn book_to_page_book(b: &Book, thumb_url: Option<String>) -> PageBook {
         quantity: b.quantity,
         cover_url: b.front_cover_path.as_deref().map(file_url),
         thumb_url,
+
+        series: b.series.clone().unwrap_or_else(|| EMPTY.to_string()),
+        edition: b.edition.clone().unwrap_or_else(|| EMPTY.to_string()),
+        printed_by: b.printed_by.clone().unwrap_or_else(|| EMPTY.to_string()),
+        volume: b.volume.clone().unwrap_or_else(|| EMPTY.to_string()),
+        paper_type: b.paper_type.clone().unwrap_or_else(|| EMPTY.to_string()),
+        issue_number: b.issue_number,
+        height: b.height.clone().unwrap_or_else(|| EMPTY.to_string()),
+        width: b.width.clone().unwrap_or_else(|| EMPTY.to_string()),
+        dewey: b.dewey.clone().unwrap_or_else(|| EMPTY.to_string()),
+        lccn: b.lccn.clone().unwrap_or_else(|| EMPTY.to_string()),
+        dedication: b.dedication.clone().unwrap_or_else(|| EMPTY.to_string()),
+        first_edition: b.first_edition.unwrap_or(false),
+        printing: b.printing,
+        box_set: b.box_set.unwrap_or(false),
+        audio_length_minutes: b.audio_length_minutes,
+        original_title: b.original_title.clone().unwrap_or_else(|| EMPTY.to_string()),
+        original_subtitle: b.original_subtitle.clone().unwrap_or_else(|| EMPTY.to_string()),
+        original_publisher: b.original_publisher.clone().unwrap_or_else(|| EMPTY.to_string()),
+        original_country: b.original_country.clone().unwrap_or_else(|| EMPTY.to_string()),
+        original_language: b.original_language.clone().unwrap_or_else(|| EMPTY.to_string()),
+        original_publication_year: b.original_publication_year.clone().unwrap_or_else(|| EMPTY.to_string()),
+        original_publication_month: b.original_publication_month.clone().unwrap_or_else(|| EMPTY.to_string()),
+        original_publication_day: b.original_publication_day.clone().unwrap_or_else(|| EMPTY.to_string()),
+
+        owner: b.owner.clone().unwrap_or_else(|| EMPTY.to_string()),
+        store: b.store.clone().unwrap_or_else(|| EMPTY.to_string()),
+        location_number: b.location_number.clone().unwrap_or_else(|| EMPTY.to_string()),
+        cover_price: b.cover_price,
+        purchase_year: b.purchase_year.clone().unwrap_or_else(|| EMPTY.to_string()),
+        purchase_month: b.purchase_month.clone().unwrap_or_else(|| EMPTY.to_string()),
+        purchase_day: b.purchase_day.clone().unwrap_or_else(|| EMPTY.to_string()),
+        rare: b.rare.unwrap_or(false),
+        read_it: b.read_it.unwrap_or(false),
+        read_times: b.read_times,
+        read_year: b.read_year.clone().unwrap_or_else(|| EMPTY.to_string()),
+        read_month: b.read_month.clone().unwrap_or_else(|| EMPTY.to_string()),
+        read_day: b.read_day.clone().unwrap_or_else(|| EMPTY.to_string()),
+        user_lookup1: b.user_lookup1.clone().unwrap_or_else(|| EMPTY.to_string()),
+        user_lookup2: b.user_lookup2.clone().unwrap_or_else(|| EMPTY.to_string()),
+        user_text1: b.user_text1.clone().unwrap_or_else(|| EMPTY.to_string()),
+        user_text2: b.user_text2.clone().unwrap_or_else(|| EMPTY.to_string()),
+        date_added: b.date_added.clone().unwrap_or_else(|| EMPTY.to_string()),
+
+        credits: b.credits.clone(),
+        characters: b.characters.clone(),
+        contents: b.contents.clone(),
+        links: b.links.clone(),
     }
 }
 
@@ -840,7 +1155,7 @@ fn default_quantity() -> i64 {
     1
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CharacterInput {
     pub name: String,
     #[serde(default)]
@@ -853,14 +1168,14 @@ pub struct CharacterInput {
 /// `UserRole1`, `UserRole2`, `UserRole3` — see `role_id_for_role`),
 /// case-insensitive, or absent/unrecognized for no role (`ZROLEID` left
 /// NULL, as before this field existed).
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CreditInput {
     pub name: String,
     #[serde(default)]
     pub role: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContentInput {
     pub title: String,
     #[serde(default)]
@@ -878,7 +1193,7 @@ pub struct ContentInput {
     pub authors: Vec<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LinkInput {
     pub url: String,
     #[serde(default)]

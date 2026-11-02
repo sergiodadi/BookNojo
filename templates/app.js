@@ -96,6 +96,35 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
+// Canonical role key (what's stored/round-tripped, see role_id_for_role in
+// lib.rs) -> French display label. Shared by the Crédits sub-tab's
+// repeatable list and the read-only detail-card view.
+const ROLE_LABELS = {
+  Translator: 'Traducteur', CoverArtist: 'Artiste de couverture', Editor: 'Éditeur (rôle)',
+  Illustrator: 'Illustrateur', Ghostwriter: 'Nègre littéraire', ForewordAuthor: 'Auteur de la préface',
+  Photographer: 'Photographe', Narrator: 'Narrateur',
+  UserRole1: 'Rôle personnalisé 1', UserRole2: 'Rôle personnalisé 2', UserRole3: 'Rôle personnalisé 3',
+};
+
+// Flat key/value section for the detail card ("Product Details"/"Personal
+// Details" etc., matching Book Collector's own section names) — falsy
+// values (0, '', null) are dropped, same convention `current_value`/
+// `purchase_price` already use just above in selectBook().
+function kvGroup(label, pairs) {
+  const rows = pairs
+    .filter(([, v]) => v)
+    .map(([k, v]) => `<div class="kv-row"><span class="kv-key">${escapeHtml(k)}</span><span class="kv-val">${escapeHtml(String(v))}</span></div>`)
+    .join('');
+  return rows ? `<div class="group"><div class="label">${escapeHtml(label)}</div><div class="kv-list">${rows}</div></div>` : '';
+}
+
+// Repeatable-entry section (Crédits, Personnages, Contenus, Liens) — each
+// entry is a pre-built HTML string from the caller, since the fields
+// differ per type.
+function repGroup(label, itemsHtml) {
+  return itemsHtml.length ? `<div class="group"><div class="label">${escapeHtml(label)}</div><div class="rep-list-view">${itemsHtml.join('')}</div></div>` : '';
+}
+
 const state = {
   collection: null, // set once allBooks has loaded — see boot()
   groupField: 'authors',
@@ -384,6 +413,68 @@ function selectBook(id, scrollIntoView) {
   const subjectTags = (b.subjects || []).map(s => `<span class="tag subject">${escapeHtml(s)}</span>`).join('');
   const userTags = (b.tags || []).map(t => `<span class="tag usertag">${escapeHtml(t)}</span>`).join('');
 
+  // "Product Details" / "Personal Details" — section names match Book
+  // Collector's own detail view, which these were missing entirely against.
+  const dimensions = [b.height, b.width].filter(Boolean).join(' × ');
+  const productDetails = kvGroup('Détails produit', [
+    ['Édition', b.edition],
+    ['Série', b.series ? (b.volume ? `${b.series}, vol. ${b.volume}` : b.series) : ''],
+    ['Imprimé par', b.printed_by],
+    ['Type de papier', b.paper_type],
+    ['Dimensions', dimensions],
+    ['Dewey', b.dewey],
+    ['LCCN', b.lccn],
+    ['Dédicace', b.dedication],
+    ['Première édition', b.first_edition ? 'Oui' : ''],
+    ['Tirage', b.printing],
+    ['Coffret', b.box_set ? 'Oui' : ''],
+    ['Durée audio', b.audio_length_minutes ? `${b.audio_length_minutes} min` : ''],
+    ['N° de parution (Issue)', b.issue_number],
+  ]);
+  const originalPubDate = [b.original_publication_day, b.original_publication_month, b.original_publication_year]
+    .filter(Boolean).join('/');
+  const originalEdition = kvGroup('Édition originale', [
+    ['Titre original', b.original_title],
+    ['Sous-titre original', b.original_subtitle],
+    ['Éditeur original', b.original_publisher],
+    ['Pays original', b.original_country],
+    ['Langue originale', b.original_language],
+    ['Date de publication originale', originalPubDate],
+  ]);
+  const purchaseDate = [b.purchase_day, b.purchase_month, b.purchase_year].filter(Boolean).join('/');
+  const readDate = [b.read_day, b.read_month, b.read_year].filter(Boolean).join('/');
+  const personalDetails = kvGroup('Détails personnels', [
+    ['Propriétaire', b.owner],
+    ['Magasin', b.store],
+    ["N° d'emplacement", b.location_number],
+    ['Prix de couverture', b.cover_price],
+    ["Date d'achat", purchaseDate],
+    ['Rare', b.rare ? 'Oui' : ''],
+    ['Lu', b.read_it ? 'Oui' : ''],
+    ['Nombre de lectures', b.read_times],
+    ['Date de lecture', readDate],
+    ['Champ personnalisé 1', b.user_lookup1 || b.user_text1],
+    ['Champ personnalisé 2', b.user_lookup2 || b.user_text2],
+    ['Ajouté le', b.date_added ? b.date_added.slice(0, 10) : ''],
+  ]);
+
+  const creditsSection = repGroup('Crédits', (b.credits || []).map(c => {
+    const role = c.role ? (ROLE_LABELS[c.role] || c.role) : '';
+    return `<div class="rep-item">${escapeHtml(c.name)}${role ? ` <span class="rep-sub">(${escapeHtml(role)})</span>` : ''}</div>`;
+  }));
+  const charactersSection = repGroup('Personnages', (b.characters || []).map(c =>
+    `<div class="rep-item">${escapeHtml(c.name)}${c.alias ? ` <span class="rep-sub">(alias : ${escapeHtml(c.alias)})</span>` : ''}</div>`));
+  const contentsSection = repGroup('Contenus', (b.contents || []).map(c => {
+    const bits = [];
+    if (c.number_of_pages) bits.push(`${c.number_of_pages} p.`);
+    if (c.start_page) bits.push(`débute p. ${c.start_page}`);
+    if (c.authors && c.authors.length) bits.push(c.authors.join(', '));
+    const sub = c.subtitle ? ` — ${escapeHtml(c.subtitle)}` : '';
+    return `<div class="rep-item">${escapeHtml(c.title)}${sub}${bits.length ? ` <span class="rep-sub">(${escapeHtml(bits.join(' · '))})</span>` : ''}</div>`;
+  }));
+  const linksSection = repGroup('Liens', (b.links || []).map(l =>
+    `<div class="rep-item"><a href="${escapeHtml(l.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(l.description || l.url)}</a></div>`));
+
   detailEl.innerHTML = `
     <div class="card">
       ${cover}
@@ -400,6 +491,13 @@ function selectBook(id, scrollIntoView) {
         ${genreTags ? `<div class="group"><div class="label">Genres</div><div class="tags">${genreTags}</div></div>` : ''}
         ${subjectTags ? `<div class="group"><div class="label">Sujets</div><div class="tags">${subjectTags}</div></div>` : ''}
         ${userTags ? `<div class="group"><div class="label">Tags</div><div class="tags">${userTags}</div></div>` : ''}
+        ${productDetails}
+        ${originalEdition}
+        ${personalDetails}
+        ${creditsSection}
+        ${charactersSection}
+        ${contentsSection}
+        ${linksSection}
         ${b.plot ? '<div class="group"><div class="label">Résumé</div><div class="text-block plot"></div></div>' : ''}
         ${b.notes ? '<div class="group"><div class="label">Notes</div><div class="text-block notes"></div></div>' : ''}
         ${window.__TAURI__ ? '<div class="detail-actions"><button type="button" id="editBookBtn" class="secondary">✏️ Modifier ce livre</button><button type="button" id="deleteBookBtn" class="danger">🗑️ Supprimer ce livre</button></div>' : ''}
@@ -1007,12 +1105,6 @@ function renderAddForm() {
     });
   });
 
-  const ROLE_LABELS = {
-    Translator: 'Traducteur', CoverArtist: 'Artiste de couverture', Editor: 'Éditeur (rôle)',
-    Illustrator: 'Illustrateur', Ghostwriter: 'Nègre littéraire', ForewordAuthor: 'Auteur de la préface',
-    Photographer: 'Photographe', Narrator: 'Narrateur',
-    UserRole1: 'Rôle personnalisé 1', UserRole2: 'Rôle personnalisé 2', UserRole3: 'Rôle personnalisé 3',
-  };
   const creditsListHandle = setupRepeatableList(
     'creditsList', addFormState.credits,
     c => c.role ? `${c.name} (${ROLE_LABELS[c.role] || c.role})` : c.name,
