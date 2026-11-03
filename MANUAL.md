@@ -568,6 +568,14 @@ bien en base, mais introuvable en recherche jusqu'au rechargement suivant
 de la collection. Une boîte de dialogue confirme maintenant explicitement
 le succès de l'ajout.
 
+**v0.45.0** : "🗑️ Supprimer ce livre" ne demandait en réalité jamais
+confirmation — le plugin dialog de Tauri remplace `window.confirm` par
+une version asynchrone (une `Promise`, toujours "vraie" telle quelle),
+donc un `if (!window.confirm(...))` sans `await` ne bloquait jamais rien
+et la suppression continuait immédiatement. Corrigé (`await` ajouté) ;
+confirmé que c'est le seul endroit de l'app qui supprime réellement des
+données persistées.
+
 `app/src/index.html` reste gitignoré (généré par `generate-dev-data.sh`
 depuis `app/src/index.template.html`, committé lui) mais ne contient plus
 de données personnelles depuis l'étape 3 — exclu par précaution tout de

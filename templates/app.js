@@ -574,7 +574,11 @@ async function editBook(b) {
 // export (no window.__TAURI__, no button rendered in the first place).
 async function deleteBookWithConfirm(b) {
   const label = b.title || '(sans titre)';
-  if (!window.confirm(`Supprimer « ${label} » ? Une sauvegarde est prise avant, mais cette action n'est pas réversible depuis NBC.`)) {
+  // Tauri's dialog plugin replaces window.confirm with an async version
+  // (resolves to a Promise, not a boolean) — a bare `if (!window.confirm(...))`
+  // always sees a truthy Promise and never returns early, so the delete
+  // used to go ahead no matter what the user clicked (found in v0.45.0).
+  if (!(await window.confirm(`Supprimer « ${label} » ? Une sauvegarde est prise avant, mais cette action n'est pas réversible depuis NBC.`))) {
     return;
   }
   try {

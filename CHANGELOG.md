@@ -4,6 +4,11 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.45.0] - 2026-11-03
+
+### Fixed
+- **"Supprimer ce livre" ne demandait en réalité aucune confirmation** — signalé par l'utilisateur : la suppression fonctionnait mais sans jamais réellement attendre de réponse. Cause : le plugin dialog de Tauri remplace `window.confirm`/`window.alert` du navigateur par des versions **asynchrones** passant par la vraie boîte de dialogue native (`window.confirm` renvoie désormais une `Promise`, pas un booléen). Le code testait `if (!window.confirm(...))` sans `await` — une `Promise` est toujours "vraie", donc la condition n'était jamais remplie et la suppression continuait immédiatement, quel que soit le bouton cliqué par l'utilisateur (ou même avant qu'il ait pu cliquer). Corrigé en ajoutant `await`. Vérifié qu'il s'agit du **seul** endroit de toute l'app qui supprime réellement des données persistées (pas de suppression de sous-collection ni de suppression en masse) — aucun autre site à corriger.
+
 ## [0.44.0] - 2026-11-03
 
 ### Fixed
