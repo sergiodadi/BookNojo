@@ -6,11 +6,17 @@
 // exactly as before (synchronous, embedded JSON, opened in any browser).
 //
 // Fallback when nothing better is known yet (first launch, nothing in
-// localStorage): this dev machine's sample collection (see
-// testdata-sample/, build-sample-testdata.sh). "File > Import a file..."
-// (step 4) picks a real one and overrides it from then on, remembered
-// across relaunches the same way the rest of the UI state already is.
-const DEV_COLLECTION_PATH = '/Users/serge/Developer/book_collector_export/testdata-sample/MyCollection.bkcp';
+// localStorage): a small, entirely fictional sample collection (see
+// sample-collection/, examples/generate_sample_collection.rs) — safe to
+// ship as a default. This used to point at testdata-sample/, a ~100-book
+// *extract of the developer's real collection*: harmless for local dev
+// (never committed, never packaged) but wrong as the app's shipped
+// default, since it meant a freshly installed NBC opened real personal
+// data on first launch (found by the user after actually installing the
+// built package, v0.49.0). "File > Import a collection..." picks a real
+// one and overrides it from then on, remembered across relaunches the
+// same way the rest of the UI state already is.
+const DEV_COLLECTION_PATH = '/Users/serge/Developer/book_collector_export/sample-collection/MyCollection.bkcp';
 let currentCollectionPath = DEV_COLLECTION_PATH;
 try {
   const saved = localStorage.getItem('bc_collection_path');

@@ -136,6 +136,17 @@ Pour des itérations plus rapides (notamment sur l'app NBC, § 8), un petit
 Structurellement valide (vérifié en l'ouvrant dans Book Collector), mais
 reste des données personnelles — jamais committé (`.gitignore`).
 
+**`sample-collection/` (v0.49.0)** — à la différence de `testdata/`,
+`testdata-rw/` et `testdata-sample/`, celle-ci **est committée** : elle ne
+contient que 10 fiches entièrement inventées (2 sous-collections, "Livres"
+et "BD"), sans aucun lien avec une vraie collection. C'est elle que NBC
+ouvre par défaut au tout premier lancement (voir § 8). Régénérable à tout
+moment :
+
+```bash
+cargo run --release --example generate_sample_collection
+```
+
 ## 7. (Expérimental) Préparer l'ajout d'un livre — étapes 1 à 6 sur 6
 
 > ⚠️ En cours de construction, par étapes. `bc_add resolve`, `plan` et
@@ -554,9 +565,16 @@ perte de temps de diagnostic ; vérifiable avec
 `diff <(md5 -q templates/app.js) <(md5 -q app/src/app.js)`.
 
 Le chemin de la collection chargée au démarrage reste `DEV_COLLECTION_PATH`
-(`templates/app.js`, vers `testdata-sample/`) **seulement comme valeur de
-repli** au tout premier lancement — "File > Import a collection…" le
-remplace et le mémorise (`localStorage`) pour les lancements suivants.
+(`templates/app.js`) **seulement comme valeur de repli** au tout premier
+lancement — "File > Import a collection…" le remplace et le mémorise
+(`localStorage`) pour les lancements suivants.
+
+**v0.49.0** : cette valeur de repli pointe désormais vers
+`sample-collection/` (2 sous-collections inventées, 10 fiches fictives —
+voir § 6) et non plus vers `testdata-sample/` (un extrait de la vraie
+collection) — trouvé par l'utilisateur après avoir réellement installé le
+paquet : une collection fraîchement installée ouvrait par défaut de
+vraies données personnelles.
 
 **"Ajouter un livre" écrit désormais réellement dans la collection**
 (v0.34.0), sans passer par le fichier `new_book.json`/`bc_add` manuel décrit

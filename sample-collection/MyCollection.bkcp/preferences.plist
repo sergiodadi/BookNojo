@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>kCheckCoverSyncFixDone</key>
+	<true/>
+	<key>kCheckForOldSearchStrings</key>
+	<true/>
+	<key>kConnectRevisionNumber</key>
+	<string>1</string>
+	<key>kPreferenceOldBackupsHasMoved</key>
+	<true/>
+	<key>kPreferencesApplicationVersion</key>
+	<string>20.3.1</string>
+	<key>kPreferencesAutoIncrementIndexNumber</key>
+	<true/>
+	<key>kPreferencesDatabaseVersion</key>
+	<string>9</string>
+	<key>kPreferencesIndexNumber</key>
+	<integer>2685</integer>
+	<key>kPreferencesOutlineExpandedFolders</key>
+	<array>
+		<string>0</string>
+	</array>
+	<key>kPreferencesOutlineExpandedFolders_0</key>
+	<array>
+		<string>0</string>
+	</array>
+	<key>kPreferencesOutlineSelectedFolder</key>
+	<string>0</string>
+	<key>kPreferencesOutlineSelectedFolder_0</key>
+	<string>0</string>
+	<key>kPreferencesSelectedItemView</key>
+	<integer>0</integer>
+	<key>kSyncLastDataSetVersion</key>
+	<integer>10</integer>
+	<key>kSyncPersistDBGUID</key>
+	<string>7d03af11844a4c44bd3f1aa028747a9c</string>
+	<key>kSyncPersistLastClearCount</key>
+	<integer>0</integer>
+	<key>kSyncPersistLastSyncedUserID</key>
+	<string>14228</string>
+	<key>kSyncPersistLastUpdateCount</key>
+	<integer>6980</integer>
+</dict>
+</plist>

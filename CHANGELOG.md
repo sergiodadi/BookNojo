@@ -4,6 +4,17 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.49.0] - 2026-11-04
+
+### Fixed
+- **NBC ouvrait une collection personnelle par défaut au premier lancement** — signalé par l'utilisateur après avoir réellement installé le paquet `.dmg` (pas juste testé en développement). Cause : `DEV_COLLECTION_PATH` (`templates/app.js`) pointait vers `testdata-sample/`, un extrait d'une centaine de fiches dérivé de la vraie collection — jamais commité, jamais empaqueté dans le `.dmg` lui-même, mais le chemin restait une référence en dur vers un vrai dossier de données personnelles, chargé automatiquement tant qu'aucune autre collection n'avait encore été importée.
+
+### Added
+- **`sample-collection/` — nouvelle collection d'exemple, entièrement inventée**, qui remplace `testdata-sample/` comme valeur de repli par défaut. 2 sous-collections ("Livres", "BD"), 10 fiches au total (5 par sous-collection), dont 4 (2 par sous-collection) avec **absolument tous les champs** renseignés — titre, auteurs, éditeur, édition originale, crédits avec rôle, personnages, contenus, liens, champs personnalisés, etc. — pour que la fiche détail, le formulaire d'ajout/modification et les statistiques aient toujours de quoi s'afficher pleinement dès l'installation, sans dépendre d'aucune donnée réelle.
+  - Généré par un nouveau script, `examples/generate_sample_collection.rs` (`cargo run --release --example generate_sample_collection`) : part d'une copie du schéma de `testdata/` (seul moyen d'obtenir un fichier `Book_data` valide avec l'outillage actuel), **vide intégralement** toutes les tables de données (chaque livre/auteur/genre/éditeur réel disparaît), crée les 2 sous-collections, puis insère les 10 fiches inventées via `commit_add_book` — le même code déjà testé que l'app elle-même utilise, pas un mécanisme séparé.
+  - Vérifié : `PRAGMA integrity_check` à `ok`, les 10 fiches relues via `bc_export` (le vrai chemin de lecture de l'app) avec les bonnes valeurs, et confirmation explicite qu'aucun nom réel (auteur, éditeur...) n'a survécu au vidage — uniquement les noms inventés.
+  - Contrairement à `testdata/`/`testdata-rw/`/`testdata-sample/` (données personnelles, jamais commitées), `sample-collection/` est commitée dans le dépôt — elle ne contient que des données fictives, et pourra aussi servir de collection de démonstration sûre si ce projet est un jour partagé sur GitHub.
+
 ## [0.48.0] - 2026-11-04
 
 ### Changed
