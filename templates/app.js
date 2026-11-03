@@ -574,14 +574,19 @@ async function editBook(b) {
 // export (no window.__TAURI__, no button rendered in the first place).
 async function deleteBookWithConfirm(b) {
   const label = b.title || '(sans titre)';
-  // Tauri's dialog plugin replaces window.confirm with an async version
-  // (resolves to a Promise, not a boolean) — a bare `if (!window.confirm(...))`
-  // always sees a truthy Promise and never returns early, so the delete
-  // used to go ahead no matter what the user clicked (found in v0.45.0).
-  if (!(await window.confirm(`Supprimer « ${label} » ? Une sauvegarde est prise avant, mais cette action n'est pas réversible depuis NBC.`))) {
-    return;
-  }
   try {
+    // Tauri's dialog plugin replaces window.confirm with an async version
+    // (resolves to a Promise, not a boolean) — a bare `if (!window.confirm(...))`
+    // always sees a truthy Promise and never returns early, so the delete
+    // used to go ahead no matter what the user clicked (found in v0.45.0).
+    // Also inside this try now, not before it: a missing "dialog:default"
+    // capability makes the underlying invoke reject outright, which used to
+    // fail silently with no visible error at all (found right after, in
+    // v0.45.1, testing the v0.45.0 fix) — any failure here should be as
+    // visible as a failed delete_book call, not swallowed.
+    if (!(await window.confirm(`Supprimer « ${label} » ? Une sauvegarde est prise avant, mais cette action n'est pas réversible depuis NBC.`))) {
+      return;
+    }
     await window.__TAURI__.core.invoke('delete_book', { path: currentCollectionPath, bookId: b.id });
     bootWithErrorHandling();
   } catch (err) {

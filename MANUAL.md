@@ -576,6 +576,18 @@ et la suppression continuait immédiatement. Corrigé (`await` ajouté) ;
 confirmé que c'est le seul endroit de l'app qui supprime réellement des
 données persistées.
 
+**v0.45.1** : après ce correctif, "Supprimer" ne faisait plus rien du
+tout. Cause : `app/src-tauri/capabilities/default.json` n'accordait pas
+`dialog:default` à la fenêtre — nécessaire dès qu'une boîte de dialogue
+est déclenchée **depuis le JavaScript** (`window.confirm`/`window.alert`),
+contrairement aux dialogues déclenchés côté Rust (About NBC, erreur de
+version) qui n'en ont pas besoin. Sans cette permission, l'appel était
+silencieusement rejeté, et comme le `await window.confirm(...)` n'était
+pas dans le `try/catch` de la suppression, l'erreur ne s'affichait pas.
+Corrigé : permission ajoutée, et l'appel à `window.confirm` déplacé dans
+le même `try/catch` que la suppression, pour qu'une défaillance future
+s'affiche au lieu d'échouer en silence.
+
 `app/src/index.html` reste gitignoré (généré par `generate-dev-data.sh`
 depuis `app/src/index.template.html`, committé lui) mais ne contient plus
 de données personnelles depuis l'étape 3 — exclu par précaution tout de

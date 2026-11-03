@@ -4,6 +4,11 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.45.1] - 2026-11-03
+
+### Fixed
+- **Après le correctif v0.45.0, "Supprimer ce livre" ne faisait plus rien du tout** (signalé par l'utilisateur dans la minute, en retestant) — pire que le bug précédent (suppression sans confirmation), mais plus facile à diagnostiquer puisque cette fois rien n'était silencieusement destructeur. Cause : `app/src-tauri/capabilities/default.json` n'accordait que `core:default` et `opener:default` à la fenêtre principale — jamais `dialog:default`. Tant que les boîtes de dialogue étaient déclenchées **côté Rust** (About NBC, erreur de version à l'import), cette permission n'était pas nécessaire : elle ne s'applique qu'aux appels qui traversent la frontière IPC **depuis le JavaScript**, ce que `window.confirm`/`window.alert` (patchés par le plugin dialog, voir v0.45.0) font justement. Sans cette permission, l'appel sous-jacent était silencieusement rejeté — et comme `await window.confirm(...)` n'était pas dans le `try/catch` de `deleteBookWithConfirm`, cette erreur n'était jamais affichée : rien ne se passait, aucun message, aucun bouton réagissant. Corrigé en ajoutant `"dialog:default"` aux permissions de la capability, et en déplaçant l'appel à `window.confirm` à l'intérieur du même `try/catch` que la suppression elle-même, pour qu'une défaillance future de ce genre s'affiche au lieu d'échouer en silence.
+
 ## [0.45.0] - 2026-11-03
 
 ### Fixed
