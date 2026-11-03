@@ -569,19 +569,22 @@ même, au cas où un futur changement y réintroduirait des données.
 URL `file://` brute (sandbox de sécurité de la WebView) — contrairement à
 l'export HTML classique, ouvert directement en `file://` dans un
 navigateur. Contournement : le protocole `asset` de Tauri, activé dans
-`app/src-tauri/tauri.conf.json` (portée actuelle : `testdata/`,
-`testdata-rw/`, `testdata-sample/`, `collection/`,
-`~/Documents/Collectorz/`) + une fonction `resolveCoverSrc()` dans
+`app/src-tauri/tauri.conf.json` + une fonction `resolveCoverSrc()` dans
 `templates/app.js` qui ne s'active que si `window.__TAURI__` existe (donc
-jamais dans l'export HTML classique). ⚠️ Si une nouvelle collection est
-ouverte depuis un emplacement hors de cette portée (ou un nouveau dossier
-de test est créé), il faudra l'y ajouter — oubli déjà fait une fois pour
-`testdata-sample/`, couvertures silencieusement absentes sans aucune
-erreur JS (v0.31.1). Le sélecteur de fichier de l'étape 4 permet
-maintenant d'ouvrir d'autres collections, mais la portée reste **statique**
-— ouvrir une collection ailleurs que les emplacements déjà listés y
-cachera encore les couvertures ; ça restera le cas tant que cette portée
-n'est pas rendue dynamique.
+jamais dans l'export HTML classique).
+
+**v0.43.0 — portée du protocole `asset` rendue dynamique.** Jusqu'ici
+cette portée était une liste figée de chemins propres à la machine de
+développement (`testdata/`, `~/Documents/Collectorz/`, etc.) — ça
+fonctionnait ici, mais aurait silencieusement caché les couvertures de
+toute collection ouverte ailleurs (bloquant pour un futur utilisateur
+installant l'app depuis GitHub, dont la collection vivra forcément à un
+autre endroit). `tauri.conf.json` a maintenant une portée vide
+(`"scope": []`, refus par défaut) ; `load_collection`
+(`app/src-tauri/src/lib.rs`) autorise désormais dynamiquement, à chaque
+ouverture de collection, uniquement le dossier `.bkcp`/`.col` réellement
+ouvert — fonctionne pour n'importe quel emplacement, sans liste à
+maintenir à l'avance.
 
 **v0.38.0 — Supprimer un livre.** Bouton "🗑️ Supprimer ce livre" dans le
 panneau de détail (app NBC uniquement) — confirmation native, sauvegarde

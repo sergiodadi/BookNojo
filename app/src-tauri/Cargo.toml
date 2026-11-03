@@ -5,7 +5,7 @@ name = "nbc"
 # the previous static "0.1.0" meant both this crate's own env!("CARGO_PKG_VERSION")
 # (the About NBC dialog) and tauri.conf.json's bundle version were silently
 # stale since the app was scaffolded.
-version = "0.42.0"
+version = "0.43.0"
 description = "NBC (nom provisoire)"
 authors = ["Serge"]
 edition = "2024"
@@ -33,6 +33,12 @@ serde_json = "1"
 # for reading a collection, rather than duplicating ~150 lines of joins.
 book_collector_export = { path = "../.." }
 
+[dev-dependencies]
+# "test" feature only (Cargo keeps it out of release builds, since
+# dev-dependencies never compile into `cargo build`) — needed for
+# `tauri::test::mock_app`, used to unit-test `grant_asset_scope_for_collection`
+# without actually opening a window.
+tauri = { version = "2", features = ["test"] }
 
 # Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
 [profile.release]

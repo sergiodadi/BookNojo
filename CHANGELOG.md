@@ -4,6 +4,14 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.43.0] - 2026-11-03
+
+### Changed
+- **`assetProtocol.scope` rendu dynamique** — jusqu'ici, la liste des dossiers autorisés à servir des images de couverture (`app/src-tauri/tauri.conf.json`) était codée en dur sur les chemins de développement de cette machine (`testdata/`, `~/Documents/Collectorz/`, etc.). Ça fonctionnait pour l'usage actuel, mais c'était un obstacle direct à toute distribution publique (GitHub) : la collection d'un autre utilisateur, à un emplacement différent, se serait vue refuser silencieusement ses couvertures (aucune erreur visible, juste des images manquantes). La commande `load_collection` autorise désormais, à l'ouverture de chaque collection, uniquement le dossier `.bkcp`/`.col` réellement ouvert (`app.asset_protocol_scope().allow_directory(...)`, API `Manager::asset_protocol_scope` de Tauri) — ça fonctionne pour n'importe quel emplacement, sans liste à maintenir à l'avance. `tauri.conf.json` passe à `"scope": []` (refus par défaut, tout est désormais accordé dynamiquement).
+
+### Verified
+- Nouveau test unitaire (`app/src-tauri/src/lib.rs`, via `tauri::test::mock_app`) : confirme qu'un dossier non ouvert reste refusé par défaut, qu'ouvrir une collection autorise bien son propre dossier (couvertures dans `Images/` comprises), et que ça n'élargit pas l'accès à un dossier non lié. Nécessite la nouvelle dépendance de développement `tauri` avec la fonctionnalité `test` (jamais compilée dans un `cargo build` normal, uniquement pour `cargo test`).
+
 ## [0.42.0] - 2026-11-02
 
 ### Added

@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use tauri::menu::{MenuBuilder, SubmenuBuilder};
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 
 /// Only collections produced by this exact Book Collector release are known
@@ -14,10 +14,35 @@ const SUPPORTED_BKCP_VERSION: &str = "20.3.1";
 /// uses — so `templates/app.js` renders it identically either way. Errors
 /// are returned as plain strings (Tauri's IPC boundary can't carry
 /// `anyhow::Error`), with the original context preserved in the message.
+///
+/// Also grants the asset protocol (used for `convertFileSrc`-loaded cover
+/// images) access to this collection's own folder — see
+/// `grant_asset_scope_for_collection` for why this needs to happen
+/// dynamically rather than via a static list in `tauri.conf.json`.
 #[tauri::command]
-fn load_collection(path: String) -> Result<Vec<book_collector_export::PageBook>, String> {
+fn load_collection(app: tauri::AppHandle, path: String) -> Result<Vec<book_collector_export::PageBook>, String> {
     let db_path = book_collector_export::resolve_db_path(Path::new(&path)).map_err(|e| format!("{e:#}"))?;
+    grant_asset_scope_for_collection(&app, &db_path);
     book_collector_export::load_page_books(&db_path).map_err(|e| format!("{e:#}"))
+}
+
+/// Allows the asset protocol to serve files (cover images) from whichever
+/// collection folder was just opened. The WebView's security sandbox blocks
+/// raw `file://` loads, so cover images go through Tauri's asset protocol
+/// instead (`convertFileSrc` in `templates/app.js`), which only serves paths
+/// explicitly in scope. A static scope list in `tauri.conf.json` would have
+/// to name every possible collection location in advance — fine on the
+/// developer's own machine (where the test fixtures live at fixed paths),
+/// but broken for anyone else who clones this project and opens a
+/// collection from wherever theirs happens to live. Granting the scope here,
+/// at the moment a collection is actually opened, works for any location
+/// without needing to know it ahead of time. Best-effort: a failure here
+/// only means cover images won't load, not that the collection itself
+/// failed to open, so it's never surfaced as an error.
+fn grant_asset_scope_for_collection<R: tauri::Runtime>(app: &tauri::AppHandle<R>, db_path: &Path) {
+    if let Some(collection_dir) = db_path.parent() {
+        let _ = app.asset_protocol_scope().allow_directory(collection_dir, true);
+    }
 }
 
 /// The NBC app's HTML shell (`app/src/index.template.html`) is copied as-is
@@ -298,4 +323,36 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn grant_asset_scope_for_collection_allows_only_the_opened_collections_own_folder() {
+        let app = tauri::test::mock_app();
+        let collection_dir = std::env::temp_dir().join("nbc_asset_scope_test_collection");
+        let db_path = collection_dir.join("Book_data");
+        let unrelated_dir = std::env::temp_dir().join("nbc_asset_scope_test_unrelated");
+        let unrelated_file = unrelated_dir.join("Images/cover.jpg");
+
+        let scope = app.asset_protocol_scope();
+        assert!(
+            !scope.is_allowed(&unrelated_file),
+            "scope must deny everything by default, before any collection is opened"
+        );
+
+        grant_asset_scope_for_collection(app.handle(), &db_path);
+
+        assert!(
+            scope.is_allowed(collection_dir.join("Images/cover.jpg")),
+            "opening a collection must allow loading cover images from its own folder, \
+             wherever on disk that folder happens to be"
+        );
+        assert!(
+            !scope.is_allowed(&unrelated_file),
+            "granting access to one collection's folder must not widen access to unrelated folders"
+        );
+    }
 }
