@@ -98,6 +98,15 @@ Dans la colonne de gauche, cliquer sur le **nombre** à droite de la ligne
 entre un tri alphabétique (défaut) et un tri par nombre de livres
 décroissant — recliquer y revient (v0.42.0).
 
+**Interface bilingue (v0.46.0)** : un sélecteur **FR / EN** dans l'en-tête
+(à côté du numéro de version) bascule toute l'interface — regroupement,
+liste, fiche détail, statistiques, formulaire "Ajouter un livre" — entre
+français et anglais, mémorisé d'une ouverture à l'autre. Les messages
+renvoyés par l'application NBC elle-même (confirmations d'écriture,
+erreurs de sauvegarde, etc.) restent en français quelle que soit la
+langue choisie — seule l'interface générée côté navigateur est traduite
+pour l'instant.
+
 ## 6. Copie de travail et tests
 
 Pour ne jamais lire ni risquer de modifier le fichier original pendant les

@@ -17,6 +17,23 @@ try {
   if (saved) currentCollectionPath = saved;
 } catch (e) { /* ignore */ }
 
+// UI language — a separate localStorage key from the rest of the UI state
+// (bc_state), since it's a lower-level preference, not collection-specific
+// navigation state. Everything user-visible goes through t()/ROLE_LABELS so
+// toggling it re-renders the whole app consistently rather than leaving some
+// panels translated and others not.
+let currentLang = 'fr';
+try {
+  const savedLang = localStorage.getItem('bc_lang');
+  if (savedLang === 'fr' || savedLang === 'en') currentLang = savedLang;
+} catch (e) { /* ignore */ }
+
+function t(key, vars) {
+  let s = (I18N[currentLang] && I18N[currentLang][key]) ?? I18N.fr[key] ?? key;
+  if (vars) for (const k of Object.keys(vars)) s = s.replaceAll(`{${k}}`, vars[k]);
+  return s;
+}
+
 async function loadAllBooks() {
   if (window.__TAURI__) {
     return await window.__TAURI__.core.invoke('load_collection', { path: currentCollectionPath });
@@ -97,13 +114,365 @@ function escapeHtml(s) {
 }
 
 // Canonical role key (what's stored/round-tripped, see role_id_for_role in
-// lib.rs) -> French display label. Shared by the Crédits sub-tab's
-// repeatable list and the read-only detail-card view.
+// lib.rs) -> display label, per language. Shared by the Crédits sub-tab's
+// repeatable list, its role <select>, and the read-only detail-card view.
 const ROLE_LABELS = {
-  Translator: 'Traducteur', CoverArtist: 'Artiste de couverture', Editor: 'Éditeur (rôle)',
-  Illustrator: 'Illustrateur', Ghostwriter: 'Nègre littéraire', ForewordAuthor: 'Auteur de la préface',
-  Photographer: 'Photographe', Narrator: 'Narrateur',
-  UserRole1: 'Rôle personnalisé 1', UserRole2: 'Rôle personnalisé 2', UserRole3: 'Rôle personnalisé 3',
+  fr: {
+    Translator: 'Traducteur', CoverArtist: 'Artiste de couverture', Editor: 'Éditeur (rôle)',
+    Illustrator: 'Illustrateur', Ghostwriter: 'Nègre littéraire', ForewordAuthor: 'Auteur de la préface',
+    Photographer: 'Photographe', Narrator: 'Narrateur',
+    UserRole1: 'Rôle personnalisé 1', UserRole2: 'Rôle personnalisé 2', UserRole3: 'Rôle personnalisé 3',
+  },
+  en: {
+    Translator: 'Translator', CoverArtist: 'Cover artist', Editor: 'Editor (role)',
+    Illustrator: 'Illustrator', Ghostwriter: 'Ghostwriter', ForewordAuthor: 'Foreword author',
+    Photographer: 'Photographer', Narrator: 'Narrator',
+    UserRole1: 'Custom role 1', UserRole2: 'Custom role 2', UserRole3: 'Custom role 3',
+  },
+};
+
+// Every static (non-data-driven) user-facing string in this app, in both
+// languages — see t()/setLang() near the top of the file. Rust-side
+// messages returned from Tauri commands (success/error text from
+// commit_add_book, delete_book, etc.) are a deliberate exception: they stay
+// French-only for now, documented in CHANGELOG.md/MANUAL.md as a known,
+// separate follow-up (would need a `lang` parameter threaded through every
+// IPC call and bilingual message tables in the Rust crates).
+const I18N = {
+  fr: {
+    nav_back_to_collection: '📚 Collection',
+    nav_stats: '📊 Statistiques',
+    nav_add: '➕ Ajouter un livre',
+
+    group_all: 'Tous',
+    group_sort_tooltip_active: 'Trié par nombre de livres — cliquer pour revenir au tri alphabétique',
+    group_sort_tooltip_inactive: 'Cliquer pour trier par nombre de livres',
+    azbar_all: 'Tout',
+
+    opt_group_authors: 'Auteur', opt_group_genres: 'Genre', opt_group_publisher: 'Éditeur',
+    opt_group_format: 'Format', opt_group_language: 'Langue', opt_group_country: 'Pays',
+    opt_sort_title: 'Titre (A→Z)', opt_sort_author: 'Auteur (A→Z)',
+    opt_sort_year_desc: 'Année (récent d\'abord)', opt_sort_publisher: 'Éditeur (A→Z)',
+    list_search_placeholder: 'Rechercher titre ou auteur…',
+    list_view_list: '☰ Liste', list_view_grid: '▦ Grille',
+    col_title: 'Titre', col_author: 'Auteur',
+    list_prev: '‹ Préc.', list_next: 'Suiv. ›',
+    list_select_book: 'Sélectionnez un livre.',
+
+    list_page_info: 'Page {page} / {total}',
+    list_scope_books: '{count} livres',
+    list_empty_view: 'Aucun livre dans cette vue.',
+    list_book_not_found: 'Livre introuvable.',
+    list_no_title: '(sans titre)',
+
+    detail_current_value: 'Valeur actuelle : {v}',
+    detail_purchase_price: 'Prix d\'achat : {v}',
+    detail_group_product: 'Détails produit',
+    detail_field_edition: 'Édition',
+    detail_field_series: 'Série',
+    detail_field_printed_by: 'Imprimé par',
+    detail_field_paper_type: 'Type de papier',
+    detail_field_dimensions: 'Dimensions',
+    detail_field_dedication: 'Dédicace',
+    detail_field_first_edition: 'Première édition',
+    detail_yes: 'Oui',
+    detail_field_printing: 'Tirage',
+    detail_field_box_set: 'Coffret',
+    detail_field_audio_length: 'Durée audio',
+    detail_field_issue_number: 'N° de parution (Issue)',
+    detail_group_original_edition: 'Édition originale',
+    detail_field_original_title: 'Titre original',
+    detail_field_original_subtitle: 'Sous-titre original',
+    detail_field_original_publisher: 'Éditeur original',
+    detail_field_original_country: 'Pays original',
+    detail_field_original_language: 'Langue originale',
+    detail_field_original_pub_date: 'Date de publication originale',
+    detail_group_personal: 'Détails personnels',
+    detail_field_owner: 'Propriétaire',
+    detail_field_store: 'Magasin',
+    detail_field_location_number: 'N° d\'emplacement',
+    detail_field_cover_price: 'Prix de couverture',
+    detail_field_purchase_date: 'Date d\'achat',
+    detail_field_rare: 'Rare',
+    detail_field_read_it: 'Lu',
+    detail_field_read_times: 'Nombre de lectures',
+    detail_field_read_date: 'Date de lecture',
+    detail_field_custom1: 'Champ personnalisé 1',
+    detail_field_custom2: 'Champ personnalisé 2',
+    detail_field_date_added: 'Ajouté le',
+    detail_group_credits: 'Crédits',
+    detail_group_characters: 'Personnages',
+    detail_group_contents: 'Contenus',
+    detail_group_links: 'Liens',
+    detail_alias: '(alias : {alias})',
+    detail_starts_at_page: 'débute p. {n}',
+    detail_group_genres: 'Genres',
+    detail_group_subjects: 'Sujets',
+    detail_group_plot: 'Résumé',
+    detail_btn_edit: '✏️ Modifier ce livre',
+    detail_btn_delete: '🗑️ Supprimer ce livre',
+    detail_delete_confirm: 'Supprimer « {title} » ? Une sauvegarde est prise avant, mais cette action n\'est pas réversible depuis NBC.',
+    detail_delete_failed: 'Échec de la suppression : {err}',
+    detail_edit_load_failed: 'Impossible de charger ce livre pour modification : {err}',
+    common_remove: 'Retirer',
+
+    stats_title: 'Statistiques — {name}',
+    stats_entries: '{n} fiches',
+    stats_copies: '{n} exemplaires',
+    stats_value_suffix: 'de valeur totale',
+    stats_no_cover: '{n} sans couverture',
+    stats_no_isbn: '{n} sans ISBN',
+    stats_no_author: '{n} sans auteur',
+    stats_formats: 'Formats',
+    stats_languages: 'Langues',
+    stats_publishers_top10: 'Éditeurs (top 10)',
+    stats_by_decade: 'Par décennie de publication',
+    stats_no_data: 'Aucune donnée.',
+
+    add_heading_tauri: 'Ajouter un livre',
+    add_heading_static: 'Ajouter un livre (préparation — étapes 1 à 5)',
+    add_heading_edit: 'Modifier : {title}',
+    add_hint_tauri: 'Ce formulaire écrit directement dans la collection ouverte, après confirmation. L\'onglet Couvertures n\'est pas repris ici (gestion de fichiers, hors périmètre).',
+    add_hint_static: 'Ce formulaire ne modifie aucune donnée existante : il génère un fichier <code>new_book.json</code> à télécharger, à passer ensuite à <code>bc_add</code> pour vérifier ce qui existe déjà avant toute écriture réelle. L\'onglet Couvertures n\'est pas repris ici (gestion de fichiers, hors périmètre).',
+    add_hint_edit: 'Les champs ci-dessous reflètent les valeurs actuelles de ce livre. Une confirmation sera demandée avant toute écriture.',
+    add_submit_tauri: '💾 Enregistrer',
+    add_submit_static: '⬇️ Générer new_book.json',
+    add_submit_edit: '💾 Enregistrer les modifications',
+
+    add_tab_main: 'Principal', add_tab_details: 'Détails', add_tab_personal: 'Personnel',
+    add_tab_credits: 'Crédits & Personnages', add_tab_contents: 'Contenus',
+    add_tab_plot: 'Intrigue & Notes', add_tab_links: 'Liens',
+
+    add_field_title: 'Titre *', add_field_subtitle: 'Sous-titre',
+    add_field_number_of_pages: 'Nombre de pages', add_field_year: 'Année',
+    add_field_month: 'Mois', add_field_day: 'Jour', add_field_publisher: 'Éditeur',
+    add_field_language: 'Langue', add_field_country: 'Pays', add_field_location: 'Emplacement',
+    add_field_location_number: 'N° d\'emplacement', add_field_quantity: 'Quantité',
+    add_field_collection: 'Sous-collection *',
+    add_field_authors: 'Auteurs', add_placeholder_name_enter: 'Nom, puis Entrée',
+    add_field_genres: 'Genres', add_placeholder_genre_enter: 'Genre, puis Entrée',
+    add_field_subjects: 'Sujets', add_placeholder_subject_enter: 'Sujet, puis Entrée',
+
+    add_field_issue_number: 'Issue N°', add_field_edition: 'Édition',
+    add_field_printed_by: 'Imprimé par', add_field_series: 'Série', add_field_volume: 'Volume',
+    add_field_paper_type: 'Type de papier',
+    add_field_height: 'Hauteur', add_placeholder_height: 'ex. 21 cm',
+    add_field_width: 'Largeur', add_placeholder_width: 'ex. 14 cm',
+    add_field_printing: 'Tirage', add_field_audio_length: 'Durée audio (min)',
+    add_field_dedication: 'Dédicace',
+    add_check_first_edition: 'Première édition', add_check_abridged: 'Abrégé', add_check_box_set: 'Coffret',
+    add_subhead_original_edition: 'Édition originale',
+    add_field_original_title: 'Titre original', add_field_original_subtitle: 'Sous-titre original',
+    add_field_original_publisher: 'Éditeur original', add_field_original_country: 'Pays original',
+    add_field_original_language: 'Langue originale', add_field_original_year: 'Année orig.',
+    add_field_original_month: 'Mois orig.', add_field_original_day: 'Jour orig.',
+
+    add_field_condition: 'État', add_field_owner: 'Propriétaire', add_field_store: 'Magasin',
+    add_field_current_value: 'Valeur actuelle', add_field_purchase_price: 'Prix d\'achat',
+    add_field_cover_price: 'Prix de couverture', add_field_purchase_year: 'Année d\'achat',
+    add_field_purchase_month: 'Mois d\'achat', add_field_purchase_day: 'Jour d\'achat',
+    add_field_read_times: 'Nombre de lectures', add_field_read_year: 'Année de lecture',
+    add_field_read_month: 'Mois de lecture', add_field_read_day: 'Jour de lecture',
+    add_field_rating: 'Note (0–10)',
+    add_check_rare: 'Rare', add_check_read_it: 'Lu',
+    add_subhead_custom_fields: 'Champs personnalisés',
+    add_field_custom_lookup1: 'Champ personnalisé 1 (liste)', add_field_custom_lookup2: 'Champ personnalisé 2 (liste)',
+    add_field_custom_text1: 'Champ personnalisé 1 (texte)', add_field_custom_text2: 'Champ personnalisé 2 (texte)',
+
+    add_field_credits_label: 'Crédits (traducteur, illustrateur...)',
+    add_placeholder_name: 'Nom', add_role_placeholder: '— Rôle (optionnel) —',
+    common_add: 'Ajouter',
+    add_field_characters_label: 'Personnages',
+    add_placeholder_character_name: 'Nom du personnage', add_placeholder_alias: 'Alias (optionnel)',
+
+    add_contents_hint: 'Plusieurs histoires/nouvelles dans ce livre, chacune avec ses propres auteurs.',
+    add_field_content_title: 'Titre', add_field_content_subtitle: 'Sous-titre',
+    add_field_start_page: 'Page de début', add_field_content_authors: 'Auteurs de ce contenu',
+    add_btn_add_content: '➕ Ajouter ce contenu',
+
+    add_field_plot: 'Intrigue / résumé',
+    add_placeholder_description: 'Description (optionnel)',
+
+    add_confirm_title_heading: 'Confirmer l\'ajout',
+    add_confirm_hint_new: '{n} nouvelle(s) valeur(s) seront créées (marquées "nouveau" ci-dessous) :',
+    add_confirm_hint_none_new: 'Toutes les valeurs ci-dessous existent déjà dans la collection.',
+    add_confirm_empty_fields: '(aucune valeur de type éditeur/genre/auteur/etc. sur cette fiche)',
+    add_confirm_badge_new: 'nouveau',
+    common_cancel: 'Annuler', common_save: 'Enregistrer', add_confirm_saving: 'Enregistrement…',
+
+    add_err_title_required: 'Le titre est obligatoire.',
+    add_err_collection_required: 'La sous-collection est obligatoire.',
+    add_static_download_success: 'new_book.json téléchargé — passe-le à bc_add pour le vérifier.',
+
+    boot_load_failed_heading: 'Impossible de charger la collection',
+  },
+  en: {
+    nav_back_to_collection: '📚 Collection',
+    nav_stats: '📊 Statistics',
+    nav_add: '➕ Add a book',
+
+    group_all: 'All',
+    group_sort_tooltip_active: 'Sorted by book count — click to go back to alphabetical order',
+    group_sort_tooltip_inactive: 'Click to sort by book count',
+    azbar_all: 'All',
+
+    opt_group_authors: 'Author', opt_group_genres: 'Genre', opt_group_publisher: 'Publisher',
+    opt_group_format: 'Format', opt_group_language: 'Language', opt_group_country: 'Country',
+    opt_sort_title: 'Title (A→Z)', opt_sort_author: 'Author (A→Z)',
+    opt_sort_year_desc: 'Year (newest first)', opt_sort_publisher: 'Publisher (A→Z)',
+    list_search_placeholder: 'Search title or author…',
+    list_view_list: '☰ List', list_view_grid: '▦ Grid',
+    col_title: 'Title', col_author: 'Author',
+    list_prev: '‹ Prev.', list_next: 'Next ›',
+    list_select_book: 'Select a book.',
+
+    list_page_info: 'Page {page} of {total}',
+    list_scope_books: '{count} books',
+    list_empty_view: 'No books in this view.',
+    list_book_not_found: 'Book not found.',
+    list_no_title: '(untitled)',
+
+    detail_current_value: 'Current value: {v}',
+    detail_purchase_price: 'Purchase price: {v}',
+    detail_group_product: 'Product details',
+    detail_field_edition: 'Edition',
+    detail_field_series: 'Series',
+    detail_field_printed_by: 'Printed by',
+    detail_field_paper_type: 'Paper type',
+    detail_field_dimensions: 'Dimensions',
+    detail_field_dedication: 'Dedication',
+    detail_field_first_edition: 'First edition',
+    detail_yes: 'Yes',
+    detail_field_printing: 'Printing',
+    detail_field_box_set: 'Box set',
+    detail_field_audio_length: 'Audio length',
+    detail_field_issue_number: 'Issue number',
+    detail_group_original_edition: 'Original edition',
+    detail_field_original_title: 'Original title',
+    detail_field_original_subtitle: 'Original subtitle',
+    detail_field_original_publisher: 'Original publisher',
+    detail_field_original_country: 'Original country',
+    detail_field_original_language: 'Original language',
+    detail_field_original_pub_date: 'Original publication date',
+    detail_group_personal: 'Personal details',
+    detail_field_owner: 'Owner',
+    detail_field_store: 'Store',
+    detail_field_location_number: 'Location number',
+    detail_field_cover_price: 'Cover price',
+    detail_field_purchase_date: 'Purchase date',
+    detail_field_rare: 'Rare',
+    detail_field_read_it: 'Read',
+    detail_field_read_times: 'Times read',
+    detail_field_read_date: 'Date read',
+    detail_field_custom1: 'Custom field 1',
+    detail_field_custom2: 'Custom field 2',
+    detail_field_date_added: 'Added on',
+    detail_group_credits: 'Credits',
+    detail_group_characters: 'Characters',
+    detail_group_contents: 'Contents',
+    detail_group_links: 'Links',
+    detail_alias: '(alias: {alias})',
+    detail_starts_at_page: 'starts at p. {n}',
+    detail_group_genres: 'Genres',
+    detail_group_subjects: 'Subjects',
+    detail_group_plot: 'Summary',
+    detail_btn_edit: '✏️ Edit this book',
+    detail_btn_delete: '🗑️ Delete this book',
+    detail_delete_confirm: 'Delete "{title}"? A backup is taken first, but this action cannot be undone from within NBC.',
+    detail_delete_failed: 'Delete failed: {err}',
+    detail_edit_load_failed: 'Could not load this book for editing: {err}',
+    common_remove: 'Remove',
+
+    stats_title: 'Statistics — {name}',
+    stats_entries: '{n} entries',
+    stats_copies: '{n} copies',
+    stats_value_suffix: 'total value',
+    stats_no_cover: '{n} with no cover',
+    stats_no_isbn: '{n} with no ISBN',
+    stats_no_author: '{n} with no author',
+    stats_formats: 'Formats',
+    stats_languages: 'Languages',
+    stats_publishers_top10: 'Publishers (top 10)',
+    stats_by_decade: 'By publication decade',
+    stats_no_data: 'No data.',
+
+    add_heading_tauri: 'Add a book',
+    add_heading_static: 'Add a book (preview — steps 1 to 5)',
+    add_heading_edit: 'Edit: {title}',
+    add_hint_tauri: 'This form writes directly into the open collection, once confirmed. The Covers tab isn\'t included here (file management, out of scope).',
+    add_hint_static: 'This form never modifies existing data: it generates a <code>new_book.json</code> file to download, to pass on to <code>bc_add</code> afterwards to check what already exists before any real write. The Covers tab isn\'t included here (file management, out of scope).',
+    add_hint_edit: 'The fields below reflect this book\'s current values. A confirmation will be asked before anything is written.',
+    add_submit_tauri: '💾 Save',
+    add_submit_static: '⬇️ Generate new_book.json',
+    add_submit_edit: '💾 Save changes',
+
+    add_tab_main: 'Main', add_tab_details: 'Details', add_tab_personal: 'Personal',
+    add_tab_credits: 'Credits & Characters', add_tab_contents: 'Contents',
+    add_tab_plot: 'Plot & Notes', add_tab_links: 'Links',
+
+    add_field_title: 'Title *', add_field_subtitle: 'Subtitle',
+    add_field_number_of_pages: 'Number of pages', add_field_year: 'Year',
+    add_field_month: 'Month', add_field_day: 'Day', add_field_publisher: 'Publisher',
+    add_field_language: 'Language', add_field_country: 'Country', add_field_location: 'Location',
+    add_field_location_number: 'Location number', add_field_quantity: 'Quantity',
+    add_field_collection: 'Sub-collection *',
+    add_field_authors: 'Authors', add_placeholder_name_enter: 'Name, then Enter',
+    add_field_genres: 'Genres', add_placeholder_genre_enter: 'Genre, then Enter',
+    add_field_subjects: 'Subjects', add_placeholder_subject_enter: 'Subject, then Enter',
+
+    add_field_issue_number: 'Issue number', add_field_edition: 'Edition',
+    add_field_printed_by: 'Printed by', add_field_series: 'Series', add_field_volume: 'Volume',
+    add_field_paper_type: 'Paper type',
+    add_field_height: 'Height', add_placeholder_height: 'e.g. 21 cm',
+    add_field_width: 'Width', add_placeholder_width: 'e.g. 14 cm',
+    add_field_printing: 'Printing', add_field_audio_length: 'Audio length (min)',
+    add_field_dedication: 'Dedication',
+    add_check_first_edition: 'First edition', add_check_abridged: 'Abridged', add_check_box_set: 'Box set',
+    add_subhead_original_edition: 'Original edition',
+    add_field_original_title: 'Original title', add_field_original_subtitle: 'Original subtitle',
+    add_field_original_publisher: 'Original publisher', add_field_original_country: 'Original country',
+    add_field_original_language: 'Original language', add_field_original_year: 'Orig. year',
+    add_field_original_month: 'Orig. month', add_field_original_day: 'Orig. day',
+
+    add_field_condition: 'Condition', add_field_owner: 'Owner', add_field_store: 'Store',
+    add_field_current_value: 'Current value', add_field_purchase_price: 'Purchase price',
+    add_field_cover_price: 'Cover price', add_field_purchase_year: 'Purchase year',
+    add_field_purchase_month: 'Purchase month', add_field_purchase_day: 'Purchase day',
+    add_field_read_times: 'Times read', add_field_read_year: 'Read year',
+    add_field_read_month: 'Read month', add_field_read_day: 'Read day',
+    add_field_rating: 'Rating (0–10)',
+    add_check_rare: 'Rare', add_check_read_it: 'Read',
+    add_subhead_custom_fields: 'Custom fields',
+    add_field_custom_lookup1: 'Custom field 1 (lookup)', add_field_custom_lookup2: 'Custom field 2 (lookup)',
+    add_field_custom_text1: 'Custom field 1 (text)', add_field_custom_text2: 'Custom field 2 (text)',
+
+    add_field_credits_label: 'Credits (translator, illustrator...)',
+    add_placeholder_name: 'Name', add_role_placeholder: '— Role (optional) —',
+    common_add: 'Add',
+    add_field_characters_label: 'Characters',
+    add_placeholder_character_name: 'Character name', add_placeholder_alias: 'Alias (optional)',
+
+    add_contents_hint: 'Several stories in this book, each with its own authors.',
+    add_field_content_title: 'Title', add_field_content_subtitle: 'Subtitle',
+    add_field_start_page: 'Start page', add_field_content_authors: 'Authors of this content',
+    add_btn_add_content: '➕ Add this content',
+
+    add_field_plot: 'Plot / summary',
+    add_placeholder_description: 'Description (optional)',
+
+    add_confirm_title_heading: 'Confirm the addition',
+    add_confirm_hint_new: '{n} new value(s) will be created (marked "new" below):',
+    add_confirm_hint_none_new: 'All the values below already exist in the collection.',
+    add_confirm_empty_fields: '(no publisher/genre/author/etc. value on this entry)',
+    add_confirm_badge_new: 'new',
+    common_cancel: 'Cancel', common_save: 'Save', add_confirm_saving: 'Saving…',
+
+    add_err_title_required: 'Title is required.',
+    add_err_collection_required: 'Sub-collection is required.',
+    add_static_download_success: 'new_book.json downloaded — pass it to bc_add to check it.',
+
+    boot_load_failed_heading: 'Unable to load the collection',
+  },
 };
 
 // Flat key/value section for the detail card ("Product Details"/"Personal
@@ -228,7 +597,7 @@ function computeAvailableLetters() {
 function renderAzBar() {
   azEl.innerHTML = '';
   const tout = document.createElement('button');
-  tout.textContent = 'Tout';
+  tout.textContent = t('azbar_all');
   tout.className = state.azLetter === null ? 'active' : '';
   tout.addEventListener('click', () => { state.azLetter = null; refreshGroupPanel(); });
   azEl.appendChild(tout);
@@ -245,7 +614,7 @@ function renderGroupList() {
   groupListEl.innerHTML = '';
   const totalForCollection = collCounts.get(state.collection);
   groupListEl.appendChild(
-    makeGroupRow('Tous', totalForCollection, state.groupValue === null, () => selectGroup(null), true));
+    makeGroupRow(t('group_all'), totalForCollection, state.groupValue === null, () => selectGroup(null), true));
   for (const [key, count] of computeGroupCounts()) {
     groupListEl.appendChild(makeGroupRow(key, count, state.groupValue === key, () => selectGroup(key)));
   }
@@ -265,8 +634,8 @@ function makeGroupRow(label, count, active, onClick, countIsSortToggle) {
   if (countIsSortToggle) {
     n.classList.add('sortable');
     n.title = state.groupSortByCount
-      ? 'Trié par nombre de livres — cliquer pour revenir au tri alphabétique'
-      : 'Cliquer pour trier par nombre de livres';
+      ? t('group_sort_tooltip_active')
+      : t('group_sort_tooltip_inactive');
     if (state.groupSortByCount) n.classList.add('sort-active');
     n.addEventListener('click', (e) => {
       e.stopPropagation();
@@ -348,13 +717,13 @@ function renderList() {
 
     const txt = document.createElement('div');
     txt.className = 'txt';
-    const t = document.createElement('div');
-    t.className = 't';
-    t.textContent = b.title || '(sans titre)';
+    const titleEl = document.createElement('div');
+    titleEl.className = 't';
+    titleEl.textContent = b.title || t('list_no_title');
     const a = document.createElement('div');
     a.className = 'a';
     a.textContent = b.authors.join(', ');
-    txt.appendChild(t);
+    txt.appendChild(titleEl);
     txt.appendChild(a);
     row.appendChild(txt);
 
@@ -363,12 +732,12 @@ function renderList() {
   }
 
   const totalPages = Math.max(1, Math.ceil(state.items.length / PAGE_SIZE));
-  pageInfoEl.textContent = `Page ${state.page} / ${totalPages}`;
+  pageInfoEl.textContent = t('list_page_info', { page: state.page, total: totalPages });
   prevBtn.disabled = state.page <= 1;
   nextBtn.disabled = state.page >= totalPages;
   const scope = state.groupValue !== null
     ? `"${state.groupValue}"`
-    : collCounts.get(state.collection) + ' livres';
+    : t('list_scope_books', { count: collCounts.get(state.collection) });
   countEl.textContent = `${state.items.length} / ${scope}`;
 
   // Show the already-selected book if it's on this page (incl. right after
@@ -380,7 +749,7 @@ function renderList() {
     selectBook(target.id);
   } else {
     state.activeId = null;
-    detailEl.innerHTML = '<div id="empty">Aucun livre dans cette vue.</div>';
+    detailEl.innerHTML = `<div id="empty">${t('list_empty_view')}</div>`;
     saveState();
   }
 }
@@ -404,7 +773,7 @@ function selectBook(id, scrollIntoView) {
   }
 
   const b = allBooks.find(x => x.id === id);
-  if (!b) { detailEl.innerHTML = '<div id="empty">Livre introuvable.</div>'; return; }
+  if (!b) { detailEl.innerHTML = `<div id="empty">${t('list_book_not_found')}</div>`; return; }
 
   const coverSrc = resolveCoverSrc(b.cover_url);
   const cover = coverSrc
@@ -421,75 +790,76 @@ function selectBook(id, scrollIntoView) {
   ].filter(Boolean).map(x => `<span>${x}</span>`).join('');
 
   const moneyBits = [];
-  if (b.current_value) moneyBits.push(`<span>Valeur actuelle : ${b.current_value}</span>`);
-  if (b.purchase_price) moneyBits.push(`<span>Prix d'achat : ${b.purchase_price}</span>`);
+  if (b.current_value) moneyBits.push(`<span>${escapeHtml(t('detail_current_value', { v: b.current_value }))}</span>`);
+  if (b.purchase_price) moneyBits.push(`<span>${escapeHtml(t('detail_purchase_price', { v: b.purchase_price }))}</span>`);
 
   const isGenreActive = g => state.groupField === 'genres' && state.groupValue === g;
   const genreTags = (b.genres || []).map(g =>
     `<span class="tag genre${isGenreActive(g) ? ' selected' : ''}" data-genre="${escapeHtml(g)}">${escapeHtml(g)}</span>`).join('');
   const subjectTags = (b.subjects || []).map(s => `<span class="tag subject">${escapeHtml(s)}</span>`).join('');
-  const userTags = (b.tags || []).map(t => `<span class="tag usertag">${escapeHtml(t)}</span>`).join('');
+  const userTags = (b.tags || []).map(tag => `<span class="tag usertag">${escapeHtml(tag)}</span>`).join('');
 
   // "Product Details" / "Personal Details" — section names match Book
   // Collector's own detail view, which these were missing entirely against.
   const dimensions = [b.height, b.width].filter(Boolean).join(' × ');
-  const productDetails = kvGroup('Détails produit', [
-    ['Édition', b.edition],
-    ['Série', b.series ? (b.volume ? `${b.series}, vol. ${b.volume}` : b.series) : ''],
-    ['Imprimé par', b.printed_by],
-    ['Type de papier', b.paper_type],
-    ['Dimensions', dimensions],
+  const yesLabel = t('detail_yes');
+  const productDetails = kvGroup(t('detail_group_product'), [
+    [t('detail_field_edition'), b.edition],
+    [t('detail_field_series'), b.series ? (b.volume ? `${b.series}, vol. ${b.volume}` : b.series) : ''],
+    [t('detail_field_printed_by'), b.printed_by],
+    [t('detail_field_paper_type'), b.paper_type],
+    [t('detail_field_dimensions'), dimensions],
     ['Dewey', b.dewey],
     ['LCCN', b.lccn],
-    ['Dédicace', b.dedication],
-    ['Première édition', b.first_edition ? 'Oui' : ''],
-    ['Tirage', b.printing],
-    ['Coffret', b.box_set ? 'Oui' : ''],
-    ['Durée audio', b.audio_length_minutes ? `${b.audio_length_minutes} min` : ''],
-    ['N° de parution (Issue)', b.issue_number],
+    [t('detail_field_dedication'), b.dedication],
+    [t('detail_field_first_edition'), b.first_edition ? yesLabel : ''],
+    [t('detail_field_printing'), b.printing],
+    [t('detail_field_box_set'), b.box_set ? yesLabel : ''],
+    [t('detail_field_audio_length'), b.audio_length_minutes ? `${b.audio_length_minutes} min` : ''],
+    [t('detail_field_issue_number'), b.issue_number],
   ]);
   const originalPubDate = [b.original_publication_day, b.original_publication_month, b.original_publication_year]
     .filter(Boolean).join('/');
-  const originalEdition = kvGroup('Édition originale', [
-    ['Titre original', b.original_title],
-    ['Sous-titre original', b.original_subtitle],
-    ['Éditeur original', b.original_publisher],
-    ['Pays original', b.original_country],
-    ['Langue originale', b.original_language],
-    ['Date de publication originale', originalPubDate],
+  const originalEdition = kvGroup(t('detail_group_original_edition'), [
+    [t('detail_field_original_title'), b.original_title],
+    [t('detail_field_original_subtitle'), b.original_subtitle],
+    [t('detail_field_original_publisher'), b.original_publisher],
+    [t('detail_field_original_country'), b.original_country],
+    [t('detail_field_original_language'), b.original_language],
+    [t('detail_field_original_pub_date'), originalPubDate],
   ]);
   const purchaseDate = [b.purchase_day, b.purchase_month, b.purchase_year].filter(Boolean).join('/');
   const readDate = [b.read_day, b.read_month, b.read_year].filter(Boolean).join('/');
-  const personalDetails = kvGroup('Détails personnels', [
-    ['Propriétaire', b.owner],
-    ['Magasin', b.store],
-    ["N° d'emplacement", b.location_number],
-    ['Prix de couverture', b.cover_price],
-    ["Date d'achat", purchaseDate],
-    ['Rare', b.rare ? 'Oui' : ''],
-    ['Lu', b.read_it ? 'Oui' : ''],
-    ['Nombre de lectures', b.read_times],
-    ['Date de lecture', readDate],
-    ['Champ personnalisé 1', b.user_lookup1 || b.user_text1],
-    ['Champ personnalisé 2', b.user_lookup2 || b.user_text2],
-    ['Ajouté le', b.date_added ? b.date_added.slice(0, 10) : ''],
+  const personalDetails = kvGroup(t('detail_group_personal'), [
+    [t('detail_field_owner'), b.owner],
+    [t('detail_field_store'), b.store],
+    [t('detail_field_location_number'), b.location_number],
+    [t('detail_field_cover_price'), b.cover_price],
+    [t('detail_field_purchase_date'), purchaseDate],
+    [t('detail_field_rare'), b.rare ? yesLabel : ''],
+    [t('detail_field_read_it'), b.read_it ? yesLabel : ''],
+    [t('detail_field_read_times'), b.read_times],
+    [t('detail_field_read_date'), readDate],
+    [t('detail_field_custom1'), b.user_lookup1 || b.user_text1],
+    [t('detail_field_custom2'), b.user_lookup2 || b.user_text2],
+    [t('detail_field_date_added'), b.date_added ? b.date_added.slice(0, 10) : ''],
   ]);
 
-  const creditsSection = repGroup('Crédits', (b.credits || []).map(c => {
-    const role = c.role ? (ROLE_LABELS[c.role] || c.role) : '';
+  const creditsSection = repGroup(t('detail_group_credits'), (b.credits || []).map(c => {
+    const role = c.role ? (ROLE_LABELS[currentLang][c.role] || c.role) : '';
     return `<div class="rep-item">${escapeHtml(c.name)}${role ? ` <span class="rep-sub">(${escapeHtml(role)})</span>` : ''}</div>`;
   }));
-  const charactersSection = repGroup('Personnages', (b.characters || []).map(c =>
-    `<div class="rep-item">${escapeHtml(c.name)}${c.alias ? ` <span class="rep-sub">(alias : ${escapeHtml(c.alias)})</span>` : ''}</div>`));
-  const contentsSection = repGroup('Contenus', (b.contents || []).map(c => {
+  const charactersSection = repGroup(t('detail_group_characters'), (b.characters || []).map(c =>
+    `<div class="rep-item">${escapeHtml(c.name)}${c.alias ? ` <span class="rep-sub">${escapeHtml(t('detail_alias', { alias: c.alias }))}</span>` : ''}</div>`));
+  const contentsSection = repGroup(t('detail_group_contents'), (b.contents || []).map(c => {
     const bits = [];
     if (c.number_of_pages) bits.push(`${c.number_of_pages} p.`);
-    if (c.start_page) bits.push(`débute p. ${c.start_page}`);
+    if (c.start_page) bits.push(t('detail_starts_at_page', { n: c.start_page }));
     if (c.authors && c.authors.length) bits.push(c.authors.join(', '));
     const sub = c.subtitle ? ` — ${escapeHtml(c.subtitle)}` : '';
     return `<div class="rep-item">${escapeHtml(c.title)}${sub}${bits.length ? ` <span class="rep-sub">(${escapeHtml(bits.join(' · '))})</span>` : ''}</div>`;
   }));
-  const linksSection = repGroup('Liens', (b.links || []).map(l =>
+  const linksSection = repGroup(t('detail_group_links'), (b.links || []).map(l =>
     `<div class="rep-item"><a href="${escapeHtml(l.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(l.description || l.url)}</a></div>`));
 
   detailEl.innerHTML = `
@@ -505,8 +875,8 @@ function selectBook(id, scrollIntoView) {
         ${props2 ? `<div class="props">${props2}</div>` : ''}
         ${moneyBits.length ? `<div class="value-line">${moneyBits.join('')}</div>` : ''}
         ${b.my_rating ? `<div class="stars">${stars(b.my_rating)}</div>` : ''}
-        ${genreTags ? `<div class="group"><div class="label">Genres</div><div class="tags">${genreTags}</div></div>` : ''}
-        ${subjectTags ? `<div class="group"><div class="label">Sujets</div><div class="tags">${subjectTags}</div></div>` : ''}
+        ${genreTags ? `<div class="group"><div class="label">${escapeHtml(t('detail_group_genres'))}</div><div class="tags">${genreTags}</div></div>` : ''}
+        ${subjectTags ? `<div class="group"><div class="label">${escapeHtml(t('detail_group_subjects'))}</div><div class="tags">${subjectTags}</div></div>` : ''}
         ${userTags ? `<div class="group"><div class="label">Tags</div><div class="tags">${userTags}</div></div>` : ''}
         ${productDetails}
         ${originalEdition}
@@ -515,14 +885,14 @@ function selectBook(id, scrollIntoView) {
         ${charactersSection}
         ${contentsSection}
         ${linksSection}
-        ${b.plot ? '<div class="group"><div class="label">Résumé</div><div class="text-block plot"></div></div>' : ''}
+        ${b.plot ? `<div class="group"><div class="label">${escapeHtml(t('detail_group_plot'))}</div><div class="text-block plot"></div></div>` : ''}
         ${b.notes ? '<div class="group"><div class="label">Notes</div><div class="text-block notes"></div></div>' : ''}
-        ${window.__TAURI__ ? '<div class="detail-actions"><button type="button" id="editBookBtn" class="secondary">✏️ Modifier ce livre</button><button type="button" id="deleteBookBtn" class="danger">🗑️ Supprimer ce livre</button></div>' : ''}
+        ${window.__TAURI__ ? `<div class="detail-actions"><button type="button" id="editBookBtn" class="secondary">${t('detail_btn_edit')}</button><button type="button" id="deleteBookBtn" class="danger">${t('detail_btn_delete')}</button></div>` : ''}
       </div>
     </div>`;
 
   // Free-text fields set via textContent (never innerHTML) to rule out any HTML injection.
-  detailEl.querySelector('.title').textContent = b.title || '(sans titre)';
+  detailEl.querySelector('.title').textContent = b.title || t('list_no_title');
   if (b.subtitle) detailEl.querySelector('.subtitle').textContent = b.subtitle;
   const pubBits = [b.publisher, b.publication_year].filter(Boolean);
   detailEl.querySelector('.pub').textContent = pubBits.join(' — ');
@@ -563,7 +933,7 @@ async function editBook(b) {
     addFormState.links.push(...data.links.map(l => ({ ...l })));
     setPanel('add');
   } catch (err) {
-    window.alert(`Impossible de charger ce livre pour modification : ${err}`);
+    window.alert(t('detail_edit_load_failed', { err }));
   }
 }
 
@@ -573,7 +943,7 @@ async function editBook(b) {
 // allBooks/collCounts either). Never reachable from bc_export's static
 // export (no window.__TAURI__, no button rendered in the first place).
 async function deleteBookWithConfirm(b) {
-  const label = b.title || '(sans titre)';
+  const label = b.title || t('list_no_title');
   try {
     // Tauri's dialog plugin replaces window.confirm with an async version
     // (resolves to a Promise, not a boolean) — a bare `if (!window.confirm(...))`
@@ -584,13 +954,13 @@ async function deleteBookWithConfirm(b) {
     // fail silently with no visible error at all (found right after, in
     // v0.45.1, testing the v0.45.0 fix) — any failure here should be as
     // visible as a failed delete_book call, not swallowed.
-    if (!(await window.confirm(`Supprimer « ${label} » ? Une sauvegarde est prise avant, mais cette action n'est pas réversible depuis NBC.`))) {
+    if (!(await window.confirm(t('detail_delete_confirm', { title: label })))) {
       return;
     }
     await window.__TAURI__.core.invoke('delete_book', { path: currentCollectionPath, bookId: b.id });
     bootWithErrorHandling();
   } catch (err) {
-    window.alert(`Échec de la suppression : ${err}`);
+    window.alert(t('detail_delete_failed', { err }));
   }
 }
 
@@ -713,29 +1083,29 @@ function barList(title, entries, limit) {
       <span class="bar-wrap"><span class="bar" style="width:${(count / max * 100).toFixed(1)}%"></span></span>
       <span class="val">${count}</span>
     </div>`).join('');
-  return `<div class="stat-block"><h3>${escapeHtml(title)}</h3>${rows || '<p class="stat-empty">Aucune donnée.</p>'}</div>`;
+  return `<div class="stat-block"><h3>${escapeHtml(title)}</h3>${rows || `<p class="stat-empty">${escapeHtml(t('stats_no_data'))}</p>`}</div>`;
 }
 
 function renderStats() {
   const s = computeStats();
-  const moneyBit = s.totalValue ? `<span><strong>${s.totalValue.toFixed(2)}</strong> de valeur totale</span>` : '';
+  const moneyBit = s.totalValue ? `<span><strong>${s.totalValue.toFixed(2)}</strong> ${escapeHtml(t('stats_value_suffix'))}</span>` : '';
   statsPaneEl.innerHTML = `
     <div class="stats-wrap">
-      <h2>Statistiques — ${escapeHtml(state.collection)}</h2>
+      <h2>${escapeHtml(t('stats_title', { name: state.collection }))}</h2>
       <div class="stat-summary">
-        <span><strong>${s.totalFiches}</strong> fiches</span>
-        <span><strong>${s.totalQty}</strong> exemplaires</span>
+        <span>${t('stats_entries', { n: `<strong>${s.totalFiches}</strong>` })}</span>
+        <span>${t('stats_copies', { n: `<strong>${s.totalQty}</strong>` })}</span>
         ${moneyBit}
-        <span><strong>${s.noCover}</strong> sans couverture</span>
-        <span><strong>${s.noIsbn}</strong> sans ISBN</span>
-        <span><strong>${s.noAuthor}</strong> sans auteur</span>
+        <span>${t('stats_no_cover', { n: `<strong>${s.noCover}</strong>` })}</span>
+        <span>${t('stats_no_isbn', { n: `<strong>${s.noIsbn}</strong>` })}</span>
+        <span>${t('stats_no_author', { n: `<strong>${s.noAuthor}</strong>` })}</span>
       </div>
       <div class="stat-grid">
-        ${barList('Genres', s.genres, 15)}
-        ${barList('Formats', s.formats)}
-        ${barList('Langues', s.languages)}
-        ${barList('Éditeurs (top 10)', s.publishers, 10)}
-        ${barList('Par décennie de publication', s.decades)}
+        ${barList(t('detail_group_genres'), s.genres, 15)}
+        ${barList(t('stats_formats'), s.formats)}
+        ${barList(t('stats_languages'), s.languages)}
+        ${barList(t('stats_publishers_top10'), s.publishers, 10)}
+        ${barList(t('stats_by_decade'), s.decades)}
       </div>
     </div>`;
 }
@@ -746,9 +1116,9 @@ function setPanel(panel) {
   document.body.classList.toggle('panel-stats', panel === 'stats');
   document.body.classList.toggle('panel-add', panel === 'add');
   statsBtn.classList.toggle('active', panel === 'stats');
-  statsBtn.textContent = panel === 'stats' ? '📚 Collection' : '📊 Statistiques';
+  statsBtn.textContent = panel === 'stats' ? t('nav_back_to_collection') : t('nav_stats');
   addBtn.classList.toggle('active', panel === 'add');
-  addBtn.textContent = panel === 'add' ? '📚 Collection' : '➕ Ajouter un livre';
+  addBtn.textContent = panel === 'add' ? t('nav_back_to_collection') : t('nav_add');
   if (panel === 'stats') renderStats();
   if (panel === 'add') renderAddForm();
 }
@@ -791,17 +1161,17 @@ function setupChipField(inputId, chipsId, arr) {
     arr.forEach((val, i) => {
       const chip = document.createElement('span');
       chip.className = 'chip';
-      const t = document.createElement('span');
-      t.textContent = val;
+      const chipLabel = document.createElement('span');
+      chipLabel.textContent = val;
       const x = document.createElement('span');
       x.className = 'chip-x';
       x.textContent = '✕';
-      x.title = 'Retirer';
+      x.title = t('common_remove');
       x.addEventListener('click', () => {
         arr.splice(i, 1);
         renderChips();
       });
-      chip.appendChild(t);
+      chip.appendChild(chipLabel);
       chip.appendChild(x);
       chipsEl.appendChild(chip);
     });
@@ -838,7 +1208,7 @@ function setupRepeatableList(listId, arr, renderLabel) {
       const x = document.createElement('span');
       x.className = 'chip-x';
       x.textContent = '✕';
-      x.title = 'Retirer';
+      x.title = t('common_remove');
       x.addEventListener('click', () => {
         arr.splice(i, 1);
         render();
@@ -853,13 +1223,13 @@ function setupRepeatableList(listId, arr, renderLabel) {
 }
 
 const ADD_TABS = [
-  { id: 'main', label: 'Principal' },
-  { id: 'details', label: 'Détails' },
-  { id: 'personal', label: 'Personnel' },
-  { id: 'credits', label: 'Crédits & Personnages' },
-  { id: 'contents', label: 'Contenus' },
-  { id: 'plot', label: 'Intrigue & Notes' },
-  { id: 'links', label: 'Liens' },
+  { id: 'main', key: 'add_tab_main' },
+  { id: 'details', key: 'add_tab_details' },
+  { id: 'personal', key: 'add_tab_personal' },
+  { id: 'credits', key: 'add_tab_credits' },
+  { id: 'contents', key: 'add_tab_contents' },
+  { id: 'plot', key: 'add_tab_plot' },
+  { id: 'links', key: 'add_tab_links' },
 ];
 
 function renderAddForm() {
@@ -867,175 +1237,162 @@ function renderAddForm() {
     .map(c => `<option value="${escapeHtml(c)}"${c === state.collection ? ' selected' : ''}>${escapeHtml(c)}</option>`)
     .join('');
   const tabButtons = ADD_TABS
-    .map((t, i) => `<button type="button" class="add-tab-btn${i === 0 ? ' active' : ''}" data-tab="${t.id}">${t.label}</button>`)
+    .map((tab, i) => `<button type="button" class="add-tab-btn${i === 0 ? ' active' : ''}" data-tab="${tab.id}">${t(tab.key)}</button>`)
     .join('');
+
+  const roleOptions = Object.entries(ROLE_LABELS[currentLang])
+    .map(([key, label]) => `<option value="${key}">${escapeHtml(label)}</option>`).join('');
 
   addPaneEl.innerHTML = `
     <div class="add-wrap">
-      <h2>${window.__TAURI__ ? 'Ajouter un livre' : 'Ajouter un livre (préparation — étapes 1 à 5)'}</h2>
-      <p class="add-hint">${window.__TAURI__
-        ? `Ce formulaire écrit directement dans la collection ouverte, après confirmation.
-           L'onglet Couvertures n'est pas repris ici (gestion de fichiers, hors périmètre).`
-        : `Ce formulaire ne modifie aucune donnée existante : il génère un
-           fichier <code>new_book.json</code> à télécharger, à passer ensuite à
-           <code>bc_add</code> pour vérifier ce qui existe déjà avant toute écriture réelle.
-           L'onglet Couvertures n'est pas repris ici (gestion de fichiers, hors périmètre).`}</p>
+      <h2>${window.__TAURI__ ? t('add_heading_tauri') : t('add_heading_static')}</h2>
+      <p class="add-hint">${window.__TAURI__ ? t('add_hint_tauri') : t('add_hint_static')}</p>
       <div class="add-tabs">${tabButtons}</div>
       <form id="addForm" novalidate>
         <div id="addtab-main" class="add-tab-panel">
           <div class="add-grid">
-            <label>Titre *<input name="title" required></label>
-            <label>Sous-titre<input name="subtitle"></label>
+            <label>${t('add_field_title')}<input name="title" required></label>
+            <label>${t('add_field_subtitle')}<input name="subtitle"></label>
             <label>ISBN<input name="isbn"></label>
-            <label>Nombre de pages<input name="number_of_pages" type="number" min="0"></label>
-            <label>Année<input name="publication_year" placeholder="yyyy" maxlength="4"></label>
-            <label>Mois<input name="publication_month" placeholder="mm" maxlength="2"></label>
-            <label>Jour<input name="publication_day" placeholder="dd" maxlength="2"></label>
-            <label>Éditeur<input name="publisher" list="dl-publisher"></label>
+            <label>${t('add_field_number_of_pages')}<input name="number_of_pages" type="number" min="0"></label>
+            <label>${t('add_field_year')}<input name="publication_year" placeholder="yyyy" maxlength="4"></label>
+            <label>${t('add_field_month')}<input name="publication_month" placeholder="mm" maxlength="2"></label>
+            <label>${t('add_field_day')}<input name="publication_day" placeholder="dd" maxlength="2"></label>
+            <label>${t('add_field_publisher')}<input name="publisher" list="dl-publisher"></label>
             <label>Format<input name="format" list="dl-format"></label>
-            <label>Langue<input name="language" list="dl-language"></label>
-            <label>Pays<input name="country" list="dl-country"></label>
-            <label>Emplacement<input name="location" list="dl-location"></label>
-            <label>N° d'emplacement<input name="location_number"></label>
-            <label>Quantité<input name="quantity" type="number" min="1" value="1"></label>
-            <label>Sous-collection *<select name="collection" required>${collOptions}</select></label>
+            <label>${t('add_field_language')}<input name="language" list="dl-language"></label>
+            <label>${t('add_field_country')}<input name="country" list="dl-country"></label>
+            <label>${t('add_field_location')}<input name="location" list="dl-location"></label>
+            <label>${t('add_field_location_number')}<input name="location_number"></label>
+            <label>${t('add_field_quantity')}<input name="quantity" type="number" min="1" value="1"></label>
+            <label>${t('add_field_collection')}<select name="collection" required>${collOptions}</select></label>
           </div>
           <div class="add-list-field">
-            <span class="label">Auteurs</span>
+            <span class="label">${t('add_field_authors')}</span>
             <div id="authorsChips" class="chip-input"></div>
-            <input id="authorInput" list="dl-author" placeholder="Nom, puis Entrée">
+            <input id="authorInput" list="dl-author" placeholder="${t('add_placeholder_name_enter')}">
           </div>
           <div class="add-list-field">
-            <span class="label">Genres</span>
+            <span class="label">${t('add_field_genres')}</span>
             <div id="genresChips" class="chip-input"></div>
-            <input id="genreInput" list="dl-genre" placeholder="Genre, puis Entrée">
+            <input id="genreInput" list="dl-genre" placeholder="${t('add_placeholder_genre_enter')}">
           </div>
           <div class="add-list-field">
-            <span class="label">Sujets</span>
+            <span class="label">${t('add_field_subjects')}</span>
             <div id="subjectsChips" class="chip-input"></div>
-            <input id="subjectInput" list="dl-subject" placeholder="Sujet, puis Entrée">
+            <input id="subjectInput" list="dl-subject" placeholder="${t('add_placeholder_subject_enter')}">
           </div>
         </div>
 
         <div id="addtab-details" class="add-tab-panel hidden">
           <div class="add-grid">
-            <label>Issue N°<input name="issue_number" type="number" min="0"></label>
-            <label>Édition<input name="edition" list="dl-edition"></label>
-            <label>Imprimé par<input name="printed_by" list="dl-printedby"></label>
-            <label>Série<input name="series" list="dl-series"></label>
-            <label>Volume<input name="volume" list="dl-volume"></label>
-            <label>Type de papier<input name="paper_type" list="dl-papertype"></label>
-            <label>Hauteur<input name="height" placeholder="ex. 21 cm"></label>
-            <label>Largeur<input name="width" placeholder="ex. 14 cm"></label>
+            <label>${t('add_field_issue_number')}<input name="issue_number" type="number" min="0"></label>
+            <label>${t('add_field_edition')}<input name="edition" list="dl-edition"></label>
+            <label>${t('add_field_printed_by')}<input name="printed_by" list="dl-printedby"></label>
+            <label>${t('add_field_series')}<input name="series" list="dl-series"></label>
+            <label>${t('add_field_volume')}<input name="volume" list="dl-volume"></label>
+            <label>${t('add_field_paper_type')}<input name="paper_type" list="dl-papertype"></label>
+            <label>${t('add_field_height')}<input name="height" placeholder="${t('add_placeholder_height')}"></label>
+            <label>${t('add_field_width')}<input name="width" placeholder="${t('add_placeholder_width')}"></label>
             <label>Dewey<input name="dewey"></label>
             <label>LCCN<input name="lccn"></label>
-            <label>Tirage<input name="printing" type="number" min="1"></label>
-            <label>Durée audio (min)<input name="audio_length_minutes" type="number" min="0"></label>
+            <label>${t('add_field_printing')}<input name="printing" type="number" min="1"></label>
+            <label>${t('add_field_audio_length')}<input name="audio_length_minutes" type="number" min="0"></label>
           </div>
-          <label class="add-full">Dédicace<textarea name="dedication" rows="2"></textarea></label>
+          <label class="add-full">${t('add_field_dedication')}<textarea name="dedication" rows="2"></textarea></label>
           <div class="add-checkrow">
-            <label class="add-check"><input type="checkbox" name="first_edition"> Première édition</label>
-            <label class="add-check"><input type="checkbox" name="abridged"> Abrégé</label>
-            <label class="add-check"><input type="checkbox" name="box_set"> Coffret</label>
+            <label class="add-check"><input type="checkbox" name="first_edition"> ${t('add_check_first_edition')}</label>
+            <label class="add-check"><input type="checkbox" name="abridged"> ${t('add_check_abridged')}</label>
+            <label class="add-check"><input type="checkbox" name="box_set"> ${t('add_check_box_set')}</label>
           </div>
-          <h3 class="add-subhead">Édition originale</h3>
+          <h3 class="add-subhead">${t('add_subhead_original_edition')}</h3>
           <div class="add-grid">
-            <label>Titre original<input name="original_title"></label>
-            <label>Sous-titre original<input name="original_subtitle"></label>
-            <label>Éditeur original<input name="original_publisher" list="dl-publisher"></label>
-            <label>Pays original<input name="original_country" list="dl-country"></label>
-            <label>Langue originale<input name="original_language" list="dl-language"></label>
-            <label>Année orig.<input name="original_publication_year" placeholder="yyyy" maxlength="4"></label>
-            <label>Mois orig.<input name="original_publication_month" placeholder="mm" maxlength="2"></label>
-            <label>Jour orig.<input name="original_publication_day" placeholder="dd" maxlength="2"></label>
+            <label>${t('add_field_original_title')}<input name="original_title"></label>
+            <label>${t('add_field_original_subtitle')}<input name="original_subtitle"></label>
+            <label>${t('add_field_original_publisher')}<input name="original_publisher" list="dl-publisher"></label>
+            <label>${t('add_field_original_country')}<input name="original_country" list="dl-country"></label>
+            <label>${t('add_field_original_language')}<input name="original_language" list="dl-language"></label>
+            <label>${t('add_field_original_year')}<input name="original_publication_year" placeholder="yyyy" maxlength="4"></label>
+            <label>${t('add_field_original_month')}<input name="original_publication_month" placeholder="mm" maxlength="2"></label>
+            <label>${t('add_field_original_day')}<input name="original_publication_day" placeholder="dd" maxlength="2"></label>
           </div>
         </div>
 
         <div id="addtab-personal" class="add-tab-panel hidden">
           <div class="add-grid">
-            <label>État<input name="condition" list="dl-condition"></label>
-            <label>Propriétaire<input name="owner" list="dl-owner"></label>
-            <label>Magasin<input name="store" list="dl-store"></label>
-            <label>Valeur actuelle<input name="current_value" type="number" step="0.01" min="0"></label>
-            <label>Prix d'achat<input name="purchase_price" type="number" step="0.01" min="0"></label>
-            <label>Prix de couverture<input name="cover_price" type="number" step="0.01" min="0"></label>
-            <label>Année d'achat<input name="purchase_year" placeholder="yyyy" maxlength="4"></label>
-            <label>Mois d'achat<input name="purchase_month" placeholder="mm" maxlength="2"></label>
-            <label>Jour d'achat<input name="purchase_day" placeholder="dd" maxlength="2"></label>
-            <label>Nombre de lectures<input name="read_times" type="number" min="0"></label>
-            <label>Année de lecture<input name="read_year" placeholder="yyyy" maxlength="4"></label>
-            <label>Mois de lecture<input name="read_month" placeholder="mm" maxlength="2"></label>
-            <label>Jour de lecture<input name="read_day" placeholder="dd" maxlength="2"></label>
-            <label>Note (0–10)<input name="my_rating" type="number" min="0" max="10"></label>
+            <label>${t('add_field_condition')}<input name="condition" list="dl-condition"></label>
+            <label>${t('add_field_owner')}<input name="owner" list="dl-owner"></label>
+            <label>${t('add_field_store')}<input name="store" list="dl-store"></label>
+            <label>${t('add_field_current_value')}<input name="current_value" type="number" step="0.01" min="0"></label>
+            <label>${t('add_field_purchase_price')}<input name="purchase_price" type="number" step="0.01" min="0"></label>
+            <label>${t('add_field_cover_price')}<input name="cover_price" type="number" step="0.01" min="0"></label>
+            <label>${t('add_field_purchase_year')}<input name="purchase_year" placeholder="yyyy" maxlength="4"></label>
+            <label>${t('add_field_purchase_month')}<input name="purchase_month" placeholder="mm" maxlength="2"></label>
+            <label>${t('add_field_purchase_day')}<input name="purchase_day" placeholder="dd" maxlength="2"></label>
+            <label>${t('add_field_read_times')}<input name="read_times" type="number" min="0"></label>
+            <label>${t('add_field_read_year')}<input name="read_year" placeholder="yyyy" maxlength="4"></label>
+            <label>${t('add_field_read_month')}<input name="read_month" placeholder="mm" maxlength="2"></label>
+            <label>${t('add_field_read_day')}<input name="read_day" placeholder="dd" maxlength="2"></label>
+            <label>${t('add_field_rating')}<input name="my_rating" type="number" min="0" max="10"></label>
           </div>
           <div class="add-checkrow">
-            <label class="add-check"><input type="checkbox" name="rare"> Rare</label>
-            <label class="add-check"><input type="checkbox" name="read_it"> Lu</label>
+            <label class="add-check"><input type="checkbox" name="rare"> ${t('add_check_rare')}</label>
+            <label class="add-check"><input type="checkbox" name="read_it"> ${t('add_check_read_it')}</label>
           </div>
-          <h3 class="add-subhead">Champs personnalisés</h3>
+          <h3 class="add-subhead">${t('add_subhead_custom_fields')}</h3>
           <div class="add-grid">
-            <label>Champ personnalisé 1 (liste)<input name="user_lookup1" list="dl-userlookup1"></label>
-            <label>Champ personnalisé 2 (liste)<input name="user_lookup2" list="dl-userlookup2"></label>
-            <label>Champ personnalisé 1 (texte)<input name="user_text1"></label>
-            <label>Champ personnalisé 2 (texte)<input name="user_text2"></label>
+            <label>${t('add_field_custom_lookup1')}<input name="user_lookup1" list="dl-userlookup1"></label>
+            <label>${t('add_field_custom_lookup2')}<input name="user_lookup2" list="dl-userlookup2"></label>
+            <label>${t('add_field_custom_text1')}<input name="user_text1"></label>
+            <label>${t('add_field_custom_text2')}<input name="user_text2"></label>
           </div>
         </div>
 
         <div id="addtab-credits" class="add-tab-panel hidden">
           <div class="add-rep-field">
-            <span class="label">Crédits (traducteur, illustrateur...)</span>
+            <span class="label">${t('add_field_credits_label')}</span>
             <div id="creditsList" class="rep-list"></div>
             <div class="rep-add-row">
-              <input id="creditNameInput" list="dl-credit" placeholder="Nom">
+              <input id="creditNameInput" list="dl-credit" placeholder="${t('add_placeholder_name')}">
               <select id="creditRoleInput">
-                <option value="">— Rôle (optionnel) —</option>
-                <option value="Translator">Traducteur</option>
-                <option value="CoverArtist">Artiste de couverture</option>
-                <option value="Editor">Éditeur (rôle)</option>
-                <option value="Illustrator">Illustrateur</option>
-                <option value="Ghostwriter">Nègre littéraire</option>
-                <option value="ForewordAuthor">Auteur de la préface</option>
-                <option value="Photographer">Photographe</option>
-                <option value="Narrator">Narrateur</option>
-                <option value="UserRole1">Rôle personnalisé 1</option>
-                <option value="UserRole2">Rôle personnalisé 2</option>
-                <option value="UserRole3">Rôle personnalisé 3</option>
+                <option value="">${t('add_role_placeholder')}</option>
+                ${roleOptions}
               </select>
-              <button type="button" id="creditAddBtn">Ajouter</button>
+              <button type="button" id="creditAddBtn">${t('common_add')}</button>
             </div>
           </div>
           <div class="add-rep-field">
-            <span class="label">Personnages</span>
+            <span class="label">${t('add_field_characters_label')}</span>
             <div id="charactersList" class="rep-list"></div>
             <div class="rep-add-row">
-              <input id="characterNameInput" placeholder="Nom du personnage">
-              <input id="characterAliasInput" placeholder="Alias (optionnel)">
-              <button type="button" id="characterAddBtn">Ajouter</button>
+              <input id="characterNameInput" placeholder="${t('add_placeholder_character_name')}">
+              <input id="characterAliasInput" placeholder="${t('add_placeholder_alias')}">
+              <button type="button" id="characterAddBtn">${t('common_add')}</button>
             </div>
           </div>
         </div>
 
         <div id="addtab-contents" class="add-tab-panel hidden">
-          <p class="add-hint">Plusieurs histoires/nouvelles dans ce livre, chacune avec ses propres auteurs.</p>
+          <p class="add-hint">${t('add_contents_hint')}</p>
           <div id="contentsList" class="rep-list"></div>
           <div class="add-rep-field">
             <div class="add-grid">
-              <label>Titre<input id="contentTitleInput"></label>
-              <label>Sous-titre<input id="contentSubtitleInput"></label>
-              <label>Nombre de pages<input id="contentPagesInput" type="number" min="0"></label>
-              <label>Page de début<input id="contentStartPageInput" type="number" min="0"></label>
+              <label>${t('add_field_content_title')}<input id="contentTitleInput"></label>
+              <label>${t('add_field_content_subtitle')}<input id="contentSubtitleInput"></label>
+              <label>${t('add_field_number_of_pages')}<input id="contentPagesInput" type="number" min="0"></label>
+              <label>${t('add_field_start_page')}<input id="contentStartPageInput" type="number" min="0"></label>
             </div>
             <div class="add-list-field">
-              <span class="label">Auteurs de ce contenu</span>
+              <span class="label">${t('add_field_content_authors')}</span>
               <div id="contentAuthorsChips" class="chip-input"></div>
-              <input id="contentAuthorInput" list="dl-author" placeholder="Nom, puis Entrée">
+              <input id="contentAuthorInput" list="dl-author" placeholder="${t('add_placeholder_name_enter')}">
             </div>
-            <button type="button" id="contentAddBtn">➕ Ajouter ce contenu</button>
+            <button type="button" id="contentAddBtn">${t('add_btn_add_content')}</button>
           </div>
         </div>
 
         <div id="addtab-plot" class="add-tab-panel hidden">
-          <label class="add-full">Intrigue / résumé<textarea name="plot" rows="4"></textarea></label>
+          <label class="add-full">${t('add_field_plot')}<textarea name="plot" rows="4"></textarea></label>
           <label class="add-full">Notes<textarea name="notes" rows="4"></textarea></label>
         </div>
 
@@ -1043,8 +1400,8 @@ function renderAddForm() {
           <div id="linksList" class="rep-list"></div>
           <div class="rep-add-row">
             <input id="linkUrlInput" placeholder="https://…">
-            <input id="linkDescInput" placeholder="Description (optionnel)">
-            <button type="button" id="linkAddBtn">Ajouter</button>
+            <input id="linkDescInput" placeholder="${t('add_placeholder_description')}">
+            <button type="button" id="linkAddBtn">${t('common_add')}</button>
           </div>
         </div>
 
@@ -1069,7 +1426,7 @@ function renderAddForm() {
         <datalist id="dl-userlookup2"></datalist>
 
         <div class="add-actions">
-          <button type="submit" class="primary">${window.__TAURI__ ? '💾 Enregistrer' : '⬇️ Générer new_book.json'}</button>
+          <button type="submit" class="primary">${window.__TAURI__ ? t('add_submit_tauri') : t('add_submit_static')}</button>
           <span id="addMsg"></span>
         </div>
       </form>
@@ -1077,13 +1434,13 @@ function renderAddForm() {
 
     <div id="addConfirmOverlay" class="confirm-overlay hidden">
       <div class="confirm-card">
-        <h3>Confirmer l'ajout</h3>
+        <h3>${t('add_confirm_title_heading')}</h3>
         <p class="confirm-title" id="addConfirmTitle"></p>
         <p class="confirm-hint" id="addConfirmHint"></p>
         <div class="confirm-fields" id="addConfirmFields"></div>
         <div class="confirm-actions">
-          <button type="button" id="addConfirmCancel">Annuler</button>
-          <button type="button" id="addConfirmOk" class="primary">Enregistrer</button>
+          <button type="button" id="addConfirmCancel">${t('common_cancel')}</button>
+          <button type="button" id="addConfirmOk" class="primary">${t('common_save')}</button>
         </div>
       </div>
     </div>`;
@@ -1133,7 +1490,7 @@ function renderAddForm() {
 
   const creditsListHandle = setupRepeatableList(
     'creditsList', addFormState.credits,
-    c => c.role ? `${c.name} (${ROLE_LABELS[c.role] || c.role})` : c.name,
+    c => c.role ? `${c.name} (${ROLE_LABELS[currentLang][c.role] || c.role})` : c.name,
   );
   document.getElementById('creditAddBtn').addEventListener('click', () => {
     const nameEl = document.getElementById('creditNameInput');
@@ -1224,10 +1581,9 @@ function renderAddForm() {
       }
     }
     const wrap = document.querySelector('.add-wrap');
-    wrap.querySelector('h2').textContent = `Modifier : ${editingBookData.title}`;
-    wrap.querySelector('.add-hint').textContent =
-      'Les champs ci-dessous reflètent les valeurs actuelles de ce livre. Une confirmation sera demandée avant toute écriture.';
-    wrap.querySelector('.add-actions button[type="submit"]').textContent = '💾 Enregistrer les modifications';
+    wrap.querySelector('h2').textContent = t('add_heading_edit', { title: editingBookData.title });
+    wrap.querySelector('.add-hint').textContent = t('add_hint_edit');
+    wrap.querySelector('.add-actions button[type="submit"]').textContent = t('add_submit_edit');
   }
 }
 
@@ -1252,11 +1608,11 @@ function onAddFormSubmit(e) {
   const title = str('title');
   const collectionName = str('collection');
   if (!title) {
-    msgEl.textContent = 'Le titre est obligatoire.';
+    msgEl.textContent = t('add_err_title_required');
     return;
   }
   if (!collectionName) {
-    msgEl.textContent = 'La sous-collection est obligatoire.';
+    msgEl.textContent = t('add_err_collection_required');
     return;
   }
 
@@ -1350,7 +1706,7 @@ function onAddFormSubmit(e) {
   a.click();
   a.remove();
   URL.revokeObjectURL(url);
-  msgEl.textContent = 'new_book.json téléchargé — passe-le à bc_add pour le vérifier.';
+  msgEl.textContent = t('add_static_download_success');
 }
 
 // --- Tauri-only confirmation step: resolve+plan the book against the
@@ -1372,9 +1728,9 @@ async function openAddConfirm(book, msgEl) {
     document.getElementById('addConfirmTitle').textContent = preview.title;
     const hintEl = document.getElementById('addConfirmHint');
     if (preview.new_count > 0) {
-      hintEl.textContent = `${preview.new_count} nouvelle(s) valeur(s) seront créées (marquées "nouveau" ci-dessous) :`;
+      hintEl.textContent = t('add_confirm_hint_new', { n: preview.new_count });
     } else {
-      hintEl.textContent = 'Toutes les valeurs ci-dessous existent déjà dans la collection.';
+      hintEl.textContent = t('add_confirm_hint_none_new');
     }
     const fieldsEl = document.getElementById('addConfirmFields');
     fieldsEl.innerHTML = preview.fields.length
@@ -1382,9 +1738,9 @@ async function openAddConfirm(book, msgEl) {
           <div class="confirm-field">
             <span class="confirm-field-label">${escapeHtml(f.label)}</span>
             <span class="confirm-field-value">${escapeHtml(f.value)}</span>
-            ${f.is_new ? '<span class="confirm-badge-new">nouveau</span>' : ''}
+            ${f.is_new ? `<span class="confirm-badge-new">${escapeHtml(t('add_confirm_badge_new'))}</span>` : ''}
           </div>`).join('')
-      : '<p class="confirm-empty">(aucune valeur de type éditeur/genre/auteur/etc. sur cette fiche)</p>';
+      : `<p class="confirm-empty">${escapeHtml(t('add_confirm_empty_fields'))}</p>`;
     document.getElementById('addConfirmOverlay').classList.remove('hidden');
   } catch (err) {
     pendingAddBook = null;
@@ -1403,7 +1759,7 @@ async function confirmAddBook() {
   const okBtn = document.getElementById('addConfirmOk');
   const msgEl = document.getElementById('addMsg');
   okBtn.disabled = true;
-  okBtn.textContent = 'Enregistrement…';
+  okBtn.textContent = t('add_confirm_saving');
   const wasEditing = editingBookId !== null;
   try {
     const args = wasEditing
@@ -1430,7 +1786,7 @@ async function confirmAddBook() {
     msgEl.className = 'add-msg-error';
   } finally {
     okBtn.disabled = false;
-    okBtn.textContent = 'Enregistrer';
+    okBtn.textContent = t('common_save');
   }
 }
 
@@ -1552,6 +1908,108 @@ async function updateVersionBadge() {
   }
 }
 
+// Every static (non-data-driven) label that lives in the HTML template
+// rather than being generated by a render function above — <option> text,
+// placeholders, pager/view-toggle buttons, column headers. Run once at
+// module load (before boot(), so the loading phase itself isn't stuck in
+// the wrong language) and again on every setLang().
+function applyStaticLabels() {
+  const setOptionText = (selectEl, value, key) => {
+    const opt = selectEl && selectEl.querySelector(`option[value="${value}"]`);
+    if (opt) opt.textContent = t(key);
+  };
+  setOptionText(groupFieldEl, 'authors', 'opt_group_authors');
+  setOptionText(groupFieldEl, 'genres', 'opt_group_genres');
+  setOptionText(groupFieldEl, 'publisher', 'opt_group_publisher');
+  setOptionText(groupFieldEl, 'format', 'opt_group_format');
+  setOptionText(groupFieldEl, 'language', 'opt_group_language');
+  setOptionText(groupFieldEl, 'country', 'opt_group_country');
+
+  setOptionText(sortEl, 'title', 'opt_sort_title');
+  setOptionText(sortEl, 'author', 'opt_sort_author');
+  setOptionText(sortEl, 'year_desc', 'opt_sort_year_desc');
+  setOptionText(sortEl, 'publisher', 'opt_sort_publisher');
+
+  searchEl.placeholder = t('list_search_placeholder');
+  viewListBtn.textContent = t('list_view_list');
+  viewGridBtn.textContent = t('list_view_grid');
+  prevBtn.textContent = t('list_prev');
+  nextBtn.textContent = t('list_next');
+
+  const colTitle = colHeaderEl.querySelector('[data-sort="title"]');
+  if (colTitle) colTitle.textContent = t('col_title');
+  const colAuthor = colHeaderEl.querySelector('[data-sort="author"]');
+  if (colAuthor) colAuthor.textContent = t('col_author');
+
+  // Mirrors setPanel()'s own toggle logic for whichever panel isn't active
+  // right now — setPanel() itself handles the label the moment either
+  // button is actually clicked.
+  statsBtn.textContent = state.panel === 'stats' ? t('nav_back_to_collection') : t('nav_stats');
+  addBtn.textContent = state.panel === 'add' ? t('nav_back_to_collection') : t('nav_add');
+
+  // Only matters for the brief moment before the first boot() render
+  // replaces detailEl's contents entirely (or if setLang() runs during
+  // that window) — harmless to set unconditionally either way.
+  const emptyEl = document.getElementById('empty');
+  if (emptyEl) emptyEl.textContent = t('list_select_book');
+}
+
+// Builds the FR/EN toggle once and inserts it right after the version badge
+// — created in JS rather than added to the two HTML templates, so there's
+// one source of truth for its label text (like everything else here) and
+// nothing to keep in sync between templates/page.html and
+// app/src/index.template.html.
+function initLangToggle() {
+  const toggle = document.createElement('div');
+  toggle.id = 'langToggle';
+  for (const lang of ['fr', 'en']) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.dataset.lang = lang;
+    btn.textContent = lang.toUpperCase();
+    btn.addEventListener('click', () => setLang(lang));
+    toggle.appendChild(btn);
+  }
+  const versionEl = document.getElementById('appVersion');
+  if (versionEl) versionEl.insertAdjacentElement('afterend', toggle);
+  updateLangToggleUI();
+}
+
+function updateLangToggleUI() {
+  const toggle = document.getElementById('langToggle');
+  if (!toggle) return;
+  toggle.querySelectorAll('button').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.lang === currentLang);
+  });
+}
+
+function setLang(lang) {
+  if ((lang !== 'fr' && lang !== 'en') || lang === currentLang) return;
+  currentLang = lang;
+  try { localStorage.setItem('bc_lang', lang); } catch (e) { /* ignore */ }
+  applyLanguageChange();
+}
+
+// Re-renders every visible part of the app in the newly selected language.
+// Note: if the Add-book form is open, this rebuilds it from scratch via
+// renderAddForm() — any typed-but-not-yet-submitted plain field value is
+// lost (the authors/genres/credits/etc. lists in addFormState survive,
+// since those live outside the form markup, not inside it). Switching
+// language mid-fill is rare enough that this tradeoff isn't worth the
+// extra complexity of preserving every field's live value across a full
+// form rebuild.
+function applyLanguageChange() {
+  updateLangToggleUI();
+  applyStaticLabels();
+  if (allBooks) {
+    renderTabs();
+    refreshGroupPanel();
+    recompute();
+  }
+  if (state.panel === 'stats') renderStats();
+  if (state.panel === 'add') renderAddForm();
+}
+
 // One tab per sous-collection, largest first (ties broken alphabetically).
 // Runs only after allBooks has actually loaded — synchronously already
 // resolved for bc_export's static export, awaited for the NBC app's live
@@ -1580,7 +2038,7 @@ function bootWithErrorHandling() {
     console.error('NBC: échec du chargement de la collection', err);
     document.body.innerHTML =
       '<div style="padding:40px;font-family:sans-serif;color:#c0392b;">'
-      + '<h2>Impossible de charger la collection</h2><pre>' + escapeHtml(String(err)) + '</pre></div>';
+      + `<h2>${escapeHtml(t('boot_load_failed_heading'))}</h2><pre>` + escapeHtml(String(err)) + '</pre></div>';
   });
 }
 
@@ -1596,4 +2054,6 @@ if (window.__TAURI__) {
   });
 }
 
+initLangToggle();
+applyStaticLabels();
 bootWithErrorHandling();

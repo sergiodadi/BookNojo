@@ -219,6 +219,22 @@
   #viewToggle button.active { background: var(--accent); color: white; }
   #viewToggle button.active:hover { background: var(--accent); color: white; }
 
+  #langToggle { display: flex; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--surface); }
+  #langToggle button {
+    border: none;
+    background: var(--surface);
+    padding: 6px 10px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    color: var(--muted);
+    transition: background .15s ease, color .15s ease;
+  }
+  #langToggle button:hover { background: var(--surface-alt); color: var(--text); }
+  #langToggle button + button { border-left: 1px solid var(--border); }
+  #langToggle button.active { background: var(--accent); color: white; }
+  #langToggle button.active:hover { background: var(--accent); color: white; }
+
   #colHeader {
     display: flex;
     gap: 16px;

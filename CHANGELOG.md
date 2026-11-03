@@ -4,6 +4,21 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.46.0] - 2026-11-03
+
+### Added
+- **Interface bilingue français/anglais** — nouveau sélecteur "FR"/"EN" dans l'en-tête (`templates/app.js`), persisté par navigateur (clé `bc_lang`, indépendante du reste de l'état d'interface). Couvre l'intégralité du texte généré côté JS : navigation, panneau de regroupement, liste de livres (tri, pagination, recherche), fiche détail (Détails produit/Édition originale/Détails personnels/Crédits/Personnages/Contenus/Liens), panneau Statistiques, et l'intégralité du formulaire "Ajouter/Modifier un livre" (onglets, ~70 champs, rôles de crédit, boîte de confirmation, messages de validation).
+  - Dictionnaire unique `I18N = { fr: {...}, en: {...} }` + fonction `t(clé, variables)` (interpolation `{nom}`) ; `ROLE_LABELS` (noms de rôle de crédit) devient aussi bilingue (`ROLE_LABELS[langue][rôle]`).
+  - Les éléments dont le texte vit dans le HTML plutôt que généré par une fonction JS (options des `<select>`, placeholders, boutons de pagination/vue, en-têtes de colonnes) sont mis à jour par une nouvelle fonction `applyStaticLabels()`, appelée au démarrage et à chaque changement de langue — évite de dupliquer ce texte dans les deux gabarits HTML presque identiques (`templates/page.html` et `app/src/index.template.html`).
+  - **Hors périmètre, délibérément** : les messages renvoyés par les commandes Tauri côté Rust (ex. "Livre ajouté. Sauvegarde : ...", "Book Collector est actuellement lancé...") restent en français quelle que soit la langue choisie — les traduire demanderait de faire transiter un paramètre de langue à travers chaque appel IPC et de dupliquer ces messages côté Rust ; reporté à une étape séparée si le besoin se confirme.
+  - **Limite connue, documentée en commentaire** : changer de langue pendant la saisie du formulaire "Ajouter un livre" reconstruit le formulaire depuis zéro et perd les valeurs de champs simples déjà tapées (les listes auteurs/genres/crédits/etc., elles, survivent puisqu'elles vivent dans un état séparé) — un compromis volontaire, ce scénario étant jugé rare.
+
+### Verified
+- Dictionnaire : exactement 200 clés de chaque côté (`fr`/`en`), aucune clé orpheline dans un sens ou l'autre, et les marqueurs d'interpolation `{variable}` strictement identiques entre les deux langues pour chaque clé — vérifié par un script Node qui charge réellement l'objet `I18N` (pas une simple recherche textuelle).
+- Chaque appel `t('clé')` du reste du fichier (182 appels littéraux distincts, plus les quelques appels indirects comme les onglets du formulaire ou les `<option>` statiques) résolu avec succès contre `I18N.fr` et `I18N.en` par le même script — aucune clé utilisée mais absente du dictionnaire.
+- `node --check` sans erreur après chaque étape de la traduction.
+- **Non vérifié** : bascule FR/EN en conditions réelles dans un navigateur — une tentative de lancer un petit serveur local pour visualiser la page a été bloquée par le bac à sable ("Expose Local Services"). La vérification s'appuie donc entièrement sur l'analyse statique ci-dessus plutôt que sur une capture d'écran ; à confirmer visuellement à l'usage.
+
 ## [0.45.1] - 2026-11-03
 
 ### Fixed
