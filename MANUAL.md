@@ -114,8 +114,16 @@ tests, le projet garde une copie en lecture seule dans `testdata/` :
 
 ```bash
 ./refresh-testdata.sh      # resynchronise testdata/ depuis la vraie collection
-cargo test --release       # lance les tests unitaires
+cargo test --release       # lance les tests unitaires ET d'intégration
 ```
+
+**Tests d'intégration (v0.47.0)** : `tests/add_edit_delete_round_trip.rs`
+exerce les vrais pipelines d'ajout/modification/suppression contre une
+copie temporaire et jetable de `testdata/` (jamais `testdata/` lui-même,
+jamais `testdata-rw/`) — créée et détruite automatiquement à chaque
+exécution de `cargo test`, rien à préparer à la main. Complète les tests
+unitaires existants, qui ne couvrent que de petites fonctions isolées, pas
+une vraie écriture de bout en bout.
 
 Pour des itérations plus rapides (notamment sur l'app NBC, § 8), un petit
 échantillon dérivé de `testdata/` — jamais directement la vraie collection :

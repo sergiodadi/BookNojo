@@ -984,7 +984,7 @@ where
 /// base sont repris ici. Les noms de champs sont partagés tels quels avec
 /// le formulaire JS (`templates/app.js`, `onAddFormSubmit`) et avec le
 /// format `new_book.json` lu par `bc_add resolve`.
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Default, Serialize, Deserialize)]
 pub struct NewBookInput {
     pub title: String,
     #[serde(default)]

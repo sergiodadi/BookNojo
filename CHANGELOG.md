@@ -4,6 +4,20 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.47.0] - 2026-11-03
+
+### Added
+- **Tests d'intégration** (`tests/add_edit_delete_round_trip.rs`) — jusqu'ici, les pipelines "Ajouter"/"Modifier"/"Supprimer un livre" n'avaient jamais été vérifiés que manuellement (lignes de commande `bc_add` contre `testdata-rw/`, ou exemples jetables) ; les tests unitaires existants (`src/lib.rs`, `src/bin/bc_add.rs`) ne couvrent que de petites fonctions isolées (mapping des rôles, chemins, dates), jamais une vraie écriture contre une vraie base. 4 nouveaux tests, chacun sur sa propre copie temporaire et jetable de `testdata/` (jamais le fichier partagé lui-même) :
+  - `add_book_round_trip_through_every_relation` — ajoute un livre avec auteur/genre/sujet/crédit-avec-rôle/personnage/contenu/lien, vérifie que tout revient identique via `load_book_for_edit_at` **et** `load_page_books` (les deux chemins de lecture), et que `PRAGMA integrity_check` reste `ok`.
+  - `edit_book_updates_fields_and_swaps_relations_without_recreating_item_delegate` — modifie titre/genre/crédits d'un livre existant, vérifie le nouveau contenu, que l'ancien genre n'est pas supprimé (juste délié), et que le `ZITEMDELEGATE` propre au livre garde la **même** clé primaire (n'est pas recréé).
+  - `delete_book_removes_only_its_own_rows` — deux livres partageant un même genre, supprime l'un, vérifie que ses propres lignes (dont son `ZITEMDELEGATE`) disparaissent mais que le genre partagé et l'autre livre restent intacts.
+  - `commit_add_book_refuses_a_readonly_database_with_a_clear_message` — vérifie le message d'erreur exact (mentionne "lecture seule" et "testdata-rw") plutôt que l'erreur SQLite brute.
+  - `NewBookInput` gagne `#[derive(Default)]` (changement non fonctionnel) pour permettre `NewBookInput { title: ..., collection: ..., ..Default::default() }` dans ces tests sans renseigner la cinquantaine d'autres champs à chaque fois.
+
+### Verified
+- Test de mutation volontaire : une ligne supprimant le `ZITEMDELEGATE` d'un livre a été temporairement retirée de `plan_delete_book_sql`, confirmant que `delete_book_removes_only_its_own_rows` échoue bien dans ce cas (et pas de façon illusoire) — puis la ligne a été restaurée. `cargo test --release` : 17/17 tests passent (13 précédents + 4 nouveaux), aucun fichier temporaire oublié dans `/tmp` après coup.
+- **Portée délibérément limitée au niveau "données"** : ces tests couvrent la bibliothèque Rust partagée (`src/lib.rs`), pas l'interface de l'app NBC elle-même. Les bugs corrigés plus tôt dans cette même session (validation HTML silencieuse, liste non rechargée après ajout, confirmation de suppression jamais attendue, permission de dialogue manquante) étaient tous côté JavaScript/Tauri — un test Rust contre SQLite ne les aurait pas détectés. Un test d'intégration équivalent côté interface demanderait un outil de test JS (aucun configuré actuellement) ou un navigateur automatisé, ce qui s'est heurté à une restriction du bac à sable dans cette session (v0.42.0, v0.46.0).
+
 ## [0.46.0] - 2026-11-03
 
 ### Added
