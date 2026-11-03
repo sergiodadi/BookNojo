@@ -4,6 +4,12 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.44.0] - 2026-11-03
+
+### Fixed
+- **Bug critique signalé par l'utilisateur, en testant le correctif `assetProtocol.scope` sur une copie à `~/Desktop/TestAilleurs.bkcp`** : après "Ajouter un livre", le livre était bien écrit en base (confirmé : une ligne `ZTITLE='TTT'` bien présente), mais invisible dans la recherche/la liste de l'app. Cause : `confirmAddBook()` (`templates/app.js`) rechargeait toujours la collection après une **modification** (retour à la bibliothèque + `bootWithErrorHandling()`), mais après un **ajout**, se contentait d'afficher un message de succès dans le formulaire — sans jamais recharger `allBooks` en mémoire. La recherche/liste utilisait donc toujours les données d'avant l'ajout. Conséquence annexe découverte dans la même session : sans retour visuel clair, l'utilisateur a réessayé en pensant que rien ne s'était passé, créant **deux fiches "TTT"** identiques dans sa base de test.
+  - Corrigé : après un ajout, comme après une modification, la collection est maintenant systématiquement rechargée et l'app revient à la bibliothèque — plus aucune différence de comportement entre les deux cas. Une boîte de dialogue native confirme en plus explicitement le succès de l'ajout (le message de confirmation du backend, ex. "Livre ajouté. Sauvegarde : ..."), puisqu'après un ajout il n'y a rien d'équivalent à regarder (contrairement à une modification, où le livre modifié reste visible au même endroit).
+
 ## [0.43.0] - 2026-11-03
 
 ### Changed

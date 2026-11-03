@@ -560,6 +560,14 @@ chemin qui ressemble à la vraie collection Book Collector, contrairement à
 `bc_add commit --force` en CLI qui peut la forcer avec une confirmation
 tapée au clavier.
 
+**v0.44.0** : après l'écriture, l'app recharge désormais systématiquement
+la collection et revient à la bibliothèque (comme le fait déjà "Modifier
+ce livre") — avant, un ajout réussi n'était signalé que par un message
+dans le formulaire, sans recharger la liste en mémoire : le livre était
+bien en base, mais introuvable en recherche jusqu'au rechargement suivant
+de la collection. Une boîte de dialogue confirme maintenant explicitement
+le succès de l'ajout.
+
 `app/src/index.html` reste gitignoré (généré par `generate-dev-data.sh`
 depuis `app/src/index.template.html`, committé lui) mais ne contient plus
 de données personnelles depuis l'étape 3 — exclu par précaution tout de

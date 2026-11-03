@@ -1402,16 +1402,19 @@ async function confirmAddBook() {
       : { path: currentCollectionPath, input: pendingAddBook };
     const result = await window.__TAURI__.core.invoke(wasEditing ? 'commit_update_book' : 'commit_add_book', args);
     closeAddConfirm();
-    if (wasEditing) {
-      editingBookId = null;
-      editingBookData = null;
-      resetAddFormState();
-      setPanel('library');
-      bootWithErrorHandling();
-    } else {
-      msgEl.textContent = result;
-      msgEl.className = 'add-msg-success';
-    }
+    editingBookId = null;
+    editingBookData = null;
+    resetAddFormState();
+    setPanel('library');
+    bootWithErrorHandling();
+    // After an edit, the updated book is already visible (same id, same
+    // place in the list) — that's confirmation enough. After an add there
+    // is nothing equivalent to look at without searching for the new
+    // title, so without an explicit signal here, a user who doesn't
+    // immediately search can't tell whether the save actually worked
+    // (found and fixed in v0.44.0, after exactly that confusion led to a
+    // book being added twice).
+    if (!wasEditing) window.alert(result);
   } catch (err) {
     closeAddConfirm();
     msgEl.textContent = String(err);
