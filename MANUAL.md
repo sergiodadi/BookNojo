@@ -147,6 +147,11 @@ moment :
 cargo run --release --example generate_sample_collection
 ```
 
+Les 10 fiches ont chacune leur couverture inventée (v0.50.0, dans
+`Images/`) — cette commande ne les touche pas (elle ne régénère que
+`Book_data`), elles ont été produites une fois avec un script Pillow
+jetable, comme l'icône de l'app (§ 8).
+
 ## 7. (Expérimental) Préparer l'ajout d'un livre — étapes 1 à 6 sur 6
 
 > ⚠️ En cours de construction, par étapes. `bc_add resolve`, `plan` et

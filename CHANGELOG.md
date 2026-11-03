@@ -4,6 +4,14 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.50.0] - 2026-11-04
+
+### Added
+- **Couvertures pour les 10 fiches de `sample-collection/`** — demandé après avoir constaté qu'aucune des fiches de la nouvelle collection d'exemple (v0.49.0) n'en avait. 10 couvertures inventées (une par livre, style "roman" sobre pour les 5 "Livres", style "BD" vif et typé pour les 5 "BD"), générées avec Pillow (même méthode que l'icône de l'app, aucun outil de rasterisation disponible sur la machine) : dégradé de couleur propre à chaque fiche, titre et auteur en incrustation, cadre décoratif.
+  - `commit_add_book`/`NewBookInput` n'ont aucune notion de couverture (gestion de fichiers explicitement hors périmètre du formulaire d'ajout) — `examples/generate_sample_collection.rs` associe donc chaque fiche à un fichier de couverture, puis met à jour `ZCOLLECTIBLE.ZFRONTCOVER` directement en SQL juste après l'avoir ajoutée.
+  - Les fichiers de couverture eux-mêmes vivent dans `sample-collection/MyCollection.bkcp/Images/` (10 fichiers `.jpg`, ~1,4 Mo au total) — un script Python jetable (non commité, même convention que l'icône) les a produits une fois ; `generate_sample_collection.rs` ne les régénère pas, mais ne les efface plus non plus en cas de relance (corrigé au passage : la première version effaçait tout le dossier `sample-collection/` à chaque exécution, ce qui aurait supprimé les couvertures à la prochaine régénération des données).
+  - Vérifié via `bc_export` (le vrai chemin de lecture de l'app) : "10 fiches exportées, dont avec couverture avant : 10" — les 10 couvertures sont bien résolues, pas seulement présentes sur le disque.
+
 ## [0.49.0] - 2026-11-04
 
 ### Fixed
