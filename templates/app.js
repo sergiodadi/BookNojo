@@ -295,8 +295,6 @@ const I18N = {
 
     add_confirm_title_heading: 'Confirmer l\'ajout',
     add_confirm_hint_new: '{n} nouvelle(s) valeur(s) seront créées (marquées "nouveau" ci-dessous) :',
-    add_confirm_hint_none_new: 'Toutes les valeurs ci-dessous existent déjà dans la collection.',
-    add_confirm_empty_fields: '(aucune valeur de type éditeur/genre/auteur/etc. sur cette fiche)',
     add_confirm_badge_new: 'nouveau',
     common_cancel: 'Annuler', common_save: 'Enregistrer', add_confirm_saving: 'Enregistrement…',
 
@@ -462,8 +460,6 @@ const I18N = {
 
     add_confirm_title_heading: 'Confirm the addition',
     add_confirm_hint_new: '{n} new value(s) will be created (marked "new" below):',
-    add_confirm_hint_none_new: 'All the values below already exist in the collection.',
-    add_confirm_empty_fields: '(no publisher/genre/author/etc. value on this entry)',
     add_confirm_badge_new: 'new',
     common_cancel: 'Cancel', common_save: 'Save', add_confirm_saving: 'Saving…',
 
@@ -1726,21 +1722,26 @@ async function openAddConfirm(book, msgEl) {
     const preview = await window.__TAURI__.core.invoke('prepare_add_book', { path: currentCollectionPath, input: book });
     pendingAddBook = book;
     document.getElementById('addConfirmTitle').textContent = preview.title;
+    // Only say something here when there's actually something to flag —
+    // a reassurance that "everything already exists" or a placeholder
+    // explaining an empty list are both noise for an everyday user who
+    // just wants to confirm the add; the one thing genuinely worth a
+    // warning is a brand-new value about to be created (e.g. a typo'd
+    // author name that would otherwise silently become a permanent new
+    // entry in the collection) — found by the user looking at this dialog
+    // on a simple book with nothing new on it (v0.48.0).
     const hintEl = document.getElementById('addConfirmHint');
-    if (preview.new_count > 0) {
-      hintEl.textContent = t('add_confirm_hint_new', { n: preview.new_count });
-    } else {
-      hintEl.textContent = t('add_confirm_hint_none_new');
-    }
+    hintEl.classList.toggle('hidden', preview.new_count === 0);
+    hintEl.textContent = preview.new_count > 0 ? t('add_confirm_hint_new', { n: preview.new_count }) : '';
+
     const fieldsEl = document.getElementById('addConfirmFields');
-    fieldsEl.innerHTML = preview.fields.length
-      ? preview.fields.map(f => `
+    fieldsEl.classList.toggle('hidden', preview.fields.length === 0);
+    fieldsEl.innerHTML = preview.fields.map(f => `
           <div class="confirm-field">
             <span class="confirm-field-label">${escapeHtml(f.label)}</span>
             <span class="confirm-field-value">${escapeHtml(f.value)}</span>
             ${f.is_new ? `<span class="confirm-badge-new">${escapeHtml(t('add_confirm_badge_new'))}</span>` : ''}
-          </div>`).join('')
-      : `<p class="confirm-empty">${escapeHtml(t('add_confirm_empty_fields'))}</p>`;
+          </div>`).join('');
     document.getElementById('addConfirmOverlay').classList.remove('hidden');
   } catch (err) {
     pendingAddBook = null;

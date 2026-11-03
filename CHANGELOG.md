@@ -4,6 +4,11 @@ Toutes les versions notables de `bc_export` sont documentées ici.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.0.0/).
 Un numéro de version est ajouté après chaque demande traitée.
 
+## [0.48.0] - 2026-11-04
+
+### Changed
+- **Boîte "Confirmer l'ajout" allégée** — signalé par l'utilisateur : pour une fiche simple (sans auteur/genre/éditeur/etc., ou dont toutes les valeurs existent déjà), la boîte affichait deux phrases qui n'apportent rien à un utilisateur courant ("Toutes les valeurs ci-dessous existent déjà dans la collection." et "(aucune valeur de type éditeur/genre/auteur/etc. sur cette fiche)"). Ces deux phrases sont supprimées — elles n'étaient là que pour décrire un état "rien à signaler", qui n'a pas besoin d'être décrit. Ce qui reste, et qui est la vraie utilité de cette boîte : l'avertissement "{n} nouvelle(s) valeur(s) seront créées" ne s'affiche désormais **que** lorsqu'il y a effectivement une valeur réellement nouvelle à créer — c'est le seul cas qui mérite l'attention de l'utilisateur (repérer une faute de frappe avant qu'elle devienne une entrée permanente dans la collection).
+
 ## [0.47.0] - 2026-11-03
 
 ### Added
