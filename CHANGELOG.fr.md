@@ -5,6 +5,13 @@
 Historique des **versions publiées sur GitHub** (`sergiodadi/BookNojo`),
 une entrée par tag/release.
 
+## [v1.0.0b3] - 2026-11-08
+
+- README.md/README.fr.md : suppression du numéro de version dans la
+  ligne de statut — elle devenait obsolète à chaque déplacement du tag
+  public. La ligne indique maintenant juste que le projet est en
+  développement actif et public.
+
 ## [v1.0.0b2] - 2026-11-08
 
 - Le dépôt est maintenant **public**.

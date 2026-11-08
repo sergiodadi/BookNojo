@@ -8,8 +8,8 @@ dans sa propre base, et évolue progressivement vers une base de données
 **indépendante**, pour continuer à fonctionner le jour où Book Collector ne
 le pourra plus.
 
-> **Statut : v1.0.0b1, bêta.** Projet en développement actif, disponible
-> publiquement depuis le 08/11/2026.
+> Projet en développement actif, disponible publiquement depuis le
+> 08/11/2026.
 
 ## Pourquoi ce projet
 
