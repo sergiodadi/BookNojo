@@ -1,0 +1,33 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Généré par ./generate-dev-data.sh depuis testdata/ (données personnelles,
+# jamais à committer — même règle que /testdata et /collection à la racine
+# du projet). Le gabarit sans données, lui, est committé : src/index.template.html.
+src/index.html
+# app.js/style.css sont une copie de ../templates/, resynchronisée par le
+# même script — committer templates/ suffit, pas besoin de les dupliquer ici.
+src/app.js
+src/style.css
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

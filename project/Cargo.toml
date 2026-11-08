@@ -1,0 +1,27 @@
+[package]
+name = "book_collector_export"
+version = "0.66.0"
+edition = "2021"
+license = "MIT"
+
+[lib]
+name = "book_collector_export"
+path = "src/lib.rs"
+
+[[bin]]
+name = "bc_export"
+path = "src/main.rs"
+
+[[bin]]
+name = "bc_add"
+path = "src/bin/bc_add.rs"
+
+[dependencies]
+rusqlite = { version = "0.32", features = ["bundled"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+csv = "1"
+anyhow = "1"
+clap = { version = "4", features = ["derive"] }
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
+base64 = "0.22"

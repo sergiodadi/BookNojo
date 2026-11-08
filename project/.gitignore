@@ -1,0 +1,30 @@
+/target
+
+# Copie de travail de la collection (~400 Mo, données personnelles, jamais
+# à committer) — régénérée avec ./refresh-testdata.sh.
+/testdata
+
+# Copie INSCRIPTIBLE dédiée aux tests d'écriture (bc_add commit) —
+# régénérée avec ./refresh-testdata-rw.sh. Jamais la vraie collection.
+/testdata-rw
+
+# Petit échantillon (une centaine de fiches, dérivé de testdata/ — jamais
+# la vraie collection) pour des itérations rapides, notamment l'app BookNojo.
+# Régénéré avec ./build-sample-testdata.sh. Toujours des données
+# personnelles malgré la taille réduite.
+/testdata-sample
+
+# Sauvegardes horodatées créées par `bc_add guard`/`commit`.
+backups/
+
+# Intermédiaires de `bc_add add` (contiennent des données personnelles :
+# titres, noms...).
+/bc_add_runs
+
+# La future base persistante "BookNojo" (données personnelles), créée par
+# `bc_add import` — destination par défaut `collection/*.col`, mais toute
+# extension .col n'importe où est exclue par précaution.
+/collection
+*.col
+
+.DS_Store

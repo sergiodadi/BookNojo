@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Book Collector — export</title>
+<style>
+__STYLE__</style>
+</head>
+<body>
+<header>
+  <h1>📚 Book Collector — export</h1>
+  <span id="fileBadge"></span>
+  <span id="appVersion">Ⓥ bc_export v__VERSION__</span>
+  <button id="addBtn">➕ Ajouter un livre</button>
+  <button id="statsBtn">📊 Statistiques</button>
+</header>
+<div id="tabs"></div>
+<main>
+  <aside id="groups">
+    <div id="groupHeader">
+      <select id="groupField">
+        <option value="authors">Auteur</option>
+        <option value="genres">Genre</option>
+        <option value="publisher">Éditeur</option>
+        <option value="format">Format</option>
+        <option value="language">Langue</option>
+        <option value="country">Pays</option>
+      </select>
+    </div>
+    <div id="azbar"></div>
+    <div id="groupList"></div>
+  </aside>
+  <div id="splitterV" title="Glisser pour redimensionner"></div>
+  <div id="rightCol">
+    <div id="bookListPane">
+      <div id="listToolbar">
+        <span class="count" id="count"></span>
+        <select id="sort">
+          <option value="title">Titre (A→Z)</option>
+          <option value="author">Auteur (A→Z)</option>
+          <option value="year_desc">Année (récent d'abord)</option>
+          <option value="publisher">Éditeur (A→Z)</option>
+        </select>
+        <input id="search" type="search" placeholder="Rechercher titre ou auteur…">
+        <div id="viewToggle">
+          <button id="viewList" class="active">☰ Liste</button>
+          <button id="viewGrid">▦ Grille</button>
+        </div>
+      </div>
+      <div id="colHeader">
+        <span data-sort="title">Titre</span>
+        <span data-sort="author">Auteur</span>
+      </div>
+      <div id="rows"></div>
+      <div id="pager">
+        <button id="prev">‹ Préc.</button>
+        <span id="pageinfo"></span>
+        <button id="next">Suiv. ›</button>
+      </div>
+    </div>
+    <div id="splitterH" title="Glisser pour redimensionner"></div>
+    <div id="detail"><div id="empty">Sélectionnez un livre.</div></div>
+  </div>
+</main>
+<div id="statsPane"></div>
+<div id="addPane"></div>
+<script id="data" type="application/json">__DATA_JSON__</script>
+<script>
+__SCRIPT__</script>
+</body>
+</html>
