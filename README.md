@@ -7,8 +7,8 @@ Book collection manager — imports a [Book Collector](https://www.collectorz.co
 gradually evolving toward an **independent** database, so it keeps
 working the day Book Collector no longer can.
 
-> **Status: v1.0.0b1, beta, personal use.** Actively developed project,
-> not yet distributed to anyone other than its author.
+> **Status: v1.0.0b1, beta.** Actively developed project, publicly
+> available since 2026-11-08.
 
 ## Why this project
 
