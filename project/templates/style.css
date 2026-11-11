@@ -372,8 +372,7 @@
   .group .label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .04em; color: #7d7f89; margin-bottom: 5px; }
 
   /* "Product Details"/"Personal Details"/repeatable-entry sections in the
-     detail card — a compact key/value list, matching Book Collector's own
-     detail-view layout for these sections. */
+     detail card — a compact key/value list for these sections. */
   .kv-list { display: flex; flex-direction: column; gap: 3px; max-width: 480px; }
   .kv-row { display: flex; gap: 10px; font-size: 12.5px; line-height: 1.4; }
   .kv-row .kv-key { flex: 0 0 150px; color: #8a8c96; }

@@ -730,8 +730,7 @@ pub struct PageBook {
     /// `resolveCoverSrc()`).
     pub thumb_url: Option<String>,
 
-    // ---- "Product Details" — matches Book Collector's own detail-view
-    // section name, which the user explicitly compared BookNojo against. ----
+    // ---- "Product Details" ----
     /// Already resolved on `Book` (added earlier for form autocomplete) but
     /// never previously carried through to `PageBook` — found while adding
     /// the rest of "Product Details".
