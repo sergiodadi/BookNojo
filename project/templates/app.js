@@ -460,9 +460,8 @@ const I18N = {
 };
 
 // Flat key/value section for the detail card ("Product Details"/"Personal
-// Details" etc., matching Book Collector's own section names) — falsy
-// values (0, '', null) are dropped, same convention `current_value`/
-// `purchase_price` already use just above in selectBook().
+// Details" etc.) — falsy values (0, '', null) are dropped, same convention
+// `current_value`/`purchase_price` already use just above in selectBook().
 function kvGroup(label, pairs) {
   const rows = pairs
     .filter(([, v]) => v)

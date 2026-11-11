@@ -96,7 +96,7 @@ checksum = "3ded4057c258ba199e2d26386d3af3780957ecaee6c4ef4041c6b4b8b97c0b06"
 
 [[package]]
 name = "book_collector_export"
-version = "0.65.0"
+version = "0.69.0"
 dependencies = [
  "anyhow",
  "base64",

@@ -4,7 +4,7 @@ name = "booknojo"
 # "0.1.0" meant both this crate's own env!("CARGO_PKG_VERSION") (the About
 # BookNojo dialog) and tauri.conf.json's bundle version were silently
 # stale since the app was scaffolded.
-version = "0.68.0"
+version = "0.69.0"
 description = "BookNojo"
 authors = ["Serge"]
 edition = "2024"
