@@ -8,6 +8,17 @@ use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
 /// to match the schema this project's SQL targets.
 const SUPPORTED_BKCP_VERSION: &str = "20.3.1";
 
+/// The version shown to the user (header badge, both "About BookNojo"
+/// surfaces), deliberately *not* `CARGO_PKG_VERSION` — `Cargo.toml`'s
+/// version bumps on every single internal commit, while this tracks the
+/// latest published `.dmg` release tag instead (what the user actually
+/// downloaded). MusicNojo/VideoNojo both already have this; BookNojo never
+/// did — found 15/11/2026 by directly comparing the three apps' code, not
+/// from BookNojo's own MANUAL.md, which doesn't mention the gap. **Update
+/// this by hand at every future release**, before building that release's
+/// `.dmg`, not after.
+const DISPLAY_VERSION: &str = "1.0.0b3";
+
 /// Loads a collection (a `.bkcp`/`.col` directory, or its `Book_data` file
 /// directly) read-only and returns every book, across all sous-collections,
 /// as the same `PageBook` shape `bc_export`'s static HTML export already
@@ -52,7 +63,7 @@ fn grant_asset_scope_for_collection<R: tauri::Runtime>(app: &tauri::AppHandle<R>
 /// instead, same as everything else.
 #[tauri::command]
 fn app_version() -> String {
-    env!("CARGO_PKG_VERSION").to_string()
+    DISPLAY_VERSION.to_string()
 }
 
 /// Refuses any write-bound operation against what looks like the real Book
@@ -240,7 +251,17 @@ fn open_import_dialog(app: &tauri::AppHandle) {
 fn build_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     #[cfg(target_os = "macos")]
     let app_menu = SubmenuBuilder::new(app, "BookNojo")
-        .about(None)
+        .about(Some(tauri::menu::AboutMetadata {
+            // Overrides the bundle's own CFBundleShortVersionString/
+            // CFBundleVersion (still CARGO_PKG_VERSION/Cargo.toml's
+            // per-commit dev version) with DISPLAY_VERSION — the native
+            // About panel is a separate surface from the custom dialog
+            // below, driven by the bundle's own Info.plist fields rather
+            // than any Rust command, so both need fixing.
+            version: Some(DISPLAY_VERSION.to_string()),
+            short_version: Some(DISPLAY_VERSION.to_string()),
+            ..Default::default()
+        }))
         .separator()
         .hide()
         .hide_others()
@@ -315,7 +336,7 @@ pub fn run() {
             "import_collection" => open_import_dialog(app),
             "about_booknojo" => {
                 app.dialog()
-                    .message(format!("BookNojo\nVersion {}", env!("CARGO_PKG_VERSION")))
+                    .message(format!("BookNojo\nVersion {}", DISPLAY_VERSION))
                     .title("About BookNojo")
                     .show(|_| {});
             }
