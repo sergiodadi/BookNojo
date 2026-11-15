@@ -1,1 +1,4 @@
 .DS_Store
+# Claude's working fiche for this app — private notes, not the public
+# docs (see ~/.claude/CLAUDE.md on this machine for the rule).
+/BOOKNOJO.md
