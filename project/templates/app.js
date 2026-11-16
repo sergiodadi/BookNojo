@@ -209,6 +209,8 @@ const I18N = {
     stats_copies: '{n} exemplaires',
     stats_value_suffix: 'de valeur totale',
     stats_no_cover: '{n} sans couverture',
+    stats_add_cover_hint: 'Cliquer pour ajouter une jaquette',
+    cover_set_failed: 'Échec de la mise à jour de la jaquette : {err}',
     stats_no_isbn: '{n} sans ISBN',
     stats_no_author: '{n} sans auteur',
     stats_formats: 'Formats',
@@ -374,6 +376,8 @@ const I18N = {
     stats_copies: '{n} copies',
     stats_value_suffix: 'total value',
     stats_no_cover: '{n} with no cover',
+    stats_add_cover_hint: 'Click to add a cover',
+    cover_set_failed: 'Setting the cover failed: {err}',
     stats_no_isbn: '{n} with no ISBN',
     stats_no_author: '{n} with no author',
     stats_formats: 'Formats',
@@ -1040,11 +1044,13 @@ function computeStats() {
     const d = Math.floor(y / 10) * 10;
     decades.set(d, (decades.get(d) || 0) + 1);
   }
+  const noCoverBooks = books.filter(b => !b.cover_url).sort((a, b) => a.title.localeCompare(b.title));
   return {
     totalFiches: books.length,
     totalQty: books.reduce((s, b) => s + (b.quantity || 1), 0),
     totalValue: books.reduce((s, b) => s + (b.current_value || 0), 0),
-    noCover: books.filter(b => !b.cover_url).length,
+    noCover: noCoverBooks.length,
+    noCoverBooks,
     noIsbn: books.filter(b => !b.isbn).length,
     noAuthor: books.filter(b => !(b.authors && b.authors.length)).length,
     genres: tally(b => b.genres || []),
@@ -1067,9 +1073,42 @@ function barList(title, entries, limit) {
   return `<div class="stat-block"><h3>${escapeHtml(title)}</h3>${rows || `<p class="stat-empty">${escapeHtml(t('stats_no_data'))}</p>`}</div>`;
 }
 
+// Which "N with no cover" summary item is currently expanded — a plain
+// module-level Set rather than per-call state, so it survives the
+// full-innerHTML re-render renderStats() does on every toggle/language
+// switch/tab change. Same pattern MusicNojo/VideoNojo already use for
+// their own stats panel.
+const statsExpanded = new Set();
+
+// The "no cover" list's entries double as a shortcut into
+// pick_and_set_cover — only reachable under window.__TAURI__ (the plain
+// bc_export static export is read-only, nothing to click through to).
+function bookListHtml(booksList, clickableForCover) {
+  if (!booksList.length) return `<p class="stat-empty">${escapeHtml(t('stats_no_data'))}</p>`;
+  return `<ul class="stat-detail-list">${booksList.map(b => {
+    const authors = b.authors.join(', ');
+    const label = authors ? `${escapeHtml(authors)} — ${escapeHtml(b.title)}` : escapeHtml(b.title);
+    return clickableForCover
+      ? `<li class="clickable" data-book-id="${b.id}" title="${escapeHtml(t('stats_add_cover_hint'))}">${label}</li>`
+      : `<li>${label}</li>`;
+  }).join('')}</ul>`;
+}
+
+function statLink(key, labelKey, n) {
+  const expanded = statsExpanded.has(key);
+  return `<span class="stat-link${expanded ? ' expanded' : ''}" data-stat-key="${key}">${t(labelKey, { n: `<strong>${n}</strong>` })}</span>`;
+}
+
 function renderStats() {
   const s = computeStats();
   const moneyBit = s.totalValue ? `<span><strong>${s.totalValue.toFixed(2)}</strong> ${escapeHtml(t('stats_value_suffix'))}</span>` : '';
+  const canSetCover = !!window.__TAURI__;
+  const noCoverSummary = canSetCover
+    ? statLink('noCover', 'stats_no_cover', s.noCover)
+    : `<span>${t('stats_no_cover', { n: `<strong>${s.noCover}</strong>` })}</span>`;
+  const noCoverDetail = canSetCover && statsExpanded.has('noCover')
+    ? `<div class="stat-detail"><h4>${escapeHtml(t('stats_no_cover', { n: s.noCover }))}</h4>${bookListHtml(s.noCoverBooks, true)}</div>`
+    : '';
   statsPaneEl.innerHTML = `
     <div class="stats-wrap">
       <h2>${escapeHtml(t('stats_title', { name: state.collection }))}</h2>
@@ -1077,10 +1116,11 @@ function renderStats() {
         <span>${t('stats_entries', { n: `<strong>${s.totalFiches}</strong>` })}</span>
         <span>${t('stats_copies', { n: `<strong>${s.totalQty}</strong>` })}</span>
         ${moneyBit}
-        <span>${t('stats_no_cover', { n: `<strong>${s.noCover}</strong>` })}</span>
+        ${noCoverSummary}
         <span>${t('stats_no_isbn', { n: `<strong>${s.noIsbn}</strong>` })}</span>
         <span>${t('stats_no_author', { n: `<strong>${s.noAuthor}</strong>` })}</span>
       </div>
+      ${noCoverDetail}
       <div class="stat-grid">
         ${barList(t('detail_group_genres'), s.genres, 15)}
         ${barList(t('stats_formats'), s.formats)}
@@ -1089,6 +1129,25 @@ function renderStats() {
         ${barList(t('stats_by_decade'), s.decades)}
       </div>
     </div>`;
+  if (!canSetCover) return;
+  const statLinkEl = statsPaneEl.querySelector('.stat-link');
+  if (statLinkEl) {
+    statLinkEl.addEventListener('click', () => {
+      if (statsExpanded.has('noCover')) statsExpanded.delete('noCover');
+      else statsExpanded.add('noCover');
+      renderStats();
+    });
+  }
+  statsPaneEl.querySelectorAll('.stat-detail-list li.clickable').forEach(el =>
+    el.addEventListener('click', () => {
+      // Fire-and-forget: the picker is async on the Rust side, result
+      // arrives later as a "cover-set"/"cover-set-error" event.
+      window.__TAURI__.core.invoke('pick_and_set_cover', {
+        path: currentCollectionPath,
+        bookId: Number(el.dataset.bookId),
+      });
+    })
+  );
 }
 
 // --- Panel switcher: exactly one of library / stats / add is visible ---
@@ -2028,6 +2087,20 @@ if (window.__TAURI__) {
     currentCollectionPath = event.payload;
     try { localStorage.setItem('bc_collection_path', currentCollectionPath); } catch (e) { /* ignore */ }
     bootWithErrorHandling();
+  });
+
+  // Reloads the whole collection (simplest way to pick up the new
+  // cover_url everywhere it's shown — list/grid thumbnails, detail
+  // panel, the stats "no cover" list/count itself) rather than patching
+  // just the one book in local state. Same pattern MusicNojo/VideoNojo
+  // already use for their own pick_and_set_cover.
+  window.__TAURI__.event.listen('cover-set', () => {
+    bootWithErrorHandling().then(() => {
+      if (state.panel === 'stats') renderStats();
+    });
+  });
+  window.__TAURI__.event.listen('cover-set-error', (event) => {
+    window.alert(t('cover_set_failed', { err: event.payload }));
   });
 }
 

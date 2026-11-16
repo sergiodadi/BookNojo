@@ -40,7 +40,11 @@ compile it from source, see [`BUILD.md`](BUILD.md).
   "Comics") — tabs at the top let you switch between them without
   reloading anything by hand.
 - **Statistics**: an aggregated view (genres, formats, languages,
-  publishers, decades) for the currently displayed sub-collection.
+  publishers, decades) for the currently displayed sub-collection. The
+  "N with no cover" count is clickable, and expands an Author — Title
+  list of the matching books below. In that list, each book is itself
+  clickable: it opens a native file picker to choose an image, which
+  becomes that book's front cover immediately.
 - **Book detail card**: cover, title/authors/publisher and other main
   information, then — when filled in — Product Details (dimensions,
   Dewey/LCCN, first printing, limited edition...), Original Edition,
@@ -69,6 +73,10 @@ compile it from source, see [`BUILD.md`](BUILD.md).
 - After any add, edit or delete, the library is automatically reloaded:
   the book appears (or disappears) immediately in the list and in
   search, with no manual action needed.
+- There is no way yet, from the application, to pick a cover at *add*
+  time — only `set-cover` afterward (via the "no cover" list in the
+  Statistics panel, or `bc_add set-cover` from the command line) sets
+  one.
 
 ## 4. Bilingual interface
 
@@ -84,9 +92,9 @@ compile it from source, see [`BUILD.md`](BUILD.md).
 ## 5. Data safety
 
 - The user's real Book Collector collection is never modified by
-  accident: every write (add, edit, delete) is preceded by a timestamped
-  backup of the file, and is refused outright if Book Collector is
-  running at the same time (to avoid a write conflict).
+  accident: every write (add, edit, delete, cover) is preceded by a
+  timestamped backup of the file, and is refused outright if Book
+  Collector is running at the same time (to avoid a write conflict).
 - BookNojo can open the real collection in **read-only** mode to browse
   it, but none of the write actions above have any exception for it from
   the application — unlike the command-line tools, which are meant for

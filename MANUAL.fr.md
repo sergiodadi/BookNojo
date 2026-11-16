@@ -42,6 +42,11 @@ pour la compiler depuis les sources, voir [`BUILD.fr.md`](BUILD.fr.md).
   sans rien recharger à la main.
 - **Statistiques** : une vue agrégée (genres, formats, langues,
   éditeurs, décennies) pour la sous-collection actuellement affichée.
+  Le compteur "N sans couverture" est cliquable, et déroule une liste
+  Auteur — Titre des livres concernés en dessous. Dans cette liste,
+  chaque livre est lui-même cliquable : il ouvre un sélecteur de
+  fichier natif pour choisir une image, qui devient immédiatement la
+  jaquette (avant) de ce livre.
 - **Fiche détail d'un livre** : couverture, titre/auteurs/éditeur et
   autres informations principales, puis — quand ils sont renseignés —
   Détails produit (dimensions, Dewey/LCCN, premier tirage, édition
@@ -73,6 +78,10 @@ pour la compiler depuis les sources, voir [`BUILD.fr.md`](BUILD.fr.md).
 - Après tout ajout, modification ou suppression, la bibliothèque est
   automatiquement rechargée : le livre apparaît (ou disparaît)
   immédiatement dans la liste et la recherche, sans action manuelle.
+- Il n'est pas encore possible, depuis l'application, de choisir une
+  couverture au moment de l'*ajout* — seul `set-cover` ensuite (via la
+  liste "sans couverture" du panneau de statistiques, ou
+  `bc_add set-cover` en ligne de commande) en définit une.
 
 ## 4. Interface bilingue
 
@@ -89,7 +98,8 @@ pour la compiler depuis les sources, voir [`BUILD.fr.md`](BUILD.fr.md).
 
 - La vraie collection Book Collector de l'utilisateur n'est jamais
   modifiée par accident : toute écriture (ajout, modification,
-  suppression) est précédée d'une sauvegarde horodatée du fichier, et
+  suppression, couverture) est précédée d'une sauvegarde horodatée du
+  fichier, et
   refusée d'emblée si Book Collector est lancé en même temps (pour éviter
   un conflit d'écriture).
 - BookNojo peut ouvrir la vraie collection en **lecture** pour la consulter,

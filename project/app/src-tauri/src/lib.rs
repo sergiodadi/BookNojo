@@ -82,6 +82,67 @@ fn refuse_if_real_collection(db_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// Native picker for a cover image, same async-callback shape as the
+/// import dialog (a blocking pick from inside a `#[tauri::command]`
+/// deadlocks on macOS). `set_cover` didn't exist anywhere in this project
+/// before 2026-11-15 — found missing by comparing against MusicNojo's/
+/// VideoNojo's own `pick_and_set_cover`, which this mirrors. Entry point is
+/// the stats panel's "no cover" list (front cover only, same as the other
+/// two apps — there's no equivalent one-click action for the back cover).
+/// Result goes back as an event, not the command's return value, since the
+/// picker itself is asynchronous.
+#[tauri::command]
+fn pick_and_set_cover(app: tauri::AppHandle, path: String, book_id: i64) {
+    let db_path = match book_collector_export::resolve_db_path(Path::new(&path)) {
+        Ok(p) => p,
+        Err(e) => {
+            let _ = app.emit("cover-set-error", format!("{e:#}"));
+            return;
+        }
+    };
+    if refuse_if_real_collection(&db_path).is_err() {
+        let _ = app.emit(
+            "cover-set-error",
+            "BookNojo n'écrit jamais directement dans la vraie collection Book Collector.".to_string(),
+        );
+        return;
+    }
+    app.dialog()
+        .file()
+        .set_title("Choisir une image de jaquette")
+        .add_filter("Image", &["jpg", "jpeg", "png", "gif", "bmp"])
+        .pick_file(move |file| {
+            let Some(file) = file else { return };
+            let Some(local_path) = file.as_path() else { return };
+            match book_collector_export::is_book_collector_running() {
+                Ok(true) => {
+                    let _ = app.emit(
+                        "cover-set-error",
+                        "Book Collector est actuellement lancé — fermez l'application avant d'enregistrer.".to_string(),
+                    );
+                    return;
+                }
+                Err(e) => {
+                    let _ = app.emit("cover-set-error", format!("{e:#}"));
+                    return;
+                }
+                Ok(false) => {}
+            }
+            let backup_dir = db_path
+                .parent()
+                .map(|p| p.join("backups"))
+                .unwrap_or_else(|| std::path::PathBuf::from("backups"));
+            match book_collector_export::set_cover(&db_path, &backup_dir, book_id, Some(local_path), None) {
+                Ok(_) => {
+                    let _ = app.emit("cover-set", book_id);
+                }
+                Err(e) => {
+                    let _ = app.emit("cover-set-error", format!("{e:#}"));
+                }
+            }
+        });
+}
+
 /// Read-only half of "Ajouter un livre" (étape 1-5 du formulaire) — résout
 /// les champs du nouveau livre contre la collection actuellement ouverte et
 /// renvoie un résumé à faire valider par l'utilisateur avant toute écriture.
@@ -325,6 +386,7 @@ pub fn run() {
             delete_book,
             load_book_for_edit,
             commit_update_book,
+            pick_and_set_cover,
             app_version
         ])
         .setup(|app| {

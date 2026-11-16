@@ -156,8 +156,8 @@ are kept in `bc_add_runs/<timestamp>/`, replayable later with
 
 Beyond the "Main" tab (example above), all fields from the other tabs
 of "Add Book" are available in the input JSON, all optional — only the
-ones provided are taken into account. Covers (file management) are not
-covered.
+ones provided are taken into account. Covers are set separately, see
+§ "Covers — `set-cover`" below.
 
 - **Details**: `edition`, `printed_by`, `series`, `volume`,
   `paper_type` (lists), `height`, `width`, `dewey`, `lccn`,
@@ -223,9 +223,25 @@ To control each step separately instead of `bc_add add`:
 yet (e.g. the `ZSEARCHSTRING` companion row, title sorting, CLZ Cloud
 sync identifiers) — read it before `commit`.
 
+### Covers — `set-cover`
+
+```bash
+./bc_add set-cover --db "<path>" --id <book id> --front cover.jpg
+./bc_add set-cover --db "<path>" --id <book id> --front front.jpg --back back.jpg
+```
+
+Writes immediately — unlike the plan/commit split above, a cover is
+just a file copy into the collection's `Images/` folder (named
+`"<id>_f_<slug>.<ext>"` / `"<id>_b_<slug>.<ext>"`, matching the
+application's own naming) plus one column each, nothing to review
+first. The same feature is reachable from the app itself: the
+Statistics panel's "no cover" count expands into a clickable list of
+titles, each opening a native file picker.
+
 ### Safety gates
 
-Before writing, `commit` (and so `add`) checks, in order:
+Before writing, `commit` (and so `add`) and `set-cover` check, in
+order:
 
 1. the database path **does not look like** the real Book Collector
    collection (`~/Documents/Collectorz/...`) — immediate refusal
@@ -235,7 +251,8 @@ Before writing, `commit` (and so `add`) checks, in order:
    its next save);
 3. a timestamped backup of `Book_data` (and `-wal`/`-shm` if present)
    is created in `backups/`, next to the database;
-4. the SQL runs in a single transaction.
+4. the SQL runs in a single transaction (`commit`) or the file copy
+   plus column updates happen (`set-cover`).
 
 `--force` lifts refusal #1, but **still doesn't write directly**: a
 confirmation typed by hand in the terminal takes over:

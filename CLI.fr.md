@@ -159,8 +159,8 @@ sans tout recommencer.
 
 Au-delà de l'onglet "Main" (exemple ci-dessus), tous les champs des
 autres onglets de "Add Book" sont disponibles dans le JSON d'entrée, tous
-optionnels — seuls ceux fournis sont pris en compte. Couvertures (gestion
-de fichiers) n'est pas couvert.
+optionnels — seuls ceux fournis sont pris en compte. Les couvertures se
+posent séparément, voir § « Couvertures — `set-cover` » ci-dessous.
 
 - **Détails** : `edition`, `printed_by`, `series`, `volume`, `paper_type`
   (listes), `height`, `width`, `dewey`, `lccn`, `dedication` (texte
@@ -226,9 +226,25 @@ Pour contrôler chaque étape séparément plutôt que `bc_add add` :
 encore (ex. la ligne compagnon `ZSEARCHSTRING`, le tri de titre, les
 identifiants de synchronisation CLZ Cloud) — à relire avant `commit`.
 
+### Couvertures — `set-cover`
+
+```bash
+./bc_add set-cover --db "<chemin>" --id <id du livre> --front cover.jpg
+./bc_add set-cover --db "<chemin>" --id <id du livre> --front front.jpg --back back.jpg
+```
+
+Écrit immédiatement — contrairement au couple plan/commit ci-dessus,
+une couverture n'est qu'une copie de fichier dans le dossier `Images/`
+de la collection (nommé `"<id>_f_<slug>.<ext>"` / `"<id>_b_<slug>.<ext>"`,
+comme le fait l'application elle-même) plus une colonne chacune, rien à
+relire avant. La même fonctionnalité est accessible depuis l'app : le
+panneau Statistiques, le compteur « sans couverture » se déplie en
+liste cliquable de titres, chacun ouvrant un sélecteur de fichier natif.
+
 ### Garde-fous
 
-Avant d'écrire, `commit` (et donc `add`) vérifie dans l'ordre :
+Avant d'écrire, `commit` (et donc `add`) et `set-cover` vérifient dans
+l'ordre :
 
 1. le chemin de la base **ne ressemble pas** à la vraie collection
    Book Collector (`~/Documents/Collectorz/...`) — refus immédiat sinon ;
@@ -237,7 +253,8 @@ Avant d'écrire, `commit` (et donc `add`) vérifie dans l'ordre :
    changements à sa prochaine sauvegarde) ;
 3. une sauvegarde horodatée de `Book_data` (et `-wal`/`-shm` si présents)
    est créée dans `backups/`, à côté de la base ;
-4. le SQL s'exécute dans une seule transaction.
+4. le SQL s'exécute dans une seule transaction (`commit`) ou la copie de
+   fichier plus les mises à jour de colonnes ont lieu (`set-cover`).
 
 `--force` lève le refus n°1, mais **n'écrit toujours pas directement** :
 une confirmation tapée à la main dans le terminal prend le relais :

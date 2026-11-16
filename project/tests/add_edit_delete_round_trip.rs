@@ -251,3 +251,46 @@ fn commit_add_book_refuses_a_readonly_database_with_a_clear_message() {
     std::fs::set_permissions(&db_path, perms).unwrap();
     cleanup(&db_path);
 }
+
+/// `set_cover` didn't exist anywhere in this project before 2026-11-15 —
+/// added after comparing against MusicNojo/VideoNojo, which both already
+/// had it. First automated test for it (previously manually verified via
+/// `bc_add set-cover` against a scratch copy).
+#[test]
+fn set_cover_updates_front_and_back_cover_filenames() {
+    let db_path = fixture_copy("set_cover_round_trip");
+    let title = format!("ZZ_IntegrationTest_SetCover_{}", std::process::id());
+
+    let input = NewBookInput {
+        title: title.clone(),
+        collection: "book-collector-serge".to_string(),
+        ..Default::default()
+    };
+    commit_add_book(&db_path, &backup_dir_for(&db_path), input).expect("commit_add_book");
+    let book_pk = find_by_title(&db_path, &title);
+
+    let image = Path::new(env!("CARGO_MANIFEST_DIR")).join("app/app-icon.png");
+    set_cover(&db_path, &backup_dir_for(&db_path), book_pk, Some(&image), Some(&image))
+        .expect("set_cover");
+
+    let conn = open_ro(&db_path);
+    let (front, back): (String, String) = conn
+        .query_row(
+            "SELECT ZFRONTCOVER, ZBACKCOVER FROM ZCOLLECTIBLE WHERE Z_PK = ?1",
+            [book_pk],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap();
+    // Not an exact filename match — the title's slug is truncated to 28
+    // chars, which may or may not keep the trailing pid digits depending
+    // on their length; the prefix/suffix is what actually matters here.
+    assert!(front.starts_with(&format!("{book_pk}_f_")) && front.ends_with(".png"), "front: {front}");
+    assert!(back.starts_with(&format!("{book_pk}_b_")) && back.ends_with(".png"), "back: {back}");
+
+    let images_dir = db_path.parent().unwrap().join("Images");
+    assert!(images_dir.join(&front).is_file(), "front cover file should have been copied into Images/");
+    assert!(images_dir.join(&back).is_file(), "back cover file should have been copied into Images/");
+    integrity_check(&db_path);
+
+    cleanup(&db_path);
+}

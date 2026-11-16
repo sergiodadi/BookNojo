@@ -2515,6 +2515,85 @@ pub fn delete_book(db_path: &Path, backup_dir: &Path, book_pk: i64) -> Result<Pa
     write_plan_sql(db_path, backup_dir, &sql)
 }
 
+/// Lowercase alphanumeric words joined by underscores, truncated — same
+/// filename shape already used for existing covers in a real collection
+/// (e.g. `"142_f_the_hobbit.jpg"`). Same helper MusicNojo/VideoNojo already
+/// have for their own `set_cover`.
+fn slugify(title: &str, max_len: usize) -> String {
+    let mut slug = String::new();
+    for c in title.chars() {
+        if c.is_alphanumeric() {
+            slug.push(c.to_ascii_lowercase());
+        } else if !slug.ends_with('_') && !slug.is_empty() {
+            slug.push('_');
+        }
+    }
+    let slug = slug.trim_matches('_');
+    slug.chars().take(max_len).collect()
+}
+
+/// Copies `front`/`back` into the collection's `Images/` folder and points
+/// `ZCOLLECTIBLE.ZFRONTCOVER`/`ZBACKCOVER` directly at the new filenames —
+/// no delegate hop for this column, same as every other scalar field on
+/// `ZCOLLECTIBLE`. **Didn't exist anywhere in this project before
+/// 2026-11-15** — found missing by directly comparing BookNojo's code
+/// against MusicNojo's/VideoNojo's, which both already have it. Callers
+/// must have already checked `is_book_collector_running() == false` and
+/// refused `db_path` if `looks_like_real_collection` returns `Some` — same
+/// contract as `commit_add_book`/`delete_book`. Returns the backup path.
+pub fn set_cover(
+    db_path: &Path,
+    backup_dir: &Path,
+    book_pk: i64,
+    front: Option<&Path>,
+    back: Option<&Path>,
+) -> Result<PathBuf> {
+    let images_dir = db_path
+        .parent()
+        .context("chemin de base invalide")?
+        .join("Images");
+    std::fs::create_dir_all(&images_dir)
+        .with_context(|| format!("création de {}", images_dir.display()))?;
+
+    let title: String = {
+        let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+            .with_context(|| format!("ouverture en lecture seule de {}", db_path.display()))?;
+        let book_ent = entity_ent_id(&conn, "Book")?;
+        conn.query_row(
+            "SELECT ZTITLE FROM ZCOLLECTIBLE WHERE Z_PK = ?1 AND Z_ENT = ?2",
+            rusqlite::params![book_pk, book_ent],
+            |row| row.get(0),
+        )
+        .with_context(|| format!("aucun livre avec Z_PK={book_pk} dans cette collection"))?
+    };
+    let slug = slugify(&title, 28);
+
+    let mut set_clauses = Vec::new();
+    for (source, side, column) in [(front, "f", "ZFRONTCOVER"), (back, "b", "ZBACKCOVER")] {
+        if let Some(source) = source {
+            let ext = source
+                .extension()
+                .and_then(|e| e.to_str())
+                .unwrap_or("jpg")
+                .to_lowercase();
+            let filename = format!("{book_pk}_{side}_{slug}.{ext}");
+            std::fs::copy(source, images_dir.join(&filename)).with_context(|| {
+                format!("copie de {} vers Images/{filename}", source.display())
+            })?;
+            set_clauses.push(format!("{column} = {}", sql_quote(&filename)));
+        }
+    }
+    if set_clauses.is_empty() {
+        bail!("aucune image fournie (--front et/ou --back)");
+    }
+
+    let sql = format!(
+        "BEGIN TRANSACTION;\nUPDATE ZCOLLECTIBLE SET {} WHERE Z_PK = {book_pk};\nCOMMIT;\n",
+        set_clauses.join(", ")
+    );
+    write_plan_sql(db_path, backup_dir, &sql)
+}
+
 /// Verifies `book_pk` names an existing `Book` row, then finds everything
 /// needed to clean up its relations before a delete *or* an update: its
 /// `ZSTORY` rows (whose own `ZAUTHOR` rows need deleting first) and its

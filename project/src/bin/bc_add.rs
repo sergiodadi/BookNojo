@@ -18,8 +18,12 @@
 //!   (`~/Documents/Collectorz/...`) sauf `--force` explicite.
 //!
 //! Étape 5 : `resolve`/`plan` couvrent maintenant aussi les onglets Détails,
-//! Personnel, Crédits & Personnages, Contenus, Intrigue/Notes et Liens (pas
-//! Couvertures — gestion de fichiers, hors périmètre). Crédits, Personnages
+//! Personnel, Crédits & Personnages, Contenus, Intrigue/Notes et Liens.
+//! Couvertures : `set-cover`, ajouté le 15/11/2026 (trouvé manquant en
+//! comparant avec MusicNojo/VideoNojo, qui l'ont tous les deux) — écrit
+//! directement, hors du pipeline resolve/plan/commit puisqu'une jaquette
+//! est une copie de fichier plus une colonne, rien à relire d'abord.
+//! Crédits, Personnages
 //! et Contenus utilisent des tables (`ZCREATOR`, `ZCHARACTER`, `ZSTORY`) qui
 //! sont VIDES dans la collection de test : leur plan SQL est construit par
 //! analogie avec des motifs vérifiés ailleurs (ZAUTHOR, ZLINK — ce dernier
@@ -51,8 +55,8 @@
 use anyhow::{bail, Context, Result};
 use book_collector_export::{
     backup_sqlite_store, entity_ent_id, is_book_collector_running, looks_like_real_collection,
-    plan_book_sql, resolve_book, resolve_db_path, strip_plan_wrapper, write_plan_sql, NewBookInput,
-    ResolvedBook, ResolvedLookup,
+    plan_book_sql, resolve_book, resolve_db_path, set_cover, strip_plan_wrapper, write_plan_sql,
+    NewBookInput, ResolvedBook, ResolvedLookup,
 };
 use clap::{Parser, Subcommand};
 use rusqlite::{Connection, OpenFlags};
@@ -173,6 +177,29 @@ enum Command {
         /// Autorise l'écriture sur --db et/ou --also-db si l'un ressemble à
         /// la vraie collection — la confirmation tapée (voir `commit`)
         /// s'applique quand même à chaque base concernée.
+        #[arg(long)]
+        force: bool,
+    },
+    /// Définit la jaquette (avant et/ou arrière) d'un livre, en copiant le
+    /// fichier dans le dossier Images/ de la collection. Écrit directement
+    /// (pas de resolve/plan séparés) — mêmes garde-fous que `commit`.
+    SetCover {
+        /// Chemin vers le fichier Book_data, ou vers le dossier .bkcp qui le contient.
+        #[arg(long)]
+        db: PathBuf,
+        /// Z_PK du livre (voir la sortie JSON de bc_export, champ "id").
+        #[arg(long)]
+        id: i64,
+        /// Image locale à utiliser comme jaquette avant.
+        #[arg(long)]
+        front: Option<PathBuf>,
+        /// Image locale à utiliser comme jaquette arrière.
+        #[arg(long)]
+        back: Option<PathBuf>,
+        /// Dossier de sauvegarde (par défaut : "backups" à côté de la base).
+        #[arg(long)]
+        backup_dir: Option<PathBuf>,
+        /// Autorise l'écriture même si le chemin ressemble à la vraie collection.
         #[arg(long)]
         force: bool,
     },
@@ -519,6 +546,62 @@ fn cmd_commit(db: PathBuf, plan: PathBuf, backup_dir: Option<PathBuf>, force: bo
     Ok(())
 }
 
+/// Same real-collection/running-app/backup gates as `cmd_commit`, but for
+/// `set_cover` (a direct file-copy-plus-column write, not a plan file).
+fn cmd_set_cover(
+    db: PathBuf,
+    id: i64,
+    front: Option<PathBuf>,
+    back: Option<PathBuf>,
+    backup_dir: Option<PathBuf>,
+    force: bool,
+) -> Result<()> {
+    let db_path = resolve_db_path(&db)?;
+    println!("Base: {}", db_path.display());
+
+    if front.is_none() && back.is_none() {
+        bail!("passez --front et/ou --back");
+    }
+
+    match (force, looks_like_real_collection(&db_path)) {
+        (false, Some(real_prefix)) => {
+            bail!(
+                "{} se trouve sous {} — ça ressemble à la vraie collection.\n\
+                 Cette commande écrit réellement dans la base : utilisez une copie dédiée\n\
+                 (ex. testdata-rw/, via ./refresh-testdata-rw.sh), ou passez --force si\n\
+                 vous savez vraiment ce que vous faites.",
+                db_path.display(),
+                real_prefix.display()
+            );
+        }
+        (true, Some(real_prefix)) => {
+            let stdin = std::io::stdin();
+            let mut locked = stdin.lock();
+            let mut stdout = std::io::stdout();
+            confirm_real_write(&mut locked, &mut stdout, &db_path, &real_prefix)?;
+        }
+        (_, None) => {}
+    }
+
+    if is_book_collector_running()? {
+        bail!("Book Collector est actuellement lancé — fermez l'app avant d'écrire (voir `bc_add guard`).");
+    }
+    println!("✅ Book Collector n'est pas lancé.");
+
+    let backup_dir = backup_dir.unwrap_or_else(|| {
+        db_path
+            .parent()
+            .map(|p| p.join("backups"))
+            .unwrap_or_else(|| PathBuf::from("backups"))
+    });
+
+    let backup_path = set_cover(&db_path, &backup_dir, id, front.as_deref(), back.as_deref())?;
+    println!("✅ Sauvegarde créée: {}", backup_path.display());
+    println!("✅ Jaquette mise à jour.");
+
+    Ok(())
+}
+
 // --------------------------------------------------------------------- Add
 
 /// Runs resolve → plan → commit against a single `db`, writing the two
@@ -679,6 +762,9 @@ fn main() -> Result<()> {
         Command::Plan { db, resolved, output } => cmd_plan(db, resolved, output),
         Command::Guard { db, backup_dir } => cmd_guard(db, backup_dir),
         Command::Commit { db, plan, backup_dir, force } => cmd_commit(db, plan, backup_dir, force),
+        Command::SetCover { db, id, front, back, backup_dir, force } => {
+            cmd_set_cover(db, id, front, back, backup_dir, force)
+        }
         Command::Add { db, input, also_db, backup_dir, runs_dir, force } => {
             cmd_add(db, input, also_db, backup_dir, runs_dir, force)
         }
