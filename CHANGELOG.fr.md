@@ -5,6 +5,20 @@
 Historique des **versions publiées sur GitHub** (`sergiodadi/BookNojo`),
 une entrée par tag/release.
 
+## [v1.0.0b4] - 2026-11-16
+
+- `DISPLAY_VERSION` corrigé pour suivre le tag de release publié — le
+  badge d'en-tête et les deux surfaces « About BookNojo » (boîte de
+  dialogue custom et panneau natif macOS) affichaient auparavant la
+  version de développement interne brute.
+- Ajout de `set-cover` (la commande CLI `bc_add set-cover`, et un
+  nouveau point d'entrée dans l'app : le compteur « sans couverture »
+  du panneau Statistiques se déplie en liste cliquable de livres,
+  chacun ouvrant un sélecteur de fichier natif).
+- Ajout de `bc_add edit-plan`/`delete-plan` — modifier et supprimer un
+  livre en ligne de commande, possible auparavant seulement depuis
+  l'application.
+
 ## [v1.0.0b3] - 2026-11-08
 
 - README.md/README.fr.md : suppression du numéro de version dans la
