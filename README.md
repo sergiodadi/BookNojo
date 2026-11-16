@@ -2,22 +2,19 @@
 
 > 🇫🇷 [Lire en français](README.fr.md)
 
-Book collection manager — imports a [Book Collector](https://www.collectorz.com/book)
-(Collectorz) collection's database into its own database, and is
-gradually evolving toward an **independent** database, so it keeps
-working the day Book Collector no longer can.
-
-> Actively developed project, publicly available since 2026-11-08.
-
 ## Why this project
 
-Book Collector for Mac is an Intel app that depends on Rosetta 2. Apple
-has announced the planned end of Rosetta 2 (full support only through
-macOS 27, largely removed starting with macOS 28, ~fall 2027) — so Book
-Collector has a limited remaining lifespan on an up-to-date Mac. BookNojo
-bootstraps an independent database from an existing collection, then
-keeps feeding it with its own tools, without depending on Book Collector
-to grow.
+Book collection manager. Book Collector for Mac is an Intel app that
+depends on Rosetta 2. Apple has announced the planned end of Rosetta 2
+(full support only through macOS 27, largely removed starting with
+macOS 28, ~fall 2027) — so Book Collector has a limited remaining
+lifespan on an up-to-date Mac. BookNojo imports a [Book Collector](https://www.collectorz.com/book)
+(Collectorz) collection's database into its own database, and is
+gradually evolving toward an **independent** database — bootstrapped
+from an existing collection, then kept fed with its own tools — so it
+keeps working the day Book Collector no longer can.
+
+> Actively developed project, publicly available since 2026-11-08.
 
 ## What it does today
 

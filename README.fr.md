@@ -2,24 +2,21 @@
 
 > 🇬🇧 [Read in English](README.md)
 
-Gestionnaire de collection de livres — importe la base de données d'une
-collection [Book Collector](https://www.collectorz.com/book) (Collectorz)
-dans sa propre base, et évolue progressivement vers une base de données
-**indépendante**, pour continuer à fonctionner le jour où Book Collector ne
-le pourra plus.
+## Pourquoi ce projet
+
+Gestionnaire de collection de livres. Book Collector pour Mac est une
+application Intel qui dépend de Rosetta 2. Apple a annoncé la fin
+programmée de Rosetta 2 (support complet jusqu'à macOS 27, largement
+retiré à partir de macOS 28, ~automne 2027) — Book Collector a donc
+une espérance de vie limitée sur un Mac à jour. BookNojo importe la
+base de données d'une collection [Book Collector](https://www.collectorz.com/book)
+(Collectorz) dans sa propre base, et évolue progressivement vers une
+base de données **indépendante** — amorcée à partir d'une collection
+existante, puis alimentée avec ses propres outils — pour continuer à
+fonctionner le jour où Book Collector ne le pourra plus.
 
 > Projet en développement actif, disponible publiquement depuis le
 > 08/11/2026.
-
-## Pourquoi ce projet
-
-Book Collector pour Mac est une application Intel qui dépend de Rosetta 2.
-Apple a annoncé la fin programmée de Rosetta 2 (support complet jusqu'à
-macOS 27, largement retiré à partir de macOS 28, ~automne 2027) — Book
-Collector a donc une espérance de vie limitée sur un Mac à jour. BookNojo
-amorce une base de données indépendante à partir d'une collection
-existante, puis continue à l'alimenter avec ses propres outils, sans
-dépendre de Book Collector pour grandir.
 
 ## Ce que ça fait aujourd'hui
 
