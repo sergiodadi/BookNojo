@@ -55,8 +55,9 @@
 use anyhow::{bail, Context, Result};
 use book_collector_export::{
     backup_sqlite_store, entity_ent_id, is_book_collector_running, looks_like_real_collection,
-    plan_book_sql, resolve_book, resolve_db_path, set_cover, strip_plan_wrapper, write_plan_sql,
-    NewBookInput, ResolvedBook, ResolvedLookup,
+    plan_book_sql, plan_delete_book_sql, plan_update_book_sql, resolve_book, resolve_db_path,
+    resolved_book_summary, set_cover, strip_plan_wrapper, write_plan_sql, NewBookInput,
+    ResolvedBook, ResolvedLookup,
 };
 use clap::{Parser, Subcommand};
 use rusqlite::{Connection, OpenFlags};
@@ -121,6 +122,40 @@ enum Command {
         /// Fichier produit par `bc_add resolve`.
         #[arg(long)]
         resolved: PathBuf,
+        /// Fichier .sql de sortie (optionnel — toujours affiché sur stdout aussi).
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+    /// Calcule et affiche le SQL de modification d'un livre existant — ne l'exécute
+    /// jamais. Résout aussi les valeurs "liste" du JSON d'entrée (même format que
+    /// `add`/`resolve`) en une seule étape, puisqu'une revue séparée n'apporte rien
+    /// de plus qu'avec `add` : les nouvelles valeurs seraient de toute façon les
+    /// mêmes listées ici avant le SQL.
+    EditPlan {
+        /// Chemin vers le fichier Book_data, ou vers le dossier .bkcp qui le contient.
+        #[arg(long)]
+        db: PathBuf,
+        /// Z_PK du livre à modifier (voir la sortie JSON de bc_export, champ "id").
+        #[arg(long)]
+        id: i64,
+        /// Fichier JSON décrivant les nouvelles valeurs du livre (même format que `add`).
+        #[arg(long)]
+        input: PathBuf,
+        /// Fichier .sql de sortie (optionnel — toujours affiché sur stdout aussi).
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+    /// Calcule et affiche le SQL de suppression d'un livre (par id) et de tout ce
+    /// qui lui est propre (crédits, personnages, contenus, liens) — jamais les
+    /// valeurs partagées (éditeur, genre...), que d'autres livres peuvent encore
+    /// utiliser. N'exécute jamais rien.
+    DeletePlan {
+        /// Chemin vers le fichier Book_data, ou vers le dossier .bkcp qui le contient.
+        #[arg(long)]
+        db: PathBuf,
+        /// Z_PK du livre à supprimer.
+        #[arg(long)]
+        id: i64,
         /// Fichier .sql de sortie (optionnel — toujours affiché sur stdout aussi).
         #[arg(long)]
         output: Option<PathBuf>,
@@ -407,6 +442,88 @@ fn cmd_plan(db: PathBuf, resolved_path: PathBuf, output: Option<PathBuf>) -> Res
     println!("- ZLASTLOAN, ZSYNCFRONTCOVER/ZSYNCBACKCOVER, ZCLZLASTREVISION, ZLASTEDITDATE,");
     println!("  ZLASTSUBMISSIONDATE: loan-tracking/sync metadata, set by other app actions — not");
     println!("  part of Add Book, out of scope here.");
+
+    if let Some(path) = &output {
+        std::fs::write(path, &sql).with_context(|| format!("écriture de {}", path.display()))?;
+        println!();
+        println!("SQL également écrit dans: {}", path.display());
+    }
+
+    println!();
+    println!(
+        "(Aucune écriture dans {} — ce SQL n'a pas été exécuté.)",
+        db_path.display()
+    );
+
+    Ok(())
+}
+
+// -------------------------------------------------------------- EditPlan
+
+fn cmd_edit_plan(db: PathBuf, id: i64, input: PathBuf, output: Option<PathBuf>) -> Result<()> {
+    let db_path = resolve_db_path(&db)?;
+    println!("Base lue (lecture seule): {}", db_path.display());
+
+    let conn = Connection::open_with_flags(&db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .with_context(|| format!("ouverture en lecture seule de {}", db_path.display()))?;
+
+    let raw = std::fs::read_to_string(&input).with_context(|| format!("lecture de {}", input.display()))?;
+    let book: NewBookInput =
+        serde_json::from_str(&raw).with_context(|| format!("parsing JSON de {}", input.display()))?;
+
+    let resolved = resolve_book(&conn, book)?;
+    let fields = resolved_book_summary(&resolved);
+    let new_count = fields.iter().filter(|f| f.is_new).count();
+
+    println!();
+    println!("Titre: \"{}\"", resolved.title);
+    if fields.is_empty() {
+        println!("(aucune valeur de type liste/personne à résoudre)");
+    } else {
+        for f in &fields {
+            if f.is_new {
+                println!("  {}: \"{}\" -> n'existe pas, sera créé", f.label, f.value);
+            } else {
+                println!("  {}: \"{}\" -> réutilise une valeur existante", f.label, f.value);
+            }
+        }
+    }
+    if new_count > 0 {
+        println!();
+        println!("⚠️  {new_count} nouvelle(s) valeur(s) seraient créée(s) — vérifiez avant de continuer.");
+    }
+
+    let sql = plan_update_book_sql(&conn, id, &resolved)?;
+    println!();
+    println!("{sql}");
+
+    if let Some(path) = &output {
+        std::fs::write(path, &sql).with_context(|| format!("écriture de {}", path.display()))?;
+        println!();
+        println!("SQL également écrit dans: {}", path.display());
+    }
+
+    println!();
+    println!(
+        "(Aucune écriture dans {} — ce SQL n'a pas été exécuté.)",
+        db_path.display()
+    );
+
+    Ok(())
+}
+
+// ------------------------------------------------------------ DeletePlan
+
+fn cmd_delete_plan(db: PathBuf, id: i64, output: Option<PathBuf>) -> Result<()> {
+    let db_path = resolve_db_path(&db)?;
+    println!("Base lue (lecture seule): {}", db_path.display());
+
+    let conn = Connection::open_with_flags(&db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .with_context(|| format!("ouverture en lecture seule de {}", db_path.display()))?;
+
+    let sql = plan_delete_book_sql(&conn, id)?;
+    println!();
+    println!("{sql}");
 
     if let Some(path) = &output {
         std::fs::write(path, &sql).with_context(|| format!("écriture de {}", path.display()))?;
@@ -760,6 +877,8 @@ fn main() -> Result<()> {
     match cli.command {
         Command::Resolve { db, input, output } => cmd_resolve(db, input, output),
         Command::Plan { db, resolved, output } => cmd_plan(db, resolved, output),
+        Command::EditPlan { db, id, input, output } => cmd_edit_plan(db, id, input, output),
+        Command::DeletePlan { db, id, output } => cmd_delete_plan(db, id, output),
         Command::Guard { db, backup_dir } => cmd_guard(db, backup_dir),
         Command::Commit { db, plan, backup_dir, force } => cmd_commit(db, plan, backup_dir, force),
         Command::SetCover { db, id, front, back, backup_dir, force } => {

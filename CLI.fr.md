@@ -226,6 +226,33 @@ Pour contrôler chaque étape séparément plutôt que `bc_add add` :
 encore (ex. la ligne compagnon `ZSEARCHSTRING`, le tri de titre, les
 identifiants de synchronisation CLZ Cloud) — à relire avant `commit`.
 
+### Modifier et supprimer un livre — `edit-plan`, `delete-plan`
+
+```bash
+# Calcule le SQL de modification d'un livre existant (par id) — résout
+# les valeurs "liste" de l'entrée dans la même étape (contrairement à
+# add, pas de couple resolve/plan séparé ici).
+./bc_add edit-plan --db "<chemin>" --id <id du livre> --input nouvelles_valeurs.json --output edit-plan.sql
+
+# Calcule le SQL de suppression d'un livre (par id) et de tout ce qui
+# lui est propre (crédits, personnages, contenus, liens) — jamais une
+# valeur partagée (éditeur, genre...) qu'un autre livre pourrait encore
+# utiliser.
+./bc_add delete-plan --db "<chemin>" --id <id du livre> --output delete-plan.sql
+
+# Le même `commit` que ci-dessus exécute l'un ou l'autre plan, dans une
+# transaction unique.
+./bc_add commit --db "<chemin>" --plan edit-plan.sql
+```
+
+Le JSON d'entrée de `edit-plan` utilise le même format que celui de
+`add` (§ « Tous les champs disponibles ») — c'est un remplacement
+complet des champs du livre, pas une modification partielle : un champ
+absent du JSON est effacé, pas laissé tel quel. Aucun `--force`
+nécessaire pour `edit-plan` ou `delete-plan` eux-mêmes — comme `plan`,
+ils ne font que calculer du SQL, jamais écrire ; `--force` ne compte
+que sur le `commit` qui suit, comme pour `add`.
+
 ### Couvertures — `set-cover`
 
 ```bash

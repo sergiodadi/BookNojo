@@ -223,6 +223,31 @@ To control each step separately instead of `bc_add add`:
 yet (e.g. the `ZSEARCHSTRING` companion row, title sorting, CLZ Cloud
 sync identifiers) — read it before `commit`.
 
+### Editing and deleting a book — `edit-plan`, `delete-plan`
+
+```bash
+# Computes the SQL to modify an existing book (by id) — resolves the
+# input's list-type values against the collection in the same step
+# (unlike add, there's no separate resolve/plan pair for this).
+./bc_add edit-plan --db "<path>" --id <book id> --input new_values.json --output edit-plan.sql
+
+# Computes the SQL to delete a book (by id) and everything specific to
+# it (credits, characters, contents, links) — never a shared value
+# (publisher, genre...) another book might still use.
+./bc_add delete-plan --db "<path>" --id <book id> --output delete-plan.sql
+
+# Same `commit` as above runs either plan, in a single transaction.
+./bc_add commit --db "<path>" --plan edit-plan.sql
+```
+
+`edit-plan`'s input JSON uses the same shape as `add`'s (§ "All
+available fields") — it's a full replacement of the book's fields, not
+a partial patch: a field left out of the JSON is cleared, not left
+untouched. No `--force` is needed for either `edit-plan` or
+`delete-plan` themselves — like `plan`, they only ever compute SQL and
+never write; `--force` only matters on the `commit` that follows, same
+as for `add`.
+
 ### Covers — `set-cover`
 
 ```bash
