@@ -57,6 +57,11 @@ Pour compiler depuis les sources plutôt que d'utiliser le `.dmg`, voir
 > Testé uniquement sous **macOS Tahoe (26)** — non vérifié sur d'autres
 > versions de macOS.
 
+## Copie d'écran
+
+![Vue bibliothèque](screenshots/library.png)
+![Ajouter un livre](screenshots/add-book.png)
+
 ## Historique des versions
 
 Voir [`CHANGELOG.fr.md`](CHANGELOG.fr.md) — une entrée par version publiée sur
