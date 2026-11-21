@@ -5,6 +5,17 @@
 History of **versions published on GitHub** (`sergiodadi/BookNojo`),
 one entry per tag/release.
 
+## [v1.0.0b5] - 2026-11-21
+
+- README: added a "Screenshots" section (two screenshots of the app) right
+  after Installation.
+- README: reworded the intro to lead with "Why this project", merging it
+  with the opening paragraph.
+- `tauri.conf.json`'s version field now tracks the published release tag
+  instead of bumping on every dev commit — this was silently causing the
+  `.dmg` filename (and the `.app` bundle's own version fields) to show an
+  internal development version number instead of the actual release.
+
 ## [v1.0.0b4] - 2026-11-16
 
 - `DISPLAY_VERSION` fixed to track the published release tag — the
