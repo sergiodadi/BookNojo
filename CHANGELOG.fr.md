@@ -5,6 +5,18 @@
 Historique des **versions publiées sur GitHub** (`sergiodadi/BookNojo`),
 une entrée par tag/release.
 
+## [v1.0.0b6] - 2026-11-22
+
+- Le formulaire d'ajout de livre a maintenant un bouton optionnel
+  « Choisir une image… » : la couverture est posée juste après l'ajout du
+  livre, au lieu de seulement après coup via la liste « sans couverture »
+  du panneau Statistiques. Si l'ajout de la couverture échoue, le livre
+  est quand même ajouté — rattrapable ensuite via la liste « sans
+  couverture » ou `bc_add set-cover`.
+- Un bouton « 📂 Ouvrir une collection… » dans l'en-tête, à côté
+  d'« Ajouter un livre » — la même action que File > Import a
+  collection… dans le menu natif, juste accessible sans l'ouvrir.
+
 ## [v1.0.0b5] - 2026-11-21
 
 - README : ajout d'une section « Copie d'écran » (deux captures de l'app)
