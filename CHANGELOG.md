@@ -5,6 +5,11 @@
 History of **versions published on GitHub** (`sergiodadi/BookNojo`),
 one entry per tag/release.
 
+## [v1.0.0b7] - 2026-11-22
+
+- New app icon: a flat blue-gradient square with a white "BN" monogram,
+  replacing the previous open-book icon.
+
 ## [v1.0.0b6] - 2026-11-22
 
 - The Add-book form now has an optional "Choose an image…" button: the

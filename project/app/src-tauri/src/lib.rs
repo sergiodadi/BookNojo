@@ -17,7 +17,7 @@ const SUPPORTED_BKCP_VERSION: &str = "20.3.1";
 /// from BookNojo's own MANUAL.md, which doesn't mention the gap. **Update
 /// this by hand at every future release**, before building that release's
 /// `.dmg`, not after.
-const DISPLAY_VERSION: &str = "1.0.0b6";
+const DISPLAY_VERSION: &str = "1.0.0b7";
 
 /// Loads a collection (a `.bkcp`/`.col` directory, or its `Book_data` file
 /// directly) read-only and returns every book, across all sous-collections,
