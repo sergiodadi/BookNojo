@@ -8,10 +8,11 @@ compile it from source, see [`BUILD.md`](BUILD.md).
 
 ## 1. Opening a collection
 
-- **File > Import a collection…** opens the native macOS file picker to
-  choose a collection — a `.bkcp` folder (Book Collector) or `.col`
-  (BookNojo). The choice is remembered automatically: on the next
-  launch, BookNojo reopens the same collection without asking anything.
+- The **"📂 Open Collection…"** button in the header (same as **File >
+  Import a collection…**) opens the native macOS file picker to choose a
+  collection — a `.bkcp` folder (Book Collector) or `.col` (BookNojo). The
+  choice is remembered automatically: on the next launch, BookNojo reopens
+  the same collection without asking anything.
 - A `.bkcp` collection from a Book Collector version other than the one
   BookNojo was built against (20.3.1) is rejected at import, with a
   clear message rather than a crash or silent corruption.
@@ -73,10 +74,11 @@ compile it from source, see [`BUILD.md`](BUILD.md).
 - After any add, edit or delete, the library is automatically reloaded:
   the book appears (or disappears) immediately in the list and in
   search, with no manual action needed.
-- There is no way yet, from the application, to pick a cover at *add*
-  time — only `set-cover` afterward (via the "no cover" list in the
-  Statistics panel, or `bc_add set-cover` from the command line) sets
-  one.
+- A cover can also be picked right from the Add-book form (a "Choose an
+  image…" button, optional): it's attached to the book once the add is
+  confirmed. If the add succeeds but the cover can't be saved, the book is
+  still added — fix the cover afterward from the "no cover" list in the
+  Statistics panel, or with `bc_add set-cover`.
 
 ## 4. Bilingual interface
 

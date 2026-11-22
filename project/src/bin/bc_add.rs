@@ -395,10 +395,11 @@ fn cmd_plan(db: PathBuf, resolved_path: PathBuf, output: Option<PathBuf>) -> Res
     let book: ResolvedBook =
         serde_json::from_str(&raw).with_context(|| format!("parsing JSON de {}", resolved_path.display()))?;
 
-    let sql = plan_book_sql(&conn, &book)?;
+    let (sql, book_pk) = plan_book_sql(&conn, &book)?;
 
     println!();
     println!("{sql}");
+    println!("-- ID (Z_PK) prévu pour ce livre : {book_pk} (utilisable ensuite avec 'set-cover').");
 
     println!("--- Non couvert par ce plan (connu, documenté) ---");
     println!("- ZSEARCHSTRING : une ligne compagnon semble exister pour chaque fiche");

@@ -87,7 +87,7 @@ fn add_book_round_trip_through_every_relation() {
         ..Default::default()
     };
 
-    let backup_path = commit_add_book(&db_path, &backup_dir_for(&db_path), input).expect("commit_add_book");
+    let (backup_path, _book_pk) = commit_add_book(&db_path, &backup_dir_for(&db_path), input).expect("commit_add_book");
     assert!(backup_path.is_file(), "commit_add_book must leave a backup file behind");
 
     integrity_check(&db_path);

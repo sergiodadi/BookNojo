@@ -71,6 +71,7 @@ const prevBtn = document.getElementById('prev');
 const nextBtn = document.getElementById('next');
 const statsBtn = document.getElementById('statsBtn');
 const statsPaneEl = document.getElementById('statsPane');
+const openCollectionBtn = document.getElementById('openCollectionBtn');
 const addBtn = document.getElementById('addBtn');
 const addPaneEl = document.getElementById('addPane');
 
@@ -129,6 +130,7 @@ function escapeHtml(s) {
 const I18N = {
   fr: {
     nav_back_to_collection: '📚 Collection',
+    nav_open: '📂 Ouvrir une collection…',
     nav_stats: '📊 Statistiques',
     nav_add: '➕ Ajouter un livre',
 
@@ -229,6 +231,11 @@ const I18N = {
     add_submit_static: '⬇️ Générer new_book.json',
     add_submit_edit: '💾 Enregistrer les modifications',
 
+    add_cover_label: 'Couverture (optionnel)',
+    add_cover_choose: 'Choisir une image…',
+    add_cover_chosen: 'Choisi : {name}',
+    add_cover_remove: 'Retirer',
+
     add_tab_main: 'Principal', add_tab_details: 'Détails', add_tab_personal: 'Personnel',
     add_tab_credits: 'Crédits & Personnages', add_tab_contents: 'Contenus',
     add_tab_plot: 'Intrigue & Notes', add_tab_links: 'Liens',
@@ -296,6 +303,7 @@ const I18N = {
   },
   en: {
     nav_back_to_collection: '📚 Collection',
+    nav_open: '📂 Open Collection…',
     nav_stats: '📊 Statistics',
     nav_add: '➕ Add a book',
 
@@ -395,6 +403,11 @@ const I18N = {
     add_submit_tauri: '💾 Save',
     add_submit_static: '⬇️ Generate new_book.json',
     add_submit_edit: '💾 Save changes',
+
+    add_cover_label: 'Cover (optional)',
+    add_cover_choose: 'Choose an image…',
+    add_cover_chosen: 'Chosen: {name}',
+    add_cover_remove: 'Remove',
 
     add_tab_main: 'Main', add_tab_details: 'Details', add_tab_personal: 'Personal',
     add_tab_credits: 'Credits & Characters', add_tab_contents: 'Contents',
@@ -508,6 +521,7 @@ const addFormState = {
 
 function resetAddFormState() {
   for (const key of Object.keys(addFormState)) addFormState[key].length = 0;
+  pendingAddCoverPath = null;
 }
 
 // Non-null while the Add-book panel is showing an existing book for
@@ -517,6 +531,13 @@ function resetAddFormState() {
 // display-name values, same shape renderAddForm's inputs read).
 let editingBookId = null;
 let editingBookData = null;
+
+// Local path of the cover image picked for a brand-new book (via the Add
+// form's "Choisir une couverture" button, Tauri-only, never set while
+// editingBookId is non-null — picking a new cover for an existing book
+// still only goes through the Statistics panel's "no cover" list). Set by
+// the 'add-cover-picked' event listener, read once at commit_add_book time.
+let pendingAddCoverPath = null;
 
 function renderTabs() {
   tabsEl.innerHTML = '';
@@ -1166,6 +1187,17 @@ function setPanel(panel) {
 statsBtn.addEventListener('click', () => {
   setPanel(state.panel === 'stats' ? 'library' : 'stats');
 });
+// Tauri-only: absent from the static HTML export's page.html shell (no
+// file picker there), same window.__TAURI__ gate as everything else that
+// only makes sense inside the app.
+if (openCollectionBtn) {
+  openCollectionBtn.addEventListener('click', () => {
+    // Fire-and-forget: reuses the exact same native picker + version check
+    // as "File > Import a collection…" — the chosen path arrives later as
+    // the same 'import-collection' event already listened for below.
+    window.__TAURI__.core.invoke('pick_collection');
+  });
+}
 addBtn.addEventListener('click', () => {
   // The only way into "edit" mode is editBook() (the detail pane's
   // "Modifier" button) — this top button always means "start fresh" or
@@ -1272,6 +1304,28 @@ const ADD_TABS = [
   { id: 'links', key: 'add_tab_links' },
 ];
 
+// Updates just the "Choisi : {name}" / remove-link span in place, without
+// re-rendering the whole Add-book form (a full re-render would wipe
+// whatever the user has already typed into the plain <input> fields —
+// unlike the chip/repeatable fields, those aren't backed by addFormState).
+// Called once from renderAddForm() itself, and again from the
+// 'add-cover-picked' event listener once the native picker returns.
+function updateAddCoverChosenLabel() {
+  const chosenEl = document.getElementById('addCoverChosen');
+  if (!chosenEl) return;
+  if (!pendingAddCoverPath) {
+    chosenEl.textContent = '';
+    return;
+  }
+  const name = pendingAddCoverPath.split('/').pop();
+  chosenEl.innerHTML = `${escapeHtml(t('add_cover_chosen', { name }))} — <a href="#" id="addCoverRemoveLink">${escapeHtml(t('add_cover_remove'))}</a>`;
+  document.getElementById('addCoverRemoveLink').addEventListener('click', (e) => {
+    e.preventDefault();
+    pendingAddCoverPath = null;
+    updateAddCoverChosenLabel();
+  });
+}
+
 function renderAddForm() {
   const collOptions = collections
     .map(c => `<option value="${escapeHtml(c)}"${c === state.collection ? ' selected' : ''}>${escapeHtml(c)}</option>`)
@@ -1284,6 +1338,12 @@ function renderAddForm() {
     <div class="add-wrap">
       <h2>${window.__TAURI__ ? t('add_heading_tauri') : t('add_heading_static')}</h2>
       <p class="add-hint">${window.__TAURI__ ? t('add_hint_tauri') : t('add_hint_static')}</p>
+      ${window.__TAURI__ && editingBookId === null ? `
+      <div class="add-cover-field">
+        <span class="label">${t('add_cover_label')}</span>
+        <button type="button" id="addCoverPickBtn">${t('add_cover_choose')}</button>
+        <span id="addCoverChosen" class="add-cover-chosen"></span>
+      </div>` : ''}
       <div class="add-tabs">${tabButtons}</div>
       <form id="addForm" novalidate>
         <div id="addtab-main" class="add-tab-panel">
@@ -1596,6 +1656,14 @@ function renderAddForm() {
   document.getElementById('addConfirmCancel').addEventListener('click', closeAddConfirm);
   document.getElementById('addConfirmOk').addEventListener('click', confirmAddBook);
 
+  const addCoverPickBtn = document.getElementById('addCoverPickBtn');
+  if (addCoverPickBtn) {
+    addCoverPickBtn.addEventListener('click', () => {
+      window.__TAURI__.core.invoke('pick_cover_for_new_book');
+    });
+    updateAddCoverChosenLabel();
+  }
+
   // Edit mode: pre-fill every plain input/select/textarea from
   // editingBookData (the chip/repeatable-list fields are already populated
   // via addFormState, set up before this render in editBook()) and swap
@@ -1800,7 +1868,7 @@ async function confirmAddBook() {
   try {
     const args = wasEditing
       ? { path: currentCollectionPath, bookId: editingBookId, input: pendingAddBook }
-      : { path: currentCollectionPath, input: pendingAddBook };
+      : { path: currentCollectionPath, input: pendingAddBook, coverPath: pendingAddCoverPath };
     const result = await window.__TAURI__.core.invoke(wasEditing ? 'commit_update_book' : 'commit_add_book', args);
     closeAddConfirm();
     editingBookId = null;
@@ -1982,6 +2050,7 @@ function applyStaticLabels() {
   // button is actually clicked.
   statsBtn.textContent = state.panel === 'stats' ? t('nav_back_to_collection') : t('nav_stats');
   addBtn.textContent = state.panel === 'add' ? t('nav_back_to_collection') : t('nav_add');
+  if (openCollectionBtn) openCollectionBtn.textContent = t('nav_open');
 
   // Only matters for the brief moment before the first boot() render
   // replaces detailEl's contents entirely (or if setLang() runs during
@@ -2101,6 +2170,16 @@ if (window.__TAURI__) {
   });
   window.__TAURI__.event.listen('cover-set-error', (event) => {
     window.alert(t('cover_set_failed', { err: event.payload }));
+  });
+
+  // The Add-book form's "Choisir une couverture" button — just stashes the
+  // picked path for confirmAddBook() to send along with commit_add_book;
+  // nothing is written yet. Updates the "Choisi : {name}" label in place
+  // (see updateAddCoverChosenLabel's own comment for why not a full
+  // re-render).
+  window.__TAURI__.event.listen('add-cover-picked', (event) => {
+    pendingAddCoverPath = event.payload;
+    updateAddCoverChosenLabel();
   });
 }
 

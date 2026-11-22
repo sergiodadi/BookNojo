@@ -1705,7 +1705,13 @@ fn plan_lookup_fk(
 /// `BEGIN TRANSACTION;`/`COMMIT;` for a readable standalone preview;
 /// `write_plan_sql` strips that wrapper back out before executing, since
 /// the write path opens its own transaction (`run_write_transaction`).
-pub fn plan_book_sql(conn: &Connection, book: &ResolvedBook) -> Result<String> {
+///
+/// Also returns the new book's own `Z_PK` — allocated deterministically
+/// from the read-only connection's current counters, so it's already known
+/// before the SQL is ever executed. `commit_add_book` forwards it so a
+/// caller can immediately `set_cover()` the just-added book without a
+/// separate lookup.
+pub fn plan_book_sql(conn: &Connection, book: &ResolvedBook) -> Result<(String, i64)> {
     let mut alloc = PkAllocator::new(conn);
     let mut sql = String::new();
     sql.push_str("-- Plan d'insertion — APERÇU, RIEN N'EST EXÉCUTÉ.\n");
@@ -1847,7 +1853,7 @@ pub fn plan_book_sql(conn: &Connection, book: &ResolvedBook) -> Result<String> {
 
     sql.push_str("\nCOMMIT;\n");
 
-    Ok(sql)
+    Ok((sql, book_pk))
 }
 
 /// Emits every INSERT that attaches to a book purely by its `Z_PK`/`Z_ENT`:
@@ -2198,15 +2204,18 @@ pub fn prepare_add_book(db_path: &Path, input: NewBookInput) -> Result<AddBookPr
 /// `is_book_collector_running() == false` and refused `db_path` if
 /// `looks_like_real_collection` returns `Some` — this function enforces
 /// neither on its own, same contract as `write_plan_sql`. Returns the
-/// backup path.
-pub fn commit_add_book(db_path: &Path, backup_dir: &Path, input: NewBookInput) -> Result<PathBuf> {
-    let sql = {
+/// backup path and the new book's own `Z_PK` (see `plan_book_sql`) — a
+/// caller can use that id to immediately `set_cover()` the book it just
+/// added, as a second, independent write (not part of this transaction).
+pub fn commit_add_book(db_path: &Path, backup_dir: &Path, input: NewBookInput) -> Result<(PathBuf, i64)> {
+    let (sql, book_pk) = {
         let conn = Connection::open_with_flags(db_path, OpenFlags::SQLITE_OPEN_READ_ONLY)
             .with_context(|| format!("ouverture en lecture seule de {}", db_path.display()))?;
         let resolved = resolve_book(&conn, input)?;
         plan_book_sql(&conn, &resolved)?
     };
-    write_plan_sql(db_path, backup_dir, &sql)
+    let backup = write_plan_sql(db_path, backup_dir, &sql)?;
+    Ok((backup, book_pk))
 }
 
 /// Loads an existing book's current values back into a `NewBookInput`-

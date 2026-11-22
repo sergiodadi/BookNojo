@@ -143,6 +143,27 @@ fn pick_and_set_cover(app: tauri::AppHandle, path: String, book_id: i64) {
         });
 }
 
+/// Native picker for a cover image to attach to a *brand-new* book, fired
+/// from the Add-book form's "Choisir une couverture" button — before the
+/// book exists yet, so this only picks a file and hands its path back via
+/// an event; `commit_add_book` does the actual `set_cover()` write once the
+/// new book's `Z_PK` is known. Same async-callback shape as
+/// `pick_and_set_cover` (a blocking pick deadlocks on macOS). No error
+/// event: the only way this doesn't emit is the user cancelling the picker,
+/// which isn't an error.
+#[tauri::command]
+fn pick_cover_for_new_book(app: tauri::AppHandle) {
+    app.dialog()
+        .file()
+        .set_title("Choisir une image de jaquette")
+        .add_filter("Image", &["jpg", "jpeg", "png", "gif", "bmp"])
+        .pick_file(move |file| {
+            let Some(file) = file else { return };
+            let Some(local_path) = file.as_path() else { return };
+            let _ = app.emit("add-cover-picked", local_path.to_string_lossy().to_string());
+        });
+}
+
 /// Read-only half of "Ajouter un livre" (étape 1-5 du formulaire) — résout
 /// les champs du nouveau livre contre la collection actuellement ouverte et
 /// renvoie un résumé à faire valider par l'utilisateur avant toute écriture.
@@ -160,8 +181,20 @@ fn prepare_add_book(
 /// l'utilisateur a validé l'aperçu renvoyé par `prepare_add_book`. Refuse la
 /// vraie collection (voir `refuse_if_real_collection`) et refuse si Book
 /// Collector est actuellement lancé, avant toute sauvegarde/écriture.
+///
+/// `cover_path` (optionnel) vient du bouton "Choisir une couverture" du
+/// formulaire d'ajout (voir `pick_cover_for_new_book`) : une fois le livre
+/// créé et son `Z_PK` connu (renvoyé par `commit_add_book` côté lib), la
+/// jaquette est posée via `set_cover` — une 2e écriture indépendante, pas
+/// la même transaction que l'ajout. Si elle échoue, le livre reste quand
+/// même ajouté (rattrapable ensuite via la liste "sans couverture" du
+/// panneau Statistiques) ; le message renvoyé le signale.
 #[tauri::command]
-fn commit_add_book(path: String, input: book_collector_export::NewBookInput) -> Result<String, String> {
+fn commit_add_book(
+    path: String,
+    input: book_collector_export::NewBookInput,
+    cover_path: Option<String>,
+) -> Result<String, String> {
     let db_path = book_collector_export::resolve_db_path(Path::new(&path)).map_err(|e| format!("{e:#}"))?;
     refuse_if_real_collection(&db_path)?;
     if book_collector_export::is_book_collector_running().map_err(|e| format!("{e:#}"))? {
@@ -171,9 +204,18 @@ fn commit_add_book(path: String, input: book_collector_export::NewBookInput) -> 
         .parent()
         .map(|p| p.join("backups"))
         .unwrap_or_else(|| std::path::PathBuf::from("backups"));
-    book_collector_export::commit_add_book(&db_path, &backup_dir, input)
-        .map(|backup| format!("Livre ajouté. Sauvegarde : {}", backup.display()))
-        .map_err(|e| format!("{e:#}"))
+    let (backup, book_pk) = book_collector_export::commit_add_book(&db_path, &backup_dir, input)
+        .map_err(|e| format!("{e:#}"))?;
+    let Some(cover_path) = cover_path else {
+        return Ok(format!("Livre ajouté. Sauvegarde : {}", backup.display()));
+    };
+    match book_collector_export::set_cover(&db_path, &backup_dir, book_pk, Some(Path::new(&cover_path)), None) {
+        Ok(_) => Ok(format!("Livre ajouté avec sa couverture. Sauvegarde : {}", backup.display())),
+        Err(e) => Ok(format!(
+            "Livre ajouté, mais la couverture n'a pas pu être enregistrée ({e:#}). Sauvegarde : {}",
+            backup.display()
+        )),
+    }
 }
 
 /// Supprime un livre (et uniquement ses propres lignes — crédits,
@@ -309,6 +351,18 @@ fn open_import_dialog(app: &tauri::AppHandle) {
         });
 }
 
+/// Header button "Open Collection…" — a second entry point into the exact
+/// same picker as "File > Import a collection…" (same version check, same
+/// `import-collection` event), added because that menu item was the only
+/// way to open a different `.bkcp` and a user asked for something visible
+/// without digging into the File menu. Not a separate flow: BookNojo has no
+/// distinct "import vs. just open" distinction in practice (see
+/// `open_import_dialog`'s own doc comment).
+#[tauri::command]
+fn pick_collection(app: tauri::AppHandle) {
+    open_import_dialog(&app);
+}
+
 fn build_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     #[cfg(target_os = "macos")]
     let app_menu = SubmenuBuilder::new(app, "BookNojo")
@@ -387,6 +441,8 @@ pub fn run() {
             load_book_for_edit,
             commit_update_book,
             pick_and_set_cover,
+            pick_cover_for_new_book,
+            pick_collection,
             app_version
         ])
         .setup(|app| {

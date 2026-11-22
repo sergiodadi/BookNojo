@@ -54,7 +54,7 @@
   }
   #fileBadge:empty { display: none; }
   #appVersion { font-variant-numeric: tabular-nums; }
-  #statsBtn, #addBtn {
+  #statsBtn, #addBtn, #openCollectionBtn {
     border: 1px solid var(--border);
     background: var(--surface);
     border-radius: 6px;
@@ -65,7 +65,7 @@
     cursor: pointer;
     transition: background .15s ease, border-color .15s ease, color .15s ease, box-shadow .15s ease;
   }
-  #statsBtn:hover, #addBtn:hover { background: var(--surface-alt); border-color: var(--border-strong); }
+  #statsBtn:hover, #addBtn:hover, #openCollectionBtn:hover { background: var(--surface-alt); border-color: var(--border-strong); }
   #statsBtn.active, #addBtn.active { background: var(--accent); color: white; border-color: var(--accent); box-shadow: var(--shadow-sm); }
   #tabs {
     display: flex;
@@ -451,6 +451,23 @@
   .add-wrap h2 { font-size: 18px; font-weight: 700; letter-spacing: -.01em; margin: 0 0 8px; }
   .add-hint { font-size: 12.5px; color: var(--muted); margin-bottom: 18px; line-height: 1.5; }
   .add-hint code { background: var(--surface-alt); padding: 1px 5px; border-radius: 4px; }
+  .add-cover-field { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .add-cover-field .label { font-size: 11.5px; font-weight: 600; letter-spacing: .01em; color: var(--muted); }
+  .add-cover-field button {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 12px;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--text);
+    cursor: pointer;
+    font-family: inherit;
+    transition: border-color .15s ease, color .15s ease, background .15s ease;
+  }
+  .add-cover-field button:hover { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-dark); }
+  .add-cover-chosen { font-size: 12.5px; color: var(--muted); }
+  .add-cover-chosen a { color: var(--accent); }
   .add-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px 16px; margin-bottom: 16px; }
   .add-grid label, .add-list-field {
     display: flex;

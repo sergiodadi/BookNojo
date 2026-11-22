@@ -8,7 +8,8 @@ pour la compiler depuis les sources, voir [`BUILD.fr.md`](BUILD.fr.md).
 
 ## 1. Ouvrir une collection
 
-- **File > Import a collection…** ouvre le sélecteur de fichier natif
+- Le bouton **« 📂 Ouvrir une collection… »** dans l'en-tête (identique à
+  **File > Import a collection…**) ouvre le sélecteur de fichier natif
   macOS pour choisir une collection — un dossier `.bkcp` (Book Collector)
   ou `.col` (BookNojo). Le choix est mémorisé automatiquement : au lancement
   suivant, BookNojo rouvre la même collection sans rien demander.
@@ -78,10 +79,12 @@ pour la compiler depuis les sources, voir [`BUILD.fr.md`](BUILD.fr.md).
 - Après tout ajout, modification ou suppression, la bibliothèque est
   automatiquement rechargée : le livre apparaît (ou disparaît)
   immédiatement dans la liste et la recherche, sans action manuelle.
-- Il n'est pas encore possible, depuis l'application, de choisir une
-  couverture au moment de l'*ajout* — seul `set-cover` ensuite (via la
-  liste "sans couverture" du panneau de statistiques, ou
-  `bc_add set-cover` en ligne de commande) en définit une.
+- Une couverture peut aussi être choisie directement depuis le formulaire
+  d'ajout (un bouton « Choisir une image… », optionnel) : elle est posée
+  une fois l'ajout confirmé. Si l'ajout réussit mais que la couverture ne
+  peut pas être enregistrée, le livre est quand même ajouté — rattrapable
+  ensuite via la liste "sans couverture" du panneau Statistiques, ou avec
+  `bc_add set-cover`.
 
 ## 4. Interface bilingue
 
