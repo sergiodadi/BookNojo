@@ -5,6 +5,11 @@
 History of **versions published on GitHub** (`sergiodadi/BookNojo`),
 one entry per tag/release.
 
+## [v1.0.0b9] - 2026-11-22
+
+- New "date added (newest first)" sort option, matching the equivalent
+  option already offered by MusicNojo/VideoNojo.
+
 ## [v1.0.0b8] - 2026-11-22
 
 - "BookNojo Help > About BookNojo" (a plain name+version dialog

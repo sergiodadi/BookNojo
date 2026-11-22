@@ -5,6 +5,11 @@
 Historique des **versions publiées sur GitHub** (`sergiodadi/BookNojo`),
 une entrée par tag/release.
 
+## [v1.0.0b9] - 2026-11-22
+
+- Nouvelle option de tri « Date d'ajout (plus récent d'abord) », pour
+  correspondre à l'option équivalente déjà proposée par MusicNojo/VideoNojo.
+
 ## [v1.0.0b8] - 2026-11-22
 
 - « BookNojo Help > About BookNojo » (une simple boîte nom+version
