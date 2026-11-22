@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="fr" data-lang="fr">
+<head>
+<meta charset="utf-8">
+<title>BookNojo — Aide</title>
+<style>
+  :root {
+    --accent: #3F73ED;
+    --accent-dark: #1C3A94;
+    --bg: #ffffff;
+    --text: #1d1f27;
+    --muted: #5b5f6b;
+    --card-bg: #f6f7fb;
+    --card-border: #e4e6ef;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+  }
+  header.hero {
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%);
+    color: #fff;
+    padding: 26px 32px 22px;
+    position: relative;
+  }
+  header.hero h1 { margin: 0 0 4px; font-size: 21px; font-weight: 700; }
+  header.hero p.tagline { margin: 0; font-size: 12.5px; opacity: .92; }
+  #lang-toggle {
+    position: absolute; top: 18px; right: 22px;
+    display: flex; gap: 2px;
+    background: rgba(255,255,255,.2);
+    border-radius: 999px;
+    padding: 3px;
+  }
+  #lang-toggle button {
+    border: none; background: transparent; color: #fff;
+    font-size: 11px; font-weight: 700; padding: 4px 11px;
+    border-radius: 999px; cursor: pointer; opacity: .75;
+    font-family: inherit;
+  }
+  #lang-toggle button.active { background: #fff; color: var(--accent-dark); opacity: 1; }
+  main { max-width: 620px; margin: 0 auto; padding: 22px 30px 12px; }
+  section.card {
+    background: var(--card-bg);
+    border: 1px solid var(--card-border);
+    border-left: 4px solid var(--accent);
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin-bottom: 16px;
+  }
+  section.card h2 {
+    margin: 0 0 9px;
+    font-size: 14.5px;
+    font-weight: 700;
+    color: var(--accent-dark);
+  }
+  section.card p { margin: 0 0 9px; font-size: 12.8px; line-height: 1.55; color: var(--text); }
+  section.card p:last-child { margin-bottom: 0; }
+  section.card ul { margin: 0 0 0; padding-left: 19px; }
+  section.card li { font-size: 12.8px; line-height: 1.6; margin-bottom: 7px; }
+  section.card li:last-child { margin-bottom: 0; }
+  section.card li b { color: var(--accent-dark); }
+  .note {
+    background: #fff8e8; border: 1px solid #f0dca0; color: #6b5420;
+    border-radius: 8px; padding: 9px 13px; font-size: 12px; margin-top: 10px;
+  }
+  .note.safe { background: #eaf6ec; border-color: #b9ddbf; color: #295c33; }
+  code {
+    background: #eceef5; color: var(--accent-dark);
+    padding: 1px 5px; border-radius: 4px; font-size: 12px;
+  }
+  footer {
+    text-align: center; font-size: 11px; color: var(--muted);
+    padding: 4px 32px 24px;
+  }
+  [data-lang-content] { display: none; }
+  html[data-lang="fr"] [data-lang-content="fr"] { display: block; }
+  html[data-lang="en"] [data-lang-content="en"] { display: block; }
+</style>
+</head>
+<body>
+  <header class="hero">
+    <div id="lang-toggle">
+      <button data-lang-btn="fr">FR</button>
+      <button data-lang-btn="en">EN</button>
+    </div>
+    <h1>📚 BookNojo</h1>
+    <p class="tagline" data-lang-content="fr">Guide d'utilisation</p>
+    <p class="tagline" data-lang-content="en">User guide</p>
+  </header>
+  <main>
+
+    <div data-lang-content="fr">
+      <section class="card">
+        <h2>📂 Ouvrir une collection</h2>
+        <p>Le bouton <b>« 📂 Ouvrir une collection… »</b> dans l'en-tête
+        (identique à <b>Fichier → Import a collection…</b>) ouvre le
+        sélecteur natif macOS pour choisir une collection — un dossier
+        <code>.bkcp</code> (Book Collector) ou <code>.col</code>
+        (BookNojo).</p>
+        <ul>
+          <li>Le choix est mémorisé : au lancement suivant, BookNojo
+          rouvre la même collection sans rien demander.</li>
+          <li>Une collection <code>.bkcp</code> d'une version de Book
+          Collector différente de celle visée (20.3.1) est refusée avec
+          un message clair, plutôt qu'un plantage.</li>
+          <li>Au tout premier lancement, BookNojo ouvre une collection
+          d'exemple entièrement fictive (10 livres inventés) — il y a
+          toujours quelque chose à voir, sans jamais exposer de vraies
+          données par défaut.</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2>📚 Parcourir la bibliothèque</h2>
+        <p><b>Trois zones</b> redimensionnables à la souris : le
+        regroupement à gauche, la liste des livres en haut à droite, la
+        fiche détail en bas à droite.</p>
+        <ul>
+          <li><b>Regroupement</b> par Auteur (par défaut), Genre,
+          Éditeur, Format, Langue ou Pays, avec une barre A→Z.</li>
+          <li><b>Liste</b> : recherche texte, tri, pagination, bascule
+          liste/grille (vignettes de couverture).</li>
+          <li><b>Sous-collections</b> multiples dans un même fichier —
+          des onglets permettent de passer de l'une à l'autre.</li>
+          <li><b>Statistiques</b> : vue agrégée par genre/format/langue/
+          éditeur/décennie. Le compteur « N sans couverture » est
+          cliquable et déroule une liste de livres ; cliquer sur l'un
+          d'eux ouvre un sélecteur de fichier pour lui poser une
+          couverture immédiatement.</li>
+          <li><b>Fiche détail</b> : couverture, titre/auteurs/éditeur,
+          puis (quand renseignés) Détails produit, Édition originale,
+          Détails personnels, Crédits, Personnages, Contenus, Liens,
+          Intrigue et Notes.</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2>✏️ Ajouter, modifier, supprimer un livre</h2>
+        <ul>
+          <li><b>Ajouter</b> : un formulaire en sous-onglets, avec
+          auto-complétion. Avant toute écriture, une boîte de
+          confirmation liste chaque valeur qui serait créée pour la
+          première fois (badge « nouveau ») — pour repérer une faute de
+          frappe avant qu'elle devienne permanente.</li>
+          <li>Une couverture peut aussi être choisie directement dans le
+          formulaire d'ajout (bouton « Choisir une image… », optionnel).
+          Si l'ajout réussit mais pas la couverture, le livre est quand
+          même ajouté — rattrapable ensuite.</li>
+          <li><b>Modifier</b> : depuis la fiche détail, même formulaire
+          pré-rempli, même étape de confirmation.</li>
+          <li><b>Supprimer</b> : depuis la fiche détail, après
+          confirmation. Seules les lignes propres à ce livre sont
+          retirées — une valeur partagée n'est jamais supprimée.</li>
+          <li>Après chaque action, la bibliothèque se recharge
+          automatiquement.</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2>🌐 Interface bilingue</h2>
+        <p>Le sélecteur <b>FR / EN</b> dans l'en-tête bascule toute
+        l'interface — regroupement, liste, fiche détail, statistiques,
+        formulaires. Le choix est mémorisé d'une session à l'autre.</p>
+        <p>Les messages renvoyés par l'application elle-même après une
+        action (confirmations, erreurs) restent en français quelle que
+        soit la langue choisie, pour l'instant.</p>
+      </section>
+
+      <section class="card">
+        <h2>🛡️ Sécurité des données</h2>
+        <p>Toute écriture (ajout, modification, suppression, couverture)
+        est précédée d'une sauvegarde horodatée du fichier.</p>
+        <div class="note safe">BookNojo peut ouvrir la vraie collection
+        Book Collector en <b>lecture seule</b> pour la consulter, mais
+        aucune écriture n'a d'exception possible pour elle depuis
+        l'application — et toute écriture est refusée si Book Collector
+        est lancé en même temps, pour éviter un conflit.</div>
+      </section>
+
+      <section class="card">
+        <h2>🚧 Pas encore disponible</h2>
+        <ul>
+          <li>Recherche en ligne pour pré-remplir une fiche à partir
+          d'un ISBN (OpenLibrary/Google Books/BnF).</li>
+          <li>Application pas encore signée/notariée par un compte
+          développeur Apple — sans conséquence pour un usage
+          personnel.</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2>🔧 Pour aller plus loin</h2>
+        <p>Pour un usage quotidien, l'application seule suffit. Pour les
+        outils en ligne de commande (<code>bc_export</code>/
+        <code>bc_add</code> — export CSV/JSON/HTML, scripts, transition
+        depuis Book Collector), voir <code>CLI.fr.md</code> dans le
+        dépôt. <code>CHANGELOG.fr.md</code> garde l'historique des
+        versions publiées.</p>
+      </section>
+    </div>
+
+    <div data-lang-content="en">
+      <section class="card">
+        <h2>📂 Opening a collection</h2>
+        <p>The <b>"📂 Open Collection…"</b> button in the header (same
+        as <b>File → Import a collection…</b>) opens the native macOS
+        file picker to choose a collection — a <code>.bkcp</code> folder
+        (Book Collector) or <code>.col</code> (BookNojo).</p>
+        <ul>
+          <li>The choice is remembered: on the next launch, BookNojo
+          reopens the same collection without asking anything.</li>
+          <li>A <code>.bkcp</code> collection from a different Book
+          Collector version than the one targeted (20.3.1) is rejected
+          with a clear message, rather than a crash.</li>
+          <li>On the very first launch, BookNojo opens an entirely
+          fictional sample collection (10 invented books) — there's
+          always something to see, without ever exposing real data by
+          default.</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2>📚 Browsing the library</h2>
+        <p><b>Three zones</b>, resizable with the mouse: grouping on the
+        left, the book list at top right, the detail card at bottom
+        right.</p>
+        <ul>
+          <li><b>Grouping</b> by Author (default), Genre, Publisher,
+          Format, Language or Country, with an A→Z bar.</li>
+          <li><b>List</b>: text search, sort, pagination, list/grid
+          toggle (cover thumbnails).</li>
+          <li>Multiple <b>sub-collections</b> in a single file — tabs
+          switch between them.</li>
+          <li><b>Statistics</b>: an aggregated view by genre/format/
+          language/publisher/decade. The "N with no cover" count is
+          clickable and expands a book list; clicking one opens a file
+          picker to set its cover right away.</li>
+          <li><b>Detail card</b>: cover, title/authors/publisher, then
+          (when filled in) Product Details, Original Edition, Personal
+          Details, Credits, Characters, Contents, Links, Plot and
+          Notes.</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2>✏️ Adding, editing, deleting a book</h2>
+        <ul>
+          <li><b>Add</b>: a form organized into sub-tabs, with
+          autocomplete. Before writing anything, a confirmation box
+          lists every value that would be created for the first time (a
+          "new" badge) — to catch a typo before it becomes permanent.</li>
+          <li>A cover can also be picked right from the Add-book form
+          (optional "Choose an image…" button). If the add succeeds but
+          not the cover, the book is still added — fixable afterward.</li>
+          <li><b>Edit</b>: from the detail card, the same pre-filled
+          form, same confirmation step.</li>
+          <li><b>Delete</b>: from the detail card, after confirmation.
+          Only rows specific to that book are removed — a shared value
+          is never deleted.</li>
+          <li>The library reloads automatically after every action.</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2>🌐 Bilingual interface</h2>
+        <p>The <b>FR / EN</b> selector in the header switches the whole
+        interface — grouping, list, detail card, statistics, forms. The
+        choice is remembered from one session to the next.</p>
+        <p>Messages returned by the application itself after an action
+        (confirmations, errors) stay in French regardless of the chosen
+        language, for now.</p>
+      </section>
+
+      <section class="card">
+        <h2>🛡️ Data safety</h2>
+        <p>Every write (add, edit, delete, cover) is preceded by a
+        timestamped backup of the file.</p>
+        <div class="note safe">BookNojo can open the real Book Collector
+        collection in <b>read-only</b> mode to browse it, but none of
+        the write actions have any exception for it from the
+        application — and every write is refused if Book Collector is
+        running at the same time, to avoid a conflict.</div>
+      </section>
+
+      <section class="card">
+        <h2>🚧 Not available yet</h2>
+        <ul>
+          <li>Online lookup to pre-fill a record from an ISBN
+          (OpenLibrary/Google Books/BnF).</li>
+          <li>Not yet code-signed/notarized with an Apple developer
+          account — no consequence for personal use.</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2>🔧 Going further</h2>
+        <p>For everyday use, the application alone is enough. For the
+        command-line tools (<code>bc_export</code>/<code>bc_add</code>
+        — CSV/JSON/HTML export, scripts, transition away from Book
+        Collector), see <code>CLI.md</code> in the repository.
+        <code>CHANGELOG.md</code> keeps the history of published
+        versions.</p>
+      </section>
+    </div>
+
+  </main>
+  <footer>
+    <span data-lang-content="fr">BookNojo</span>
+    <span data-lang-content="en">BookNojo</span>
+  </footer>
+<script>
+  (function () {
+    var KEY = "bc_lang";
+    var html = document.documentElement;
+    function apply(lang) {
+      html.setAttribute("data-lang", lang);
+      document.querySelectorAll("#lang-toggle button").forEach(function (b) {
+        b.classList.toggle("active", b.dataset.langBtn === lang);
+      });
+    }
+    var saved = null;
+    try { saved = localStorage.getItem(KEY); } catch (e) {}
+    apply(saved === "en" ? "en" : "fr");
+    document.querySelectorAll("#lang-toggle button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        var lang = b.dataset.langBtn;
+        apply(lang);
+        try { localStorage.setItem(KEY, lang); } catch (e) {}
+      });
+    });
+  })();
+</script>
+</body>
+</html>

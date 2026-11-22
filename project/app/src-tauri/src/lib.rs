@@ -363,6 +363,25 @@ fn pick_collection(app: tauri::AppHandle) {
     open_import_dialog(&app);
 }
 
+/// "BookNojo Help > User Guide" — opens a real help window (a bundled,
+/// bilingual, self-contained `help.html`: no Tauri API calls from inside
+/// it, so no capability grant needed) instead of the plain name+version
+/// dialog this used to show, which only duplicated the real native About
+/// panel (the app_menu's own `.about(...)`, a separate surface already
+/// covering name+version). Reuses the existing window if already open
+/// instead of opening a second one.
+fn show_help_window(app: &tauri::AppHandle) {
+    if let Some(win) = app.get_webview_window("help") {
+        let _ = win.set_focus();
+        return;
+    }
+    let _ = tauri::WebviewWindowBuilder::new(app, "help", tauri::WebviewUrl::App("help.html".into()))
+        .title("BookNojo Help")
+        .inner_size(680.0, 820.0)
+        .resizable(true)
+        .build();
+}
+
 fn build_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     #[cfg(target_os = "macos")]
     let app_menu = SubmenuBuilder::new(app, "BookNojo")
@@ -411,8 +430,13 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::
     // in this Tauri version (confirmed by testing: renaming it made it
     // reappear; matches known upstream Tauri issues on this exact
     // behavior) — "BookNojo Help" sidesteps it while staying unambiguous.
+    // "User Guide" used to be "About BookNojo", showing a bare
+    // name+version dialog that just duplicated the real native About
+    // panel (built from the app_menu's own `.about(...)` above) — found
+    // by Serge comparing the two. Now opens a real help window instead
+    // (see show_help_window).
     let help_menu = SubmenuBuilder::new(app, "BookNojo Help")
-        .text("about_booknojo", "About BookNojo")
+        .text("show_help", "User Guide")
         .build()?;
 
     let mut builder = MenuBuilder::new(app);
@@ -452,12 +476,7 @@ pub fn run() {
         })
         .on_menu_event(|app, event| match event.id().as_ref() {
             "import_collection" => open_import_dialog(app),
-            "about_booknojo" => {
-                app.dialog()
-                    .message(format!("BookNojo\nVersion {}", DISPLAY_VERSION))
-                    .title("About BookNojo")
-                    .show(|_| {});
-            }
+            "show_help" => show_help_window(app),
             _ => {}
         })
         .run(tauri::generate_context!())
