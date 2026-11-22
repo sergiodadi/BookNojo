@@ -82,6 +82,7 @@ const SORTERS = {
   author: (a, b) => collator.compare((a.authors[0] || ''), (b.authors[0] || '')),
   year_desc: (a, b) => (parseInt(b.publication_year) || 0) - (parseInt(a.publication_year) || 0),
   publisher: (a, b) => collator.compare(a.publisher || '', b.publisher || ''),
+  date_added_desc: (a, b) => (b.date_added || '').localeCompare(a.date_added || ''),
 };
 
 // Each entry returns the list of group keys a book belongs to for that
@@ -143,6 +144,7 @@ const I18N = {
     opt_group_format: 'Format', opt_group_language: 'Langue', opt_group_country: 'Pays',
     opt_sort_title: 'Titre (A→Z)', opt_sort_author: 'Auteur (A→Z)',
     opt_sort_year_desc: 'Année (récent d\'abord)', opt_sort_publisher: 'Éditeur (A→Z)',
+    opt_sort_date_added: 'Date d\'ajout (plus récent d\'abord)',
     list_search_placeholder: 'Rechercher titre ou auteur…',
     list_view_list: '☰ Liste', list_view_grid: '▦ Grille',
     col_title: 'Titre', col_author: 'Auteur',
@@ -316,6 +318,7 @@ const I18N = {
     opt_group_format: 'Format', opt_group_language: 'Language', opt_group_country: 'Country',
     opt_sort_title: 'Title (A→Z)', opt_sort_author: 'Author (A→Z)',
     opt_sort_year_desc: 'Year (newest first)', opt_sort_publisher: 'Publisher (A→Z)',
+    opt_sort_date_added: 'Date added (newest first)',
     list_search_placeholder: 'Search title or author…',
     list_view_list: '☰ List', list_view_grid: '▦ Grid',
     col_title: 'Title', col_author: 'Author',
@@ -2033,6 +2036,7 @@ function applyStaticLabels() {
   setOptionText(sortEl, 'author', 'opt_sort_author');
   setOptionText(sortEl, 'year_desc', 'opt_sort_year_desc');
   setOptionText(sortEl, 'publisher', 'opt_sort_publisher');
+  setOptionText(sortEl, 'date_added_desc', 'opt_sort_date_added');
 
   searchEl.placeholder = t('list_search_placeholder');
   viewListBtn.textContent = t('list_view_list');
