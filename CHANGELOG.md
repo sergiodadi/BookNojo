@@ -5,6 +5,12 @@
 History of **versions published on GitHub** (`sergiodadi/BookNojo`),
 one entry per tag/release.
 
+## [v1.0.0b8] - 2026-11-22
+
+- "BookNojo Help > About BookNojo" (a plain name+version dialog
+  duplicating the real native About panel) replaced with a real,
+  bilingual "User Guide" help window.
+
 ## [v1.0.0b7] - 2026-11-22
 
 - New app icon: a flat blue-gradient square with a white "BN" monogram,

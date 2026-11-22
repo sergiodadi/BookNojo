@@ -5,6 +5,12 @@
 Historique des **versions publiées sur GitHub** (`sergiodadi/BookNojo`),
 une entrée par tag/release.
 
+## [v1.0.0b8] - 2026-11-22
+
+- « BookNojo Help > About BookNojo » (une simple boîte nom+version
+  qui dupliquait le vrai panneau natif « About ») remplacé par une
+  vraie fenêtre d'aide bilingue « User Guide ».
+
 ## [v1.0.0b7] - 2026-11-22
 
 - Nouvelle icône d'application : un carré plat en dégradé bleu avec un
