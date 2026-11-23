@@ -196,6 +196,15 @@ fn search_book_online(query: String) -> Vec<book_collector_export::online_search
     results
 }
 
+/// Étape 5 du plan "Recherche en ligne" — thin wrapper around
+/// `online_search::download_cover_to_temp_file` (see its own doc comment
+/// for why the download+write logic lives in the shared crate rather than
+/// here: `reqwest` is already a dependency there, not of this crate).
+#[tauri::command]
+fn download_online_cover(url: String) -> Result<String, String> {
+    book_collector_export::online_search::download_cover_to_temp_file(&url)
+}
+
 /// Read-only half of "Ajouter un livre" (étape 1-5 du formulaire) — résout
 /// les champs du nouveau livre contre la collection actuellement ouverte et
 /// renvoie un résumé à faire valider par l'utilisateur avant toute écriture.
@@ -499,6 +508,7 @@ pub fn run() {
             pick_cover_for_new_book,
             pick_collection,
             search_book_online,
+            download_online_cover,
             app_version
         ])
         .setup(|app| {

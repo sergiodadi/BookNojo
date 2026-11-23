@@ -236,6 +236,7 @@ const I18N = {
     add_cover_label: 'Couverture (optionnel)',
     add_cover_choose: 'Choisir une image…',
     add_cover_chosen: 'Choisi : {name}',
+    add_cover_chosen_online: 'Couverture trouvée en ligne',
     add_cover_remove: 'Retirer',
 
     add_mode_manual: '✍️ Manuellement',
@@ -419,6 +420,7 @@ const I18N = {
     add_cover_label: 'Cover (optional)',
     add_cover_choose: 'Choose an image…',
     add_cover_chosen: 'Chosen: {name}',
+    add_cover_chosen_online: 'Cover found online',
     add_cover_remove: 'Remove',
 
     add_mode_manual: '✍️ Manually',
@@ -543,6 +545,7 @@ const addFormState = {
 function resetAddFormState() {
   for (const key of Object.keys(addFormState)) addFormState[key].length = 0;
   pendingAddCoverPath = null;
+  pendingAddCoverFromOnline = false;
   addMode = 'manual';
   onlineSearchQuery = '';
   onlineSearchResults = [];
@@ -578,8 +581,17 @@ let editingBookData = null;
 // form's "Choisir une couverture" button, Tauri-only, never set while
 // editingBookId is non-null — picking a new cover for an existing book
 // still only goes through the Statistics panel's "no cover" list). Set by
-// the 'add-cover-picked' event listener, read once at commit_add_book time.
+// the 'add-cover-picked' event listener, or by applyOnlineResultToForm()
+// after downloading a chosen online search result's cover — read once at
+// commit_add_book time either way, commit_add_book doesn't know or care
+// which source set it. pendingAddCoverFromOnline only changes which label
+// updateAddCoverChosenLabel() shows (a downloaded temp file's generated
+// name isn't meaningful to show the user, unlike a file they picked
+// themselves) — reset to false whenever the path itself is cleared or
+// replaced by a manual pick, so it never survives past the cover it
+// describes.
 let pendingAddCoverPath = null;
+let pendingAddCoverFromOnline = false;
 
 function renderTabs() {
   tabsEl.innerHTML = '';
@@ -1359,11 +1371,15 @@ function updateAddCoverChosenLabel() {
     chosenEl.textContent = '';
     return;
   }
-  const name = pendingAddCoverPath.split('/').pop();
-  chosenEl.innerHTML = `${escapeHtml(t('add_cover_chosen', { name }))} — <a href="#" id="addCoverRemoveLink">${escapeHtml(t('add_cover_remove'))}</a>`;
+  // A downloaded online cover's temp filename ("booknojo-online-cover-…")
+  // means nothing to the user — show a plain label instead of it, same
+  // "Choisi : …" / remove-link structure either way.
+  const label = pendingAddCoverFromOnline ? t('add_cover_chosen_online') : t('add_cover_chosen', { name: pendingAddCoverPath.split('/').pop() });
+  chosenEl.innerHTML = `${escapeHtml(label)} — <a href="#" id="addCoverRemoveLink">${escapeHtml(t('add_cover_remove'))}</a>`;
   document.getElementById('addCoverRemoveLink').addEventListener('click', (e) => {
     e.preventDefault();
     pendingAddCoverPath = null;
+    pendingAddCoverFromOnline = false;
     updateAddCoverChosenLabel();
   });
 }
@@ -1845,6 +1861,11 @@ function renderOnlineSearchPanel() {
 
   document.querySelectorAll('.online-result-choose').forEach(btn => {
     btn.addEventListener('click', () => {
+      // Disabled immediately, not re-enabled: applyOnlineResultToForm()
+      // re-renders this whole panel away (to the manual form) once it's
+      // done, so there's nothing left to re-enable — this just blocks a
+      // second click during the cover download in between.
+      btn.disabled = true;
       applyOnlineResultToForm(onlineSearchResults[parseInt(btn.dataset.index, 10)]);
     });
   });
@@ -1876,10 +1897,17 @@ function renderOnlineResultCardHtml(r, i) {
 // there, same as every other add-form chip). Deliberately leaves the
 // title/author/publisher/year as a *starting point*, not a locked value —
 // nothing here writes to the database; the user still reviews and submits
-// the manual form normally afterwards. Cover art isn't applied yet (the
-// next plan step: downloading the result's cover_url into a local file
-// usable by the existing add-time cover mechanism).
-function applyOnlineResultToForm(r) {
+// the manual form normally afterwards.
+//
+// Cover (étape 5): if the result has a cover_url (BnF's never does — its
+// SRU response carries no image), downloads it via download_online_cover
+// *before* switching back to the manual form, so pendingAddCoverPath is
+// already set by the time that form (and its cover-chosen label) render —
+// same ordering as the plain-field prefill above. A download failure
+// (network, bad URL, whatever) never blocks picking this result: the
+// cover is optional everywhere else in this form too, and the user can
+// still pick a local file manually afterwards.
+async function applyOnlineResultToForm(r) {
   if (!r) return;
   addFormState.authors.length = 0;
   addFormState.authors.push(...(r.authors || []));
@@ -1889,6 +1917,15 @@ function applyOnlineResultToForm(r) {
     publisher: r.publisher || null,
     publication_year: r.publication_year || null,
   };
+  if (r.cover_url) {
+    try {
+      pendingAddCoverPath = await window.__TAURI__.core.invoke('download_online_cover', { url: r.cover_url });
+      pendingAddCoverFromOnline = true;
+    } catch {
+      pendingAddCoverPath = null;
+      pendingAddCoverFromOnline = false;
+    }
+  }
   addMode = 'manual';
   renderAddForm();
 }
@@ -2387,6 +2424,7 @@ if (window.__TAURI__) {
   // re-render).
   window.__TAURI__.event.listen('add-cover-picked', (event) => {
     pendingAddCoverPath = event.payload;
+    pendingAddCoverFromOnline = false;
     updateAddCoverChosenLabel();
   });
 }

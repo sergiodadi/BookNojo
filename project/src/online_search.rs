@@ -346,6 +346,56 @@ fn bnf_result_from_record(record: roxmltree::Node) -> Option<BookSearchResult> {
     })
 }
 
+// ---------------------------------------------------------------------
+// Cover download (étape 5 of the plan)
+// ---------------------------------------------------------------------
+
+/// Counter making each downloaded cover's temp filename unique within this
+/// run — combined with the process id, so two concurrent BookNojo
+/// instances (unlikely but not impossible) can't collide either. A plain
+/// counter rather than a `rand`-generated name: this crate has no other
+/// need for randomness, not worth a new dependency for one filename.
+static ONLINE_COVER_COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Downloads a chosen online search result's `cover_url` (Open Library and
+/// Google Books both provide one; BnF's SRU response carries no cover
+/// image, see `bnf_result_from_record`) into a throwaway file under the
+/// system temp dir, and returns its local path. Lives here (not in the
+/// Tauri app crate) so `reqwest` stays a dependency of this crate only —
+/// same reasoning as the rest of this module. The resulting path is meant
+/// to be handed to BookNojo's existing add-time cover mechanism
+/// (`cover_path` on `commit_add_book`) exactly like a user's own
+/// manually-picked file — no new cover-writing code, just a new way to
+/// obtain a local file for it. The file is never cleaned up here: the OS
+/// temp dir is cleared on its own schedule, and the add-time cover
+/// mechanism only *reads* the path it's given.
+pub fn download_cover_to_temp_file(url: &str) -> Result<String, String> {
+    let client = http_client()?;
+    let resp = client.get(url).send().map_err(|e| e.to_string())?;
+    if !resp.status().is_success() {
+        return Err(format!("Téléchargement de la couverture échoué ({}).", resp.status()));
+    }
+    let extension = resp
+        .headers()
+        .get(reqwest::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.split(';').next().unwrap_or(v).trim().to_string())
+        .map(|content_type| match content_type.as_str() {
+            "image/png" => "png",
+            "image/gif" => "gif",
+            "image/webp" => "webp",
+            _ => "jpg",
+        })
+        .unwrap_or("jpg");
+    let bytes = resp.bytes().map_err(|e| e.to_string())?;
+
+    let n = ONLINE_COVER_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let mut path = std::env::temp_dir();
+    path.push(format!("booknojo-online-cover-{}-{n}.{extension}", std::process::id()));
+    std::fs::write(&path, &bytes).map_err(|e| e.to_string())?;
+    Ok(path.to_string_lossy().to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -490,5 +540,15 @@ mod tests {
     #[test]
     fn search_google_books_does_not_panic_on_a_known_isbn() {
         let _ = search_google_books("978-0-14-032872-1");
+    }
+
+    #[test]
+    fn download_cover_to_temp_file_saves_a_real_open_library_cover() {
+        let path = download_cover_to_temp_file("https://covers.openlibrary.org/b/id/15152634-M.jpg")
+            .expect("download failed");
+        let metadata = std::fs::metadata(&path).expect("downloaded file should exist");
+        assert!(metadata.len() > 1000, "downloaded cover is suspiciously small: {} bytes", metadata.len());
+        assert!(path.ends_with(".jpg"), "expected a .jpg extension from the jpeg content-type, got: {path}");
+        std::fs::remove_file(&path).ok();
     }
 }
