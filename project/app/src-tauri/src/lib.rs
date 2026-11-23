@@ -164,6 +164,38 @@ fn pick_cover_for_new_book(app: tauri::AppHandle) {
         });
 }
 
+/// "Recherche en ligne" (étape 3 du plan) — interroge les 3 sources
+/// gratuites (Open Library, Google Books, BnF) **en parallèle**, un thread
+/// par source : `reqwest::blocking` est volontairement synchrone (voir
+/// `project/src/online_search.rs`), donc le parallélisme vient d'ici, pas
+/// d'async/tokio. Chaque source est indépendante — un échec réseau, un
+/// timeout ou même un panic d'une seule source (`JoinHandle::join`
+/// renvoyant `Err`) n'empêche jamais les 2 autres de répondre ; ses
+/// résultats sont simplement absents. Les résultats des 3 sources sont
+/// concaténés (Open Library, puis Google Books, puis BnF), chacun portant
+/// déjà son propre champ `source` — pas de fusion, le frontend groupe par
+/// source à l'affichage.
+#[tauri::command]
+fn search_book_online(query: String) -> Vec<book_collector_export::online_search::BookSearchResult> {
+    let open_library = std::thread::spawn({
+        let query = query.clone();
+        move || book_collector_export::online_search::search_open_library(&query)
+    });
+    let google_books = std::thread::spawn({
+        let query = query.clone();
+        move || book_collector_export::online_search::search_google_books(&query)
+    });
+    let bnf = std::thread::spawn(move || book_collector_export::online_search::search_bnf(&query));
+
+    let mut results = Vec::new();
+    for handle in [open_library, google_books, bnf] {
+        if let Ok(Ok(mut source_results)) = handle.join() {
+            results.append(&mut source_results);
+        }
+    }
+    results
+}
+
 /// Read-only half of "Ajouter un livre" (étape 1-5 du formulaire) — résout
 /// les champs du nouveau livre contre la collection actuellement ouverte et
 /// renvoie un résumé à faire valider par l'utilisateur avant toute écriture.
@@ -466,6 +498,7 @@ pub fn run() {
             pick_and_set_cover,
             pick_cover_for_new_book,
             pick_collection,
+            search_book_online,
             app_version
         ])
         .setup(|app| {
@@ -510,6 +543,23 @@ mod tests {
         assert!(
             !scope.is_allowed(&unrelated_file),
             "granting access to one collection's folder must not widen access to unrelated folders"
+        );
+    }
+
+    /// Real network call, not a mock — same spirit as `online_search`'s own
+    /// live tests. Only asserts on Open Library's contribution (confirmed
+    /// reachable/deterministic from this environment); Google Books can
+    /// legitimately return nothing (shared keyless quota) and BnF is
+    /// unreachable from this dev environment entirely (see
+    /// `online_search::search_bnf`'s doc comment) — the point of this test
+    /// is confirming the 3-way parallel join itself works and a slow/failing
+    /// source doesn't drop the others, not that every source answers.
+    #[test]
+    fn search_book_online_returns_open_librarys_result_even_if_other_sources_fail() {
+        let results = search_book_online("978-0-14-032872-1".to_string());
+        assert!(
+            results.iter().any(|r| r.source == "Open Library" && r.title == "Fantastic Mr. Fox"),
+            "expected Open Library's result among {results:?}"
         );
     }
 }
