@@ -238,6 +238,15 @@ const I18N = {
     add_cover_chosen: 'Choisi : {name}',
     add_cover_remove: 'Retirer',
 
+    add_mode_manual: '✍️ Manuellement',
+    add_mode_online: '🔍 Recherche en ligne',
+    search_online_hint: 'Cherchez par titre, auteur ou ISBN — 3 sources gratuites interrogées en même temps : Open Library, Google Books, BnF. Les résultats ne sont jamais fusionnés entre eux ; choisissez celui qui semble le plus fiable.',
+    search_online_placeholder: 'Titre, auteur ou ISBN…',
+    search_online_button: 'Rechercher',
+    search_online_searching: 'Recherche en cours…',
+    search_online_no_results: 'Aucun résultat dans les 3 sources.',
+    search_online_choose: 'Utiliser cette fiche',
+
     add_tab_main: 'Principal', add_tab_details: 'Détails', add_tab_personal: 'Personnel',
     add_tab_credits: 'Crédits & Personnages', add_tab_contents: 'Contenus',
     add_tab_plot: 'Intrigue & Notes', add_tab_links: 'Liens',
@@ -412,6 +421,15 @@ const I18N = {
     add_cover_chosen: 'Chosen: {name}',
     add_cover_remove: 'Remove',
 
+    add_mode_manual: '✍️ Manually',
+    add_mode_online: '🔍 Online search',
+    search_online_hint: 'Search by title, author, or ISBN — 3 free sources queried at the same time: Open Library, Google Books, BnF. Results are never merged across sources; pick whichever looks most reliable.',
+    search_online_placeholder: 'Title, author, or ISBN…',
+    search_online_button: 'Search',
+    search_online_searching: 'Searching…',
+    search_online_no_results: 'No results from any of the 3 sources.',
+    search_online_choose: 'Use this result',
+
     add_tab_main: 'Main', add_tab_details: 'Details', add_tab_personal: 'Personal',
     add_tab_credits: 'Credits & Characters', add_tab_contents: 'Contents',
     add_tab_plot: 'Plot & Notes', add_tab_links: 'Links',
@@ -525,7 +543,28 @@ const addFormState = {
 function resetAddFormState() {
   for (const key of Object.keys(addFormState)) addFormState[key].length = 0;
   pendingAddCoverPath = null;
+  addMode = 'manual';
+  onlineSearchQuery = '';
+  onlineSearchResults = [];
+  onlineSearchBusy = false;
+  onlineSearchDone = false;
+  pendingOnlinePrefill = null;
 }
+
+// "✍️ Manuellement" vs "🔍 Recherche en ligne" — Tauri-only, never during
+// an edit (same gate as the cover-at-add field below), reset to 'manual'
+// by resetAddFormState() so a fresh "Ajouter un livre" never starts on the
+// search panel. onlineSearch* holds the last search typed/returned so
+// switching tabs and back doesn't lose it; pendingOnlinePrefill is the
+// one-shot bridge from a chosen online result into the manual form's
+// plain `[name]` inputs, consumed and cleared the next time the manual
+// form renders (same one-shot pattern as editingBookData, see below).
+let addMode = 'manual';
+let onlineSearchQuery = '';
+let onlineSearchResults = [];
+let onlineSearchBusy = false;
+let onlineSearchDone = false;
+let pendingOnlinePrefill = null;
 
 // Non-null while the Add-book panel is showing an existing book for
 // modification instead of a blank form — set by editBook(), cleared on
@@ -1329,7 +1368,39 @@ function updateAddCoverChosenLabel() {
   });
 }
 
+// "✍️ Manuellement" / "🔍 Recherche en ligne" — Tauri-only, never during
+// an edit, same gate as the cover-at-add field. A plain flex row of pills,
+// deliberately not reusing `.add-tab-btn`'s class: that class already has
+// its own click-handler loop below keyed on `data-tab`, and attaching it
+// here too would make that loop try (and fail, `data-tab` is undefined
+// for these buttons) to toggle a `.add-tab-panel` that doesn't exist.
+function addModeToggleHtml() {
+  if (!(window.__TAURI__ && editingBookId === null)) return '';
+  return `
+      <div class="add-mode-toggle" id="addModeToggle">
+        <button type="button" class="add-mode-btn${addMode === 'manual' ? ' active' : ''}" data-mode="manual">${t('add_mode_manual')}</button>
+        <button type="button" class="add-mode-btn${addMode === 'online' ? ' active' : ''}" data-mode="online">${t('add_mode_online')}</button>
+      </div>`;
+}
+
+function wireAddModeToggle() {
+  const toggle = document.getElementById('addModeToggle');
+  if (!toggle) return;
+  toggle.querySelectorAll('[data-mode]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.dataset.mode === addMode) return;
+      addMode = btn.dataset.mode;
+      renderAddForm();
+    });
+  });
+}
+
 function renderAddForm() {
+  if (window.__TAURI__ && editingBookId === null && addMode === 'online') {
+    renderOnlineSearchPanel();
+    return;
+  }
+
   const collOptions = collections
     .map(c => `<option value="${escapeHtml(c)}"${c === state.collection ? ' selected' : ''}>${escapeHtml(c)}</option>`)
     .join('');
@@ -1341,6 +1412,7 @@ function renderAddForm() {
     <div class="add-wrap">
       <h2>${window.__TAURI__ ? t('add_heading_tauri') : t('add_heading_static')}</h2>
       <p class="add-hint">${window.__TAURI__ ? t('add_hint_tauri') : t('add_hint_static')}</p>
+      ${addModeToggleHtml()}
       ${window.__TAURI__ && editingBookId === null ? `
       <div class="add-cover-field">
         <span class="label">${t('add_cover_label')}</span>
@@ -1667,6 +1739,24 @@ function renderAddForm() {
     updateAddCoverChosenLabel();
   }
 
+  wireAddModeToggle();
+
+  // One-shot: a result just chosen from the online-search panel
+  // (applyOnlineResultToForm() sets this, then switches back to 'manual'
+  // and re-renders, landing here). Same shape/limitation as editingBookData
+  // just below — only plain `[name]` inputs, chip fields (authors) are
+  // applied directly to addFormState by applyOnlineResultToForm() instead,
+  // since this form's chip-input rendering already reads from there.
+  if (pendingOnlinePrefill) {
+    const form = document.getElementById('addForm');
+    for (const [name, value] of Object.entries(pendingOnlinePrefill)) {
+      if (value === null || value === undefined) continue;
+      const el = form.querySelector(`[name="${name}"]`);
+      if (el) el.value = value;
+    }
+    pendingOnlinePrefill = null;
+  }
+
   // Edit mode: pre-fill every plain input/select/textarea from
   // editingBookData (the chip/repeatable-list fields are already populated
   // via addFormState, set up before this render in editBook()) and swap
@@ -1687,6 +1777,120 @@ function renderAddForm() {
     wrap.querySelector('.add-hint').textContent = t('add_hint_edit');
     wrap.querySelector('.add-actions button[type="submit"]').textContent = t('add_submit_edit');
   }
+}
+
+// "🔍 Recherche en ligne" panel — a single search field for all 3 sources
+// (Open Library/Google Books/BnF), queried together by the Rust side
+// (search_book_online, one thread per source). Results are never merged
+// across sources; each card keeps its own `source` label and is applied
+// individually via applyOnlineResultToForm(). Deliberately its own render
+// path rather than a branch inside the manual form's markup: none of the
+// manual form's DOM (tabs, `<form id="addForm">`, datalists, etc.) exists
+// while this panel is showing, so none of renderAddForm()'s usual wiring
+// after the template string would have anything valid to attach to.
+function renderOnlineSearchPanel() {
+  let resultsHtml;
+  if (onlineSearchBusy) {
+    resultsHtml = '';
+  } else if (onlineSearchDone && onlineSearchResults.length === 0) {
+    resultsHtml = `<p class="add-hint">${t('search_online_no_results')}</p>`;
+  } else {
+    resultsHtml = onlineSearchResults.map(renderOnlineResultCardHtml).join('');
+  }
+
+  addPaneEl.innerHTML = `
+    <div class="add-wrap">
+      <h2>${t('add_heading_tauri')}</h2>
+      ${addModeToggleHtml()}
+      <p class="add-hint">${t('search_online_hint')}</p>
+      <div class="online-search-box">
+        <input id="onlineSearchInput" placeholder="${escapeHtml(t('search_online_placeholder'))}" value="${escapeHtml(onlineSearchQuery)}">
+        <button type="button" id="onlineSearchBtn"${onlineSearchBusy ? ' disabled' : ''}>${onlineSearchBusy ? t('search_online_searching') : t('search_online_button')}</button>
+      </div>
+      <div id="onlineSearchResults" class="online-search-results">${resultsHtml}</div>
+    </div>`;
+
+  wireAddModeToggle();
+
+  const input = document.getElementById('onlineSearchInput');
+  const runOnlineSearch = async () => {
+    const query = input.value.trim();
+    if (!query || onlineSearchBusy) return;
+    onlineSearchQuery = query;
+    onlineSearchBusy = true;
+    onlineSearchDone = false;
+    renderAddForm();
+    try {
+      onlineSearchResults = await window.__TAURI__.core.invoke('search_book_online', { query });
+    } catch {
+      // The Rust side already turns a single source's failure into "zero
+      // results for that source" (see search_book_online's own doc
+      // comment) — an invoke() rejection here means something broke
+      // before any source even ran, so there's nothing source-specific to
+      // show either way.
+      onlineSearchResults = [];
+    }
+    onlineSearchBusy = false;
+    onlineSearchDone = true;
+    renderAddForm();
+  };
+  document.getElementById('onlineSearchBtn').addEventListener('click', runOnlineSearch);
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      runOnlineSearch();
+    }
+  });
+  input.focus();
+
+  document.querySelectorAll('.online-result-choose').forEach(btn => {
+    btn.addEventListener('click', () => {
+      applyOnlineResultToForm(onlineSearchResults[parseInt(btn.dataset.index, 10)]);
+    });
+  });
+}
+
+function renderOnlineResultCardHtml(r, i) {
+  const authors = (r.authors || []).join(', ');
+  const meta = [r.publisher, r.publication_year].filter(Boolean).join(' · ');
+  const cover = r.cover_url
+    ? `<img class="online-result-cover" src="${escapeHtml(r.cover_url)}" alt="" loading="lazy">`
+    : '<div class="online-result-cover online-result-cover-empty"></div>';
+  return `
+      <div class="online-result">
+        ${cover}
+        <div class="online-result-info">
+          <span class="online-result-source">${escapeHtml(r.source)}</span>
+          <strong>${escapeHtml(r.title)}</strong>
+          ${authors ? `<span>${escapeHtml(authors)}</span>` : ''}
+          ${meta ? `<span>${escapeHtml(meta)}</span>` : ''}
+        </div>
+        <button type="button" class="online-result-choose" data-index="${i}">${t('search_online_choose')}</button>
+      </div>`;
+}
+
+// Applies one chosen online-search result to the manual form: plain text
+// fields go through pendingOnlinePrefill (consumed once by renderAddForm's
+// manual branch, same one-shot pattern as editingBookData), authors go
+// straight into addFormState (the chip-input field already reads from
+// there, same as every other add-form chip). Deliberately leaves the
+// title/author/publisher/year as a *starting point*, not a locked value —
+// nothing here writes to the database; the user still reviews and submits
+// the manual form normally afterwards. Cover art isn't applied yet (the
+// next plan step: downloading the result's cover_url into a local file
+// usable by the existing add-time cover mechanism).
+function applyOnlineResultToForm(r) {
+  if (!r) return;
+  addFormState.authors.length = 0;
+  addFormState.authors.push(...(r.authors || []));
+  pendingOnlinePrefill = {
+    title: r.title || null,
+    isbn: r.isbn || null,
+    publisher: r.publisher || null,
+    publication_year: r.publication_year || null,
+  };
+  addMode = 'manual';
+  renderAddForm();
 }
 
 function onAddFormSubmit(e) {
