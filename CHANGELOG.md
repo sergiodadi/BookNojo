@@ -5,6 +5,13 @@
 History of **versions published on GitHub** (`sergiodadi/BookNojo`),
 one entry per tag/release.
 
+## [v1.0.0b10] - 2026-11-23
+
+- The native **File** menu item was renamed from "Import a collection…"
+  to **"Open Collection…"**, matching the header button's existing
+  label — both already triggered the exact same action, so the two
+  different names were a pure wording inconsistency, not two features.
+
 ## [v1.0.0b9] - 2026-11-22
 
 - New "date added (newest first)" sort option, matching the equivalent

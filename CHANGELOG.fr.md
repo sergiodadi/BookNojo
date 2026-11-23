@@ -5,6 +5,14 @@
 Historique des **versions publiées sur GitHub** (`sergiodadi/BookNojo`),
 une entrée par tag/release.
 
+## [v1.0.0b10] - 2026-11-23
+
+- Le menu natif **Fichier** a été renommé de « Import a collection… » à
+  **« Open Collection… »**, pour correspondre au libellé déjà utilisé par
+  le bouton de l'en-tête — les deux déclenchaient déjà exactement la même
+  action, donc les deux noms différents n'étaient qu'une incohérence de
+  libellé, pas deux fonctionnalités distinctes.
+
 ## [v1.0.0b9] - 2026-11-22
 
 - Nouvelle option de tri « Date d'ajout (plus récent d'abord) », pour
