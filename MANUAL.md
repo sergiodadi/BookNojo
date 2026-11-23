@@ -79,6 +79,18 @@ compile it from source, see [`BUILD.md`](BUILD.md).
   confirmed. If the add succeeds but the cover can't be saved, the book is
   still added — fix the cover afterward from the "no cover" list in the
   Statistics panel, or with `bc_add set-cover`.
+- **Online search**: the Add-book form opens on a **"✍️ Manually" / "🔍
+  Online search"** toggle. The online panel has a single search field —
+  type a title, author, or ISBN, and it's sent to 3 free sources at once
+  (Open Library, Google Books, the BnF's catalogue) — then shows the
+  results grouped by source, each with its own "Use this result" button.
+  Picking one switches back to the manual form with title, ISBN,
+  publisher, publication year and authors already filled in (and the
+  cover downloaded automatically, when the source provides one) — nothing
+  is written yet at that point, so every field stays editable and the
+  same confirmation step applies before saving. Results from different
+  sources are never merged: if two sources disagree, pick whichever one
+  looks right rather than trying to combine them.
 
 ## 4. Bilingual interface
 

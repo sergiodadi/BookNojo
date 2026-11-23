@@ -85,6 +85,20 @@ pour la compiler depuis les sources, voir [`BUILD.fr.md`](BUILD.fr.md).
   peut pas être enregistrée, le livre est quand même ajouté — rattrapable
   ensuite via la liste "sans couverture" du panneau Statistiques, ou avec
   `bc_add set-cover`.
+- **Recherche en ligne** : le formulaire d'ajout s'ouvre sur un bascule
+  **« ✍️ Manuellement » / « 🔍 Recherche en ligne »**. Le panneau de
+  recherche a un seul champ — tapez un titre, un auteur ou un ISBN, et la
+  requête part vers 3 sources gratuites en même temps (Open Library,
+  Google Books, le catalogue de la BnF) — puis affiche les résultats
+  groupés par source, chacun avec son propre bouton « Utiliser cette
+  fiche ». En choisir un rebascule vers le formulaire manuel avec titre,
+  ISBN, éditeur, année de publication et auteurs déjà remplis (et la
+  couverture téléchargée automatiquement, quand la source en propose
+  une) — rien n'est encore écrit à ce stade, tous les champs restent
+  modifiables et la même étape de confirmation s'applique avant
+  l'enregistrement. Les résultats de sources différentes ne sont jamais
+  fusionnés : si deux sources se contredisent, choisissez celle qui
+  semble la bonne plutôt que d'essayer de les combiner.
 
 ## 4. Interface bilingue
 
