@@ -294,3 +294,54 @@ fn set_cover_updates_front_and_back_cover_filenames() {
 
     cleanup(&db_path);
 }
+
+/// Étape 7 of the "Recherche en ligne" plan — chains `online_search`'s real
+/// functions with the existing add-book pipeline, something no earlier
+/// test actually exercised together: `online_search`'s own tests cover
+/// each function in isolation, and the tests above in this file only ever
+/// build a `NewBookInput` by hand. Real network calls throughout (Open
+/// Library, then the cover download) — same "prefer real I/O over mocks"
+/// convention as the rest of this project, and the only way to actually
+/// prove `BookSearchResult`'s field names/shapes line up with what
+/// `commit_add_book`/`set_cover` expect.
+#[test]
+fn online_search_result_can_be_added_with_its_cover_through_the_real_pipeline() {
+    let db_path = fixture_copy("online_search_round_trip");
+
+    let results = online_search::search_open_library("978-0-14-032872-1").expect("search_open_library");
+    let result = results.into_iter().next().expect("Open Library should return a result for this known ISBN");
+    assert_eq!(result.title, "Fantastic Mr. Fox");
+
+    let input = NewBookInput {
+        title: result.title.clone(),
+        isbn: result.isbn.clone(),
+        authors: result.authors.clone(),
+        publisher: result.publisher.clone(),
+        publication_year: result.publication_year.clone(),
+        collection: "book-collector-serge".to_string(),
+        ..Default::default()
+    };
+    let (_backup, book_pk) = commit_add_book(&db_path, &backup_dir_for(&db_path), input).expect("commit_add_book");
+
+    let cover_url = result.cover_url.expect("Open Library result should have a cover_url for this ISBN");
+    let cover_path = online_search::download_cover_to_temp_file(&cover_url).expect("download_cover_to_temp_file");
+    set_cover(&db_path, &backup_dir_for(&db_path), book_pk, Some(Path::new(&cover_path)), None).expect("set_cover");
+    std::fs::remove_file(&cover_path).ok();
+
+    integrity_check(&db_path);
+    let reloaded = load_book_for_edit_at(&db_path, book_pk).expect("reload");
+    assert_eq!(reloaded.title, "Fantastic Mr. Fox");
+    assert_eq!(reloaded.authors, vec!["Roald Dahl".to_string()]);
+    assert_eq!(reloaded.publisher.as_deref(), Some("Puffin"));
+
+    let conn = open_ro(&db_path);
+    let front: String = conn
+        .query_row("SELECT ZFRONTCOVER FROM ZCOLLECTIBLE WHERE Z_PK = ?1", [book_pk], |row| row.get(0))
+        .unwrap();
+    assert!(!front.is_empty(), "front cover filename should be set");
+    let images_dir = db_path.parent().unwrap().join("Images");
+    assert!(images_dir.join(&front).is_file(), "downloaded cover should have been copied into Images/");
+    drop(conn);
+
+    cleanup(&db_path);
+}
