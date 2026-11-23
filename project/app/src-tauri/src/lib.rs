@@ -286,7 +286,7 @@ fn bkcp_version(bkcp_dir: &Path) -> Option<String> {
     json.get("kPreferencesApplicationVersion")?.as_str().map(str::to_string)
 }
 
-/// "File > Import a collection..." — opens the native macOS file picker. A
+/// "File > Open Collection…" — opens the native macOS file picker. A
 /// `.bkcp`/`.col` is a directory on disk, but macOS/LaunchServices registers
 /// `.bkcp` (via the app that created it) as a package — NSOpenPanel treats a
 /// recognized package as a *file*, not a folder, so a folder-only picker
@@ -298,12 +298,14 @@ fn bkcp_version(bkcp_dir: &Path) -> Option<String> {
 /// targets that one release's schema and other versions may use a
 /// different schema. The chosen path is sent to the frontend as an
 /// `import-collection` event rather than returned directly, since the
-/// picker itself is asynchronous/callback-based.
+/// picker itself is asynchronous/callback-based. (The event name stays
+/// `import-collection` — it's an internal implementation detail, not shown
+/// to the user; the user-visible label is "Open Collection…" everywhere.)
 fn open_import_dialog(app: &tauri::AppHandle) {
     let app_handle = app.clone();
     app.dialog()
         .file()
-        .set_title("Importer une collection")
+        .set_title("Open a Book Collector collection (.bkcp)")
         .add_filter("Collection", &["bkcp", "col"])
         .pick_file(move |file| {
             let Some(path) = file else { return };
@@ -352,12 +354,9 @@ fn open_import_dialog(app: &tauri::AppHandle) {
 }
 
 /// Header button "Open Collection…" — a second entry point into the exact
-/// same picker as "File > Import a collection…" (same version check, same
-/// `import-collection` event), added because that menu item was the only
-/// way to open a different `.bkcp` and a user asked for something visible
-/// without digging into the File menu. Not a separate flow: BookNojo has no
-/// distinct "import vs. just open" distinction in practice (see
-/// `open_import_dialog`'s own doc comment).
+/// same picker as "File > Open Collection…" (same version check, same
+/// `import-collection` event, same label — both are the same single action,
+/// exposed in two places for convenience).
 #[tauri::command]
 fn pick_collection(app: tauri::AppHandle) {
     open_import_dialog(&app);
@@ -405,7 +404,7 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::
         .build()?;
 
     let file_menu = SubmenuBuilder::new(app, "File")
-        .text("import_collection", "Import a collection…")
+        .text("open_collection", "Open Collection…")
         .separator()
         .close_window()
         .build()?;
@@ -475,7 +474,7 @@ pub fn run() {
             Ok(())
         })
         .on_menu_event(|app, event| match event.id().as_ref() {
-            "import_collection" => open_import_dialog(app),
+            "open_collection" => open_import_dialog(app),
             "show_help" => show_help_window(app),
             _ => {}
         })

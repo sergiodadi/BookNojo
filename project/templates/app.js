@@ -13,7 +13,7 @@
 // (never committed, never packaged) but wrong as the app's shipped
 // default, since it meant a freshly installed BookNojo opened real personal
 // data on first launch (found by the user after actually installing the
-// built package, v0.49.0). "File > Import a collection..." picks a real
+// built package, v0.49.0). "File > Open Collection..." picks a real
 // one and overrides it from then on, remembered across relaunches the
 // same way the rest of the UI state already is.
 const DEV_COLLECTION_PATH = '/Users/serge/Developer/book_collector_export/project/sample-collection/MyCollection.bkcp';
@@ -1196,7 +1196,7 @@ statsBtn.addEventListener('click', () => {
 if (openCollectionBtn) {
   openCollectionBtn.addEventListener('click', () => {
     // Fire-and-forget: reuses the exact same native picker + version check
-    // as "File > Import a collection…" — the chosen path arrives later as
+    // as "File > Open Collection…" — the chosen path arrives later as
     // the same 'import-collection' event already listened for below.
     window.__TAURI__.core.invoke('pick_collection');
   });

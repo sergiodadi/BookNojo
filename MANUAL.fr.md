@@ -9,13 +9,13 @@ pour la compiler depuis les sources, voir [`BUILD.fr.md`](BUILD.fr.md).
 ## 1. Ouvrir une collection
 
 - Le bouton **« 📂 Ouvrir une collection… »** dans l'en-tête (identique à
-  **File > Import a collection…**) ouvre le sélecteur de fichier natif
+  **File > Open Collection…**) ouvre le sélecteur de fichier natif
   macOS pour choisir une collection — un dossier `.bkcp` (Book Collector)
   ou `.col` (BookNojo). Le choix est mémorisé automatiquement : au lancement
   suivant, BookNojo rouvre la même collection sans rien demander.
 - Une collection `.bkcp` d'une version de Book Collector différente de
-  celle contre laquelle BookNojo a été construit (20.3.1) est refusée à
-  l'import, avec un message clair plutôt qu'un plantage ou une corruption
+  celle contre laquelle BookNojo a été construit (20.3.1) est refusée,
+  avec un message clair plutôt qu'un plantage ou une corruption
   silencieuse.
 - Au tout premier lancement, avant tout import, BookNojo ouvre une collection
   d'exemple entièrement fictive (10 livres inventés, aucune donnée

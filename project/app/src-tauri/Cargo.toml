@@ -4,7 +4,7 @@ name = "booknojo"
 # "0.1.0" meant both this crate's own env!("CARGO_PKG_VERSION") (the About
 # BookNojo dialog) and tauri.conf.json's bundle version were silently
 # stale since the app was scaffolded.
-version = "0.81.0"
+version = "0.82.0"
 description = "BookNojo"
 authors = ["Serge"]
 edition = "2024"
@@ -25,7 +25,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-opener = "2"
-# Native "Importer une collection..." picker (étape 4 : menu File > Import a collection...).
+# Native "Open Collection..." picker (étape 4 : menu File > Open Collection...).
 tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
