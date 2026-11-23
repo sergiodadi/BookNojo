@@ -27,6 +27,12 @@ use anyhow::{bail, Context, Result};
 use rusqlite::{Connection, OpenFlags};
 use std::path::{Path, PathBuf};
 
+/// Online book-metadata lookup ("Recherche en ligne" feature) — Open
+/// Library / Google Books / BnF. Self-contained: no dependency on the
+/// SQLite logic the rest of this crate is built around, hence its own
+/// file rather than more lines in this one.
+pub mod online_search;
+
 /// Expands a leading "~" or "~/..." to $HOME. The shell only does this when
 /// the argument is unquoted, so a quoted "~/Documents/..." reaches us
 /// literally — this makes `--db "~/Documents/..."` work either way.

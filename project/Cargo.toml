@@ -1,6 +1,6 @@
 [package]
 name = "book_collector_export"
-version = "0.84.0"
+version = "0.85.0"
 edition = "2021"
 license = "MIT"
 
@@ -33,3 +33,7 @@ base64 = "0.22"
 # architectural element for one feature. The 3 sources will be queried
 # in parallel later via plain `std::thread::spawn`, not async.
 reqwest = { version = "0.12", features = ["blocking", "json"] }
+# Parses the BnF SRU service's UNIMARC/MarcXchange XML response (no JSON
+# output offered by that service). Namespace-agnostic local-name lookups
+# (tag_name().name()) sidestep needing the exact srw:/mx: namespace URIs.
+roxmltree = "0.20"

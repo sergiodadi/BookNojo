@@ -356,7 +356,7 @@ dependencies = [
 
 [[package]]
 name = "book_collector_export"
-version = "0.84.0"
+version = "0.85.0"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -364,6 +364,7 @@ dependencies = [
  "csv",
  "image",
  "reqwest 0.12.28",
+ "roxmltree",
  "rusqlite",
  "serde",
  "serde_json",
@@ -371,7 +372,7 @@ dependencies = [
 
 [[package]]
 name = "booknojo"
-version = "0.84.0"
+version = "0.85.0"
 dependencies = [
  "book_collector_export",
  "serde",
@@ -3289,6 +3290,12 @@ dependencies = [
  "untrusted",
  "windows-sys 0.52.0",
 ]
+
+[[package]]
+name = "roxmltree"
+version = "0.20.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6c20b6793b5c2fa6553b250154b78d6d0db37e72700ae35fad9387a46f487c97"
 
 [[package]]
 name = "rusqlite"
