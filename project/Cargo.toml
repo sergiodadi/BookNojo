@@ -1,6 +1,6 @@
 [package]
 name = "book_collector_export"
-version = "0.83.0"
+version = "0.84.0"
 edition = "2021"
 license = "MIT"
 
@@ -25,3 +25,11 @@ anyhow = "1"
 clap = { version = "4", features = ["derive"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 base64 = "0.22"
+# Online book-metadata lookup (Open Library / Google Books / BnF), étape 1
+# du plan "Recherche en ligne". `blocking` feature deliberately chosen
+# over async reqwest + tokio: the rest of this project (rusqlite, every
+# existing function) is synchronous, and bc_add/bc_export have no async
+# runtime at all — adding tokio just for this would be a new
+# architectural element for one feature. The 3 sources will be queried
+# in parallel later via plain `std::thread::spawn`, not async.
+reqwest = { version = "0.12", features = ["blocking", "json"] }
