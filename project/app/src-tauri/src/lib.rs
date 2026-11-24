@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use serde::Serialize;
 use tauri::menu::{MenuBuilder, SubmenuBuilder};
 use tauri::{Emitter, Manager};
 use tauri_plugin_dialog::{DialogExt, MessageDialogKind};
@@ -327,7 +328,9 @@ fn bkcp_version(bkcp_dir: &Path) -> Option<String> {
     json.get("kPreferencesApplicationVersion")?.as_str().map(str::to_string)
 }
 
-/// "File > Open Collection…" — opens the native macOS file picker. A
+/// Header button "Open Collection…" (only entry point left as of this
+/// step — the native File menu now has "Import Collection…" instead, see
+/// `open_import_collection_dialog`). Opens the native macOS file picker. A
 /// `.bkcp`/`.col` is a directory on disk, but macOS/LaunchServices registers
 /// `.bkcp` (via the app that created it) as a package — NSOpenPanel treats a
 /// recognized package as a *file*, not a folder, so a folder-only picker
@@ -342,6 +345,11 @@ fn bkcp_version(bkcp_dir: &Path) -> Option<String> {
 /// picker itself is asynchronous/callback-based. (The event name stays
 /// `import-collection` — it's an internal implementation detail, not shown
 /// to the user; the user-visible label is "Open Collection…" everywhere.)
+///
+/// **Still accepts a `.bkcp` directly for now** (opened in place, exactly
+/// like today) — restricting this picker to `.col` only, now that a real
+/// "Import Collection…" exists to bootstrap one, is step 4 of this plan,
+/// not yet done.
 fn open_import_dialog(app: &tauri::AppHandle) {
     let app_handle = app.clone();
     app.dialog()
@@ -394,13 +402,114 @@ fn open_import_dialog(app: &tauri::AppHandle) {
         });
 }
 
-/// Header button "Open Collection…" — a second entry point into the exact
-/// same picker as "File > Open Collection…" (same version check, same
-/// `import-collection` event, same label — both are the same single action,
-/// exposed in two places for convenience).
+/// IPC wrapper so the header button's "Open Collection…" can call the same
+/// `open_import_dialog` the function above documents (a dialog callback
+/// can't be invoked directly from the frontend, only a `#[tauri::command]`).
 #[tauri::command]
 fn pick_collection(app: tauri::AppHandle) {
     open_import_dialog(&app);
+}
+
+/// Payload for the `collection-imported` event — a brand-new `.col` was
+/// just bootstrapped from a `.bkcp` (see `open_import_collection_dialog`).
+/// `book_count` lets the frontend show an import summary without a second
+/// round trip to count anything itself.
+#[derive(Serialize, Clone)]
+struct CollectionImported {
+    path: String,
+    book_count: i64,
+}
+
+/// Small one-button error dialog, factored out because
+/// `open_import_collection_dialog` below has three distinct failure points
+/// (unsupported/unverifiable Book Collector version, destination already
+/// existing, the copy itself failing) that would otherwise repeat the same
+/// `app.dialog()....show(|_| {})` boilerplate three times.
+fn show_error_dialog(app: &tauri::AppHandle, title: &str, message: impl Into<String>) {
+    app.dialog()
+        .message(message.into())
+        .title(title)
+        .kind(MessageDialogKind::Error)
+        .show(|_| {});
+}
+
+/// "File > Import Collection…" — the native macOS menu's own entry point
+/// (deliberately *not* in the app's own header/menu: imports are rare,
+/// a native-menu-only place suits them, per Serge). Distinct from "Open
+/// Collection…" (the header button, `open_import_dialog`): Import only
+/// ever takes a real Book Collector `.bkcp` as source — the picker is
+/// filtered accordingly (no `.col` here; re-importing an already-BookNojo
+/// database makes no sense) — checks its Book Collector version exactly
+/// like the combined picker used to, then bootstraps a brand-new,
+/// independent `.col` at the fixed location `default_col_destination`
+/// computes (`~/Documents/BookNojo/<name>.col`, étape 2 of this plan) via
+/// the shared `import_collection_to` (étape 1). The source `.bkcp` is only
+/// ever read — this is a one-shot copy, never a live link (see
+/// `import_collection_to`'s own doc comment).
+///
+/// On success, emits `collection-imported` (new path + book count) rather
+/// than reusing `import-collection` — the frontend needs to react
+/// differently here (show an import summary and *then* open the new
+/// collection, not just silently reload); wiring that frontend listener is
+/// étape 5 of this plan, not yet done.
+fn open_import_collection_dialog(app: &tauri::AppHandle) {
+    let app_handle = app.clone();
+    app.dialog()
+        .file()
+        .set_title("Import a Book Collector collection (.bkcp)")
+        .add_filter("Book Collector collection", &["bkcp"])
+        .pick_file(move |file| {
+            let Some(path) = file else { return };
+            let Some(source) = path.as_path() else { return };
+
+            match bkcp_version(source) {
+                Some(version) if version == SUPPORTED_BKCP_VERSION => {}
+                Some(version) => {
+                    show_error_dialog(
+                        &app_handle,
+                        "Version non prise en charge",
+                        format!(
+                            "Cette collection a été créée avec Book Collector {version}. \
+                             Seule la version {SUPPORTED_BKCP_VERSION} est prise en charge \
+                             pour l'import — import annulé."
+                        ),
+                    );
+                    return;
+                }
+                None => {
+                    show_error_dialog(
+                        &app_handle,
+                        "Version non vérifiable",
+                        "Impossible de déterminer la version de Book Collector utilisée \
+                         pour cette collection — import annulé par précaution.",
+                    );
+                    return;
+                }
+            }
+
+            let dest = match book_collector_export::default_col_destination(source) {
+                Ok(dest) => dest,
+                Err(e) => {
+                    show_error_dialog(&app_handle, "Import impossible", format!("{e:#}"));
+                    return;
+                }
+            };
+
+            match book_collector_export::import_collection_to(source, &dest) {
+                Ok(outcome) => {
+                    let _ = app_handle.emit(
+                        "collection-imported",
+                        CollectionImported {
+                            path: outcome.dest.to_string_lossy().to_string(),
+                            book_count: outcome.book_count,
+                        },
+                    );
+                }
+                Err(e) => {
+                    show_error_dialog(&app_handle, "Import impossible", format!("{e:#}"));
+                }
+            }
+        });
 }
 
 /// "BookNojo Help > User Guide" — opens a real help window (a bundled,
@@ -445,7 +554,7 @@ fn build_menu(app: &tauri::AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::
         .build()?;
 
     let file_menu = SubmenuBuilder::new(app, "File")
-        .text("open_collection", "Open Collection…")
+        .text("import_collection", "Import Collection…")
         .separator()
         .close_window()
         .build()?;
@@ -517,7 +626,7 @@ pub fn run() {
             Ok(())
         })
         .on_menu_event(|app, event| match event.id().as_ref() {
-            "open_collection" => open_import_dialog(app),
+            "import_collection" => open_import_collection_dialog(app),
             "show_help" => show_help_window(app),
             _ => {}
         })
