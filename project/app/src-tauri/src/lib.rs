@@ -328,76 +328,38 @@ fn bkcp_version(bkcp_dir: &Path) -> Option<String> {
     json.get("kPreferencesApplicationVersion")?.as_str().map(str::to_string)
 }
 
-/// Header button "Open Collection…" (only entry point left as of this
-/// step — the native File menu now has "Import Collection…" instead, see
-/// `open_import_collection_dialog`). Opens the native macOS file picker. A
-/// `.bkcp`/`.col` is a directory on disk, but macOS/LaunchServices registers
-/// `.bkcp` (via the app that created it) as a package — NSOpenPanel treats a
+/// Header button "Open Collection…" — opens the native macOS file picker,
+/// restricted to an already-imported `.col` (étape 4 of this plan: a real
+/// Book Collector `.bkcp` is now only ever a one-shot *source* for "File >
+/// Import Collection…", never opened directly here — see
+/// `open_import_collection_dialog`). `.col` is a directory on disk, but
+/// macOS/LaunchServices registers it (via BookNojo's own Info.plist
+/// document-type declaration) as a package — NSOpenPanel treats a
 /// recognized package as a *file*, not a folder, so a folder-only picker
 /// (`canChooseFiles: false`) grays it out entirely. Using `pick_file` with
 /// an extension filter instead lets the package be selected as a single
 /// atomic item, matching how Finder/Open dialogs normally handle package-
-/// style bundles. A picked `.bkcp` is additionally checked against
-/// `SUPPORTED_BKCP_VERSION` before being accepted, since this project's SQL
-/// targets that one release's schema and other versions may use a
-/// different schema. The chosen path is sent to the frontend as an
-/// `import-collection` event rather than returned directly, since the
-/// picker itself is asynchronous/callback-based. (The event name stays
-/// `import-collection` — it's an internal implementation detail, not shown
-/// to the user; the user-visible label is "Open Collection…" everywhere.)
-///
-/// **Still accepts a `.bkcp` directly for now** (opened in place, exactly
-/// like today) — restricting this picker to `.col` only, now that a real
-/// "Import Collection…" exists to bootstrap one, is step 4 of this plan,
-/// not yet done.
+/// style bundles. No Book Collector version check needed any more — that
+/// only ever applied to a raw `.bkcp`, which this picker can no longer
+/// select at all. There is no native file-picker API to detect an empty
+/// folder and show a conditional hint, so the dialog's own title doubles
+/// as the "message d'aide" Serge asked for when no `.col` exists yet —
+/// shown every time, not just when it's actually empty. The chosen path is
+/// sent to the frontend as an `import-collection` event rather than
+/// returned directly, since the picker itself is asynchronous/callback-
+/// based. (The event name stays `import-collection` — an internal
+/// implementation detail, not shown to the user; the user-visible label is
+/// "Open Collection…".)
 fn open_import_dialog(app: &tauri::AppHandle) {
     let app_handle = app.clone();
     app.dialog()
         .file()
-        .set_title("Open a Book Collector collection (.bkcp)")
-        .add_filter("Collection", &["bkcp", "col"])
+        .set_title(
+            "Open a BookNojo collection (.col) — no .col yet? Use File > Import Collection… first",
+        )
+        .add_filter("BookNojo collection", &["col"])
         .pick_file(move |file| {
             let Some(path) = file else { return };
-            let Some(local_path) = path.as_path() else {
-                let _ = app_handle.emit("import-collection", path.to_string());
-                return;
-            };
-
-            let is_bkcp = local_path
-                .extension()
-                .is_some_and(|ext| ext.eq_ignore_ascii_case("bkcp"));
-
-            if is_bkcp {
-                match bkcp_version(local_path) {
-                    Some(version) if version == SUPPORTED_BKCP_VERSION => {}
-                    Some(version) => {
-                        app_handle
-                            .dialog()
-                            .message(format!(
-                                "Cette collection a été créée avec Book Collector {version}. \
-                                 Seule la version {SUPPORTED_BKCP_VERSION} est prise en charge \
-                                 pour l'import — import annulé."
-                            ))
-                            .title("Version non prise en charge")
-                            .kind(MessageDialogKind::Error)
-                            .show(|_| {});
-                        return;
-                    }
-                    None => {
-                        app_handle
-                            .dialog()
-                            .message(
-                                "Impossible de déterminer la version de Book Collector utilisée \
-                                 pour cette collection — import annulé par précaution.",
-                            )
-                            .title("Version non vérifiable")
-                            .kind(MessageDialogKind::Error)
-                            .show(|_| {});
-                        return;
-                    }
-                }
-            }
-
             let _ = app_handle.emit("import-collection", path.to_string());
         });
 }
