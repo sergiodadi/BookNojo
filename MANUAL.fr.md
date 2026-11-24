@@ -6,17 +6,30 @@ Ce document explique comment utiliser l'application macOS **BookNojo**
 une fois installée. Pour la télécharger, voir [`README.fr.md`](README.fr.md) ;
 pour la compiler depuis les sources, voir [`BUILD.fr.md`](BUILD.fr.md).
 
-## 1. Ouvrir une collection
+## 1. Importer puis ouvrir une collection
 
-- Le bouton **« 📂 Ouvrir une collection… »** dans l'en-tête (identique à
-  **File > Open Collection…**) ouvre le sélecteur de fichier natif
-  macOS pour choisir une collection — un dossier `.bkcp` (Book Collector)
-  ou `.col` (BookNojo). Le choix est mémorisé automatiquement : au lancement
-  suivant, BookNojo rouvre la même collection sans rien demander.
-- Une collection `.bkcp` d'une version de Book Collector différente de
-  celle contre laquelle BookNojo a été construit (20.3.1) est refusée,
-  avec un message clair plutôt qu'un plantage ou une corruption
-  silencieuse.
+BookNojo garde sa propre copie indépendante de votre collection, jamais
+votre base Book Collector d'origine — deux actions distinctes :
+
+- **« File > Import Collection… »** — uniquement dans la barre de menu
+  macOS (une action rare, à faire une seule fois, pas dans l'en-tête de
+  l'app). Choisissez une vraie collection Book Collector `.bkcp` ;
+  BookNojo la copie une seule fois dans une nouvelle base `.col`
+  indépendante, à un emplacement fixe
+  (`~/Documents/BookNojo/<nom>.col`), puis l'ouvre automatiquement. Le
+  `.bkcp` d'origine n'est jamais modifié, seulement lu. Une collection
+  `.bkcp` d'une version de Book Collector différente de celle visée
+  (20.3.1) est refusée, avec un message clair plutôt qu'un plantage.
+  Importer à nouveau vers la même destination est refusé — ça
+  n'écrase jamais un `.col` existant.
+- Bouton **« 📂 Ouvrir une collection… »** dans l'en-tête (identique à
+  **File > Open Collection…**) — l'action du quotidien. Ouvre le
+  sélecteur de fichier natif macOS pour choisir un `.col` déjà
+  importé ; un `.bkcp` brut ne peut plus être sélectionné ici. Le
+  choix est mémorisé automatiquement : au lancement suivant, BookNojo
+  rouvre la même collection sans rien demander. Si aucun `.col`
+  n'existe encore, le titre du sélecteur le signale et renvoie vers
+  **File > Import Collection…**.
 - Au tout premier lancement, avant tout import, BookNojo ouvre une collection
   d'exemple entièrement fictive (10 livres inventés, aucune donnée
   personnelle) — pour qu'il y ait toujours quelque chose à voir, sans
