@@ -1,6 +1,6 @@
 [package]
 name = "book_collector_export"
-version = "0.94.0"
+version = "0.95.0"
 edition = "2021"
 license = "MIT"
 

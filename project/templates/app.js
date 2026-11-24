@@ -13,9 +13,11 @@
 // (never committed, never packaged) but wrong as the app's shipped
 // default, since it meant a freshly installed BookNojo opened real personal
 // data on first launch (found by the user after actually installing the
-// built package, v0.49.0). "File > Open Collection..." picks a real
-// one and overrides it from then on, remembered across relaunches the
-// same way the rest of the UI state already is.
+// built package, v0.49.0). The header's "Open Collection..." button picks
+// a real .col and overrides it from then on, remembered across relaunches
+// the same way the rest of the UI state already is (File > Import
+// Collection... is the way to bootstrap that .col in the first place, from
+// a real Book Collector .bkcp — see app/src-tauri/src/lib.rs).
 const DEV_COLLECTION_PATH = '/Users/serge/Developer/book_collector_export/project/sample-collection/MyCollection.bkcp';
 let currentCollectionPath = DEV_COLLECTION_PATH;
 try {
@@ -215,6 +217,7 @@ const I18N = {
     stats_no_cover: '{n} sans couverture',
     stats_add_cover_hint: 'Cliquer pour ajouter une jaquette',
     cover_set_failed: 'Échec de la mise à jour de la jaquette : {err}',
+    import_collection_success: 'Import terminé : {count} fiche(s) — ouverture de la nouvelle collection BookNojo.',
     stats_no_isbn: '{n} sans ISBN',
     stats_no_author: '{n} sans auteur',
     stats_formats: 'Formats',
@@ -399,6 +402,7 @@ const I18N = {
     stats_no_cover: '{n} with no cover',
     stats_add_cover_hint: 'Click to add a cover',
     cover_set_failed: 'Setting the cover failed: {err}',
+    import_collection_success: 'Import complete: {count} record(s) — opening the new BookNojo collection.',
     stats_no_isbn: '{n} with no ISBN',
     stats_no_author: '{n} with no author',
     stats_formats: 'Formats',
@@ -1246,9 +1250,9 @@ statsBtn.addEventListener('click', () => {
 // only makes sense inside the app.
 if (openCollectionBtn) {
   openCollectionBtn.addEventListener('click', () => {
-    // Fire-and-forget: reuses the exact same native picker + version check
-    // as "File > Open Collection…" — the chosen path arrives later as
-    // the same 'import-collection' event already listened for below.
+    // Fire-and-forget: opens the native picker (now .col-only, see
+    // app/src-tauri's open_import_dialog) — the chosen path arrives later
+    // as the 'import-collection' event already listened for below.
     window.__TAURI__.core.invoke('pick_collection');
   });
 }
@@ -2392,14 +2396,28 @@ function bootWithErrorHandling() {
   });
 }
 
-// "File > Import a file..." (step 4): the native picker runs on the Rust
-// side (app/src-tauri/src/lib.rs) and sends the chosen path as this event,
-// since picking a file is inherently async/callback-based there. Switches
-// the whole page over to the new collection and remembers it for next time.
+// Header's "Open Collection…" (.col only): the native picker runs on the
+// Rust side (app/src-tauri/src/lib.rs) and sends the chosen path as this
+// event, since picking a file is inherently async/callback-based there.
+// Switches the whole page over to the new collection and remembers it for
+// next time.
 if (window.__TAURI__) {
   window.__TAURI__.event.listen('import-collection', (event) => {
     currentCollectionPath = event.payload;
     try { localStorage.setItem('bc_collection_path', currentCollectionPath); } catch (e) { /* ignore */ }
+    bootWithErrorHandling();
+  });
+
+  // "File > Import Collection…" (étape 5 du plan "base persistante
+  // interne"): the Rust side already bootstrapped a brand-new .col on
+  // disk (app/src-tauri's open_import_collection_dialog) before sending
+  // this — unlike 'import-collection' above, this always means a *new*
+  // database was just created, so it's worth a one-off confirmation
+  // (book count) before switching over to it the same way.
+  window.__TAURI__.event.listen('collection-imported', (event) => {
+    currentCollectionPath = event.payload.path;
+    try { localStorage.setItem('bc_collection_path', currentCollectionPath); } catch (e) { /* ignore */ }
+    window.alert(t('import_collection_success', { count: event.payload.book_count }));
     bootWithErrorHandling();
   });
 
