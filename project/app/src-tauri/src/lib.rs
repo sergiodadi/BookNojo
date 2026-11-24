@@ -20,7 +20,7 @@ const SUPPORTED_BKCP_VERSION: &str = "20.3.1";
 /// `.dmg`, not after.
 const DISPLAY_VERSION: &str = "1.0.0b10";
 
-/// Loads a collection (a `.bkcp`/`.col` directory, or its `Book_data` file
+/// Loads a collection (a `.bkcp`/`.bnj` directory, or its `Book_data` file
 /// directly) read-only and returns every book, across all sous-collections,
 /// as the same `PageBook` shape `bc_export`'s static HTML export already
 /// uses — so `templates/app.js` renders it identically either way. Errors
@@ -329,23 +329,22 @@ fn bkcp_version(bkcp_dir: &Path) -> Option<String> {
 }
 
 /// Header button "Open Collection…" — opens the native macOS file picker,
-/// restricted to an already-imported `.col` (étape 4 of this plan: a real
+/// restricted to an already-imported `.bnj` (étape 4 of this plan: a real
 /// Book Collector `.bkcp` is now only ever a one-shot *source* for "File >
 /// Import Collection…", never opened directly here — see
-/// `open_import_collection_dialog`). `.col` is a directory on disk, but
-/// macOS/LaunchServices registers it (via BookNojo's own Info.plist
-/// document-type declaration) as a package — NSOpenPanel treats a
-/// recognized package as a *file*, not a folder, so a folder-only picker
-/// (`canChooseFiles: false`) grays it out entirely. Using `pick_file` with
-/// an extension filter instead lets the package be selected as a single
-/// atomic item, matching how Finder/Open dialogs normally handle package-
-/// style bundles. No Book Collector version check needed any more — that
-/// only ever applied to a raw `.bkcp`, which this picker can no longer
-/// select at all. There is no native file-picker API to detect an empty
-/// folder and show a conditional hint, so the dialog's own title doubles
-/// as the "message d'aide" Serge asked for when no `.col` exists yet —
-/// shown every time, not just when it's actually empty. The chosen path is
-/// sent to the frontend as an `import-collection` event rather than
+/// `open_import_collection_dialog`). `.bnj` is a plain directory on disk,
+/// with no declared macOS document type anywhere in this project (checked:
+/// neither `tauri.conf.json` nor any `Info.plist` registers it) — yet
+/// `pick_file` with an extension filter still lets it be selected as a
+/// single atomic item rather than navigated into, confirmed by real testing
+/// (étape 5). A plain folder-only picker (`canChooseFiles: false`) would
+/// gray it out entirely instead. No Book Collector version check needed any
+/// more — that only ever applied to a raw `.bkcp`, which this picker can no
+/// longer select at all. There is no native file-picker API to detect an
+/// empty folder and show a conditional hint, so the dialog's own title
+/// doubles as the "message d'aide" Serge asked for when no `.bnj` exists
+/// yet — shown every time, not just when it's actually empty. The chosen
+/// path is sent to the frontend as an `import-collection` event rather than
 /// returned directly, since the picker itself is asynchronous/callback-
 /// based. (The event name stays `import-collection` — an internal
 /// implementation detail, not shown to the user; the user-visible label is
@@ -355,9 +354,9 @@ fn open_import_dialog(app: &tauri::AppHandle) {
     app.dialog()
         .file()
         .set_title(
-            "Open a BookNojo collection (.col) — no .col yet? Use File > Import Collection… first",
+            "Open a BookNojo collection (.bnj) — no .bnj yet? Use File > Import Collection… first",
         )
-        .add_filter("BookNojo collection", &["col"])
+        .add_filter("BookNojo collection", &["bnj"])
         .pick_file(move |file| {
             let Some(path) = file else { return };
             let _ = app_handle.emit("import-collection", path.to_string());
@@ -372,7 +371,7 @@ fn pick_collection(app: tauri::AppHandle) {
     open_import_dialog(&app);
 }
 
-/// Payload for the `collection-imported` event — a brand-new `.col` was
+/// Payload for the `collection-imported` event — a brand-new `.bnj` was
 /// just bootstrapped from a `.bkcp` (see `open_import_collection_dialog`).
 /// `book_count` lets the frontend show an import summary without a second
 /// round trip to count anything itself.
@@ -400,11 +399,11 @@ fn show_error_dialog(app: &tauri::AppHandle, title: &str, message: impl Into<Str
 /// a native-menu-only place suits them, per Serge). Distinct from "Open
 /// Collection…" (the header button, `open_import_dialog`): Import only
 /// ever takes a real Book Collector `.bkcp` as source — the picker is
-/// filtered accordingly (no `.col` here; re-importing an already-BookNojo
+/// filtered accordingly (no `.bnj` here; re-importing an already-BookNojo
 /// database makes no sense) — checks its Book Collector version exactly
 /// like the combined picker used to, then bootstraps a brand-new,
-/// independent `.col` at the fixed location `default_col_destination`
-/// computes (`~/Documents/BookNojo/<name>.col`, étape 2 of this plan) via
+/// independent `.bnj` at the fixed location `default_bnj_destination`
+/// computes (`~/Documents/BookNojo/<name>.bnj`, étape 2 of this plan) via
 /// the shared `import_collection_to` (étape 1). The source `.bkcp` is only
 /// ever read — this is a one-shot copy, never a live link (see
 /// `import_collection_to`'s own doc comment).
@@ -449,7 +448,7 @@ fn open_import_collection_dialog(app: &tauri::AppHandle) {
                 }
             }
 
-            let dest = match book_collector_export::default_col_destination(source) {
+            let dest = match book_collector_export::default_bnj_destination(source) {
                 Ok(dest) => dest,
                 Err(e) => {
                     show_error_dialog(&app_handle, "Import impossible", format!("{e:#}"));
@@ -600,7 +599,7 @@ pub fn run() {
 mod tests {
     use super::*;
 
-    /// `default_col_destination` reads the global `HOME` env var — any test
+    /// `default_bnj_destination` reads the global `HOME` env var — any test
     /// mutating it must serialize against every other test doing the same,
     /// in this crate's own test binary (the shared crate's `src/lib.rs` has
     /// its own separate lock for its own test binary; a race here was
@@ -626,13 +625,13 @@ mod tests {
     /// Replays, outside of any dialog callback, exactly the sequence "File >
     /// Import Collection…" runs once a `.bkcp` has been picked
     /// (`open_import_collection_dialog`'s body): version check, then
-    /// `default_col_destination`, then `import_collection_to`. The dialog
+    /// `default_bnj_destination`, then `import_collection_to`. The dialog
     /// itself (native file picker) can't be driven from a test — this is
     /// the first point since étape 1-5 where that whole chain is exercised
     /// together in one test, against the real shared `testdata/` fixture
     /// rather than each function in isolation.
     #[test]
-    fn the_full_import_chain_bootstraps_a_col_at_the_fixed_destination_from_a_supported_bkcp() {
+    fn the_full_import_chain_bootstraps_a_bnj_at_the_fixed_destination_from_a_supported_bkcp() {
         let _guard = HOME_ENV_LOCK.lock().unwrap();
         let source = testdata_bkcp();
         let fake_home = std::env::temp_dir().join("booknojo_full_import_chain_test_home");
@@ -644,8 +643,8 @@ mod tests {
         let version = bkcp_version(&source);
         assert_eq!(version, Some(SUPPORTED_BKCP_VERSION.to_string()), "fixture must still match the supported version");
 
-        let dest = book_collector_export::default_col_destination(&source).expect("dest computation must succeed");
-        assert_eq!(dest, fake_home.join("Documents/BookNojo/MyCollection.col"));
+        let dest = book_collector_export::default_bnj_destination(&source).expect("dest computation must succeed");
+        assert_eq!(dest, fake_home.join("Documents/BookNojo/MyCollection.bnj"));
 
         let outcome = book_collector_export::import_collection_to(&source, &dest).expect("import must succeed");
         assert_eq!(outcome.book_count, 2237);

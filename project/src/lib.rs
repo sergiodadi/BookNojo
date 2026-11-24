@@ -195,7 +195,7 @@ impl<T> OptionalResult<T> for rusqlite::Result<T> {
     }
 }
 
-// ------------------------------------------------- Import (bootstrap a .col)
+// ------------------------------------------------- Import (bootstrap a .bnj)
 
 /// Result of a successful [`import_collection_to`] call.
 #[derive(Debug)]
@@ -204,14 +204,16 @@ pub struct ImportOutcome {
     pub book_count: i64,
 }
 
-/// Computes the fixed destination for a new `.col` database bootstrapped
+/// Computes the fixed destination for a new `.bnj` database bootstrapped
 /// from `source` via [`import_collection_to`]: always
-/// `~/Documents/BookNojo/<source file stem>.col` — a fixed, automatic
+/// `~/Documents/BookNojo/<source file stem>.bnj` — a fixed, automatic
 /// location (no "Save As" dialog) is Serge's deliberate choice for
 /// BookNojo's "Import Collection…" menu. Pure path computation: it does not
 /// create any directory or touch the filesystem itself —
 /// `import_collection_to` creates `dest`'s parent directory when it runs.
-pub fn default_col_destination(source: &Path) -> Result<PathBuf> {
+/// (`.bnj` — chosen 24/11/2026, replacing an initial `.col` pick that didn't
+/// account for MusicNojo/VideoNojo needing their own distinct extensions.)
+pub fn default_bnj_destination(source: &Path) -> Result<PathBuf> {
     let home = std::env::var("HOME").context(
         "variable d'environnement HOME introuvable — impossible de déterminer ~/Documents/BookNojo",
     )?;
@@ -222,11 +224,11 @@ pub fn default_col_destination(source: &Path) -> Result<PathBuf> {
     Ok(PathBuf::from(home)
         .join("Documents")
         .join("BookNojo")
-        .join(format!("{name}.col")))
+        .join(format!("{name}.bnj")))
 }
 
 /// Bootstraps a brand-new, independent collection at `dest` by copying the
-/// whole document package found at `source` (a `.bkcp`/`.col` path, or a
+/// whole document package found at `source` (a `.bkcp`/`.bnj` path, or a
 /// directory already containing `Book_data`). Meant to run **once** per new
 /// database: refuses outright if `dest` already exists, rather than ever
 /// overwriting one. `source` itself is only ever read, never modified —
@@ -241,7 +243,7 @@ pub fn import_collection_to(source: &Path, dest: &Path) -> Result<ImportOutcome>
     let source_db = resolve_db_path(source)?;
     let source_pkg = source_db
         .parent()
-        .context("dossier source introuvable (attendu : un .bkcp/.col contenant Book_data)")?;
+        .context("dossier source introuvable (attendu : un .bkcp/.bnj contenant Book_data)")?;
 
     if dest.exists() {
         bail!(
@@ -2892,7 +2894,7 @@ mod tests {
     use super::*;
 
     // `HOME` is process-global; tests run on separate threads by default,
-    // so any test that mutates it (expand_tilde's, default_col_destination's)
+    // so any test that mutates it (expand_tilde's, default_bnj_destination's)
     // must hold this lock for its whole duration or they can race and read
     // back each other's value mid-test (seen for real: a bare run of this
     // file flaked on exactly that race before this lock was added).
@@ -2924,24 +2926,24 @@ mod tests {
     }
 
     #[test]
-    fn default_col_destination_uses_the_fixed_documents_booknojo_folder() {
+    fn default_bnj_destination_uses_the_fixed_documents_booknojo_folder() {
         let _guard = HOME_ENV_LOCK.lock().unwrap();
         let original_home = std::env::var("HOME").ok();
         std::env::set_var("HOME", "/tmp/bc_export_test_home");
 
         assert_eq!(
-            default_col_destination(Path::new(
+            default_bnj_destination(Path::new(
                 "/Users/x/Documents/Collectorz/Book Collector/MyCollection.bkcp"
             ))
             .unwrap(),
-            PathBuf::from("/tmp/bc_export_test_home/Documents/BookNojo/MyCollection.col")
+            PathBuf::from("/tmp/bc_export_test_home/Documents/BookNojo/MyCollection.bnj")
         );
-        // Re-importing an already-BookNojo .col (e.g. a different
+        // Re-importing an already-BookNojo .bnj (e.g. a different
         // location's copy) resolves the same way — the destination only
         // depends on the source's file stem, not its extension.
         assert_eq!(
-            default_col_destination(Path::new("/Volumes/USB/Already.col")).unwrap(),
-            PathBuf::from("/tmp/bc_export_test_home/Documents/BookNojo/Already.col")
+            default_bnj_destination(Path::new("/Volumes/USB/Already.bnj")).unwrap(),
+            PathBuf::from("/tmp/bc_export_test_home/Documents/BookNojo/Already.bnj")
         );
 
         match original_home {
@@ -2951,12 +2953,12 @@ mod tests {
     }
 
     #[test]
-    fn default_col_destination_fails_clearly_without_home() {
+    fn default_bnj_destination_fails_clearly_without_home() {
         let _guard = HOME_ENV_LOCK.lock().unwrap();
         let original_home = std::env::var("HOME").ok();
         std::env::remove_var("HOME");
 
-        let err = default_col_destination(Path::new("MyCollection.bkcp")).unwrap_err();
+        let err = default_bnj_destination(Path::new("MyCollection.bkcp")).unwrap_err();
         assert!(err.to_string().contains("HOME"));
 
         if let Some(home) = original_home {

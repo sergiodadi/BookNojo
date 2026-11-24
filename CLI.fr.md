@@ -35,12 +35,12 @@ depuis les sources — voir [`BUILD.fr.md`](BUILD.fr.md)).
   --json book_collection.json
 ```
 
-`--db` accepte soit le dossier `.bkcp`/`.col`, soit directement le fichier
+`--db` accepte soit le dossier `.bkcp`/`.bnj`, soit directement le fichier
 `Book_data` qu'il contient.
 
 ### Sous-collections
 
-Un fichier `.bkcp`/`.col` peut contenir **plusieurs sous-collections**.
+Un fichier `.bkcp`/`.bnj` peut contenir **plusieurs sous-collections**.
 
 ```bash
 # Lister les sous-collections et leurs compteurs
@@ -322,24 +322,26 @@ alimentée uniquement par BookNojo, sans jamais dépendre de Book Collector
 pour continuer à grandir. `--also-db` sert la période de transition :
 continuer à alimenter la vraie application tant qu'elle tourne encore, en
 parallèle de la nouvelle base. L'extension retenue pour cette base
-persistante est **`.col`** — elle fonctionne exactement comme un `.bkcp`
+persistante est **`.bnj`** (renommée depuis un premier choix `.col` le
+24/11/2026, pour laisser `.mnj`/`.vnj` libres pour les bases propres de
+MusicNojo/VideoNojo) — elle fonctionne exactement comme un `.bkcp`
 (seule la présence d'un fichier `Book_data` à l'intérieur compte, jamais
 le nom du dossier).
 
 ### `bc_add import` — le transfert BC vers BookNojo
 
-Amorce une nouvelle base `.col` indépendante à partir d'une collection
+Amorce une nouvelle base `.bnj` indépendante à partir d'une collection
 existante (base + dossier `Images/`). Ne sert qu'**une seule fois** :
 refuse d'écraser une destination qui existe déjà.
 
 ```bash
 ./bc_add import --source "~/Documents/Collectorz/Book Collector/MyCollection.bkcp"
-# -> collection/MyCollection.col (destination par défaut)
+# -> collection/MyCollection.bnj (destination par défaut)
 
 # Ou avec une destination explicite :
 ./bc_add import \
   --source "~/Documents/Collectorz/Book Collector/MyCollection.bkcp" \
-  --dest ~/MaCollectionBookNojo.col
+  --dest ~/MaCollectionBookNojo.bnj
 ```
 
 ### Langue des messages (`--lang`)

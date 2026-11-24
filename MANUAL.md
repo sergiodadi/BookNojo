@@ -14,19 +14,19 @@ original Book Collector database — two separate actions:
 - **"File > Import Collection…"** — in the macOS menu bar only (this is
   a rare, one-time action, not in the app's own header). Choose a real
   Book Collector `.bkcp` collection; BookNojo copies it once into a
-  brand-new, independent `.col` database at a fixed location
-  (`~/Documents/BookNojo/<name>.col`), then opens it automatically. The
+  brand-new, independent `.bnj` database at a fixed location
+  (`~/Documents/BookNojo/<name>.bnj`), then opens it automatically. The
   original `.bkcp` is only ever read, never modified. A `.bkcp` from a
   Book Collector version other than the one BookNojo was built against
   (20.3.1) is rejected, with a clear message rather than a crash or
   silent corruption. Importing again into the same destination is
-  refused — it never overwrites an existing `.col`.
+  refused — it never overwrites an existing `.bnj`.
 - **"📂 Open Collection…"** button in the header (same as **File >
   Open Collection…**) — the everyday action. Opens the native macOS
-  file picker to choose an already-imported `.col`; a raw `.bkcp` can
+  file picker to choose an already-imported `.bnj`; a raw `.bkcp` can
   no longer be selected here. The choice is remembered automatically:
   on the next launch, BookNojo reopens the same collection without
-  asking anything. If no `.col` exists yet, the picker's own title
+  asking anything. If no `.bnj` exists yet, the picker's own title
   says so and points to **File > Import Collection…** first.
 - On the very first launch, before any import, BookNojo opens an
   entirely fictional sample collection (10 invented books, no personal

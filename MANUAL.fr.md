@@ -14,20 +14,20 @@ votre base Book Collector d'origine — deux actions distinctes :
 - **« File > Import Collection… »** — uniquement dans la barre de menu
   macOS (une action rare, à faire une seule fois, pas dans l'en-tête de
   l'app). Choisissez une vraie collection Book Collector `.bkcp` ;
-  BookNojo la copie une seule fois dans une nouvelle base `.col`
+  BookNojo la copie une seule fois dans une nouvelle base `.bnj`
   indépendante, à un emplacement fixe
-  (`~/Documents/BookNojo/<nom>.col`), puis l'ouvre automatiquement. Le
+  (`~/Documents/BookNojo/<nom>.bnj`), puis l'ouvre automatiquement. Le
   `.bkcp` d'origine n'est jamais modifié, seulement lu. Une collection
   `.bkcp` d'une version de Book Collector différente de celle visée
   (20.3.1) est refusée, avec un message clair plutôt qu'un plantage.
   Importer à nouveau vers la même destination est refusé — ça
-  n'écrase jamais un `.col` existant.
+  n'écrase jamais un `.bnj` existant.
 - Bouton **« 📂 Ouvrir une collection… »** dans l'en-tête (identique à
   **File > Open Collection…**) — l'action du quotidien. Ouvre le
-  sélecteur de fichier natif macOS pour choisir un `.col` déjà
+  sélecteur de fichier natif macOS pour choisir un `.bnj` déjà
   importé ; un `.bkcp` brut ne peut plus être sélectionné ici. Le
   choix est mémorisé automatiquement : au lancement suivant, BookNojo
-  rouvre la même collection sans rien demander. Si aucun `.col`
+  rouvre la même collection sans rien demander. Si aucun `.bnj`
   n'existe encore, le titre du sélecteur le signale et renvoie vers
   **File > Import Collection…**.
 - Au tout premier lancement, avant tout import, BookNojo ouvre une collection

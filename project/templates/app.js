@@ -14,9 +14,9 @@
 // default, since it meant a freshly installed BookNojo opened real personal
 // data on first launch (found by the user after actually installing the
 // built package, v0.49.0). The header's "Open Collection..." button picks
-// a real .col and overrides it from then on, remembered across relaunches
+// a real .bnj and overrides it from then on, remembered across relaunches
 // the same way the rest of the UI state already is (File > Import
-// Collection... is the way to bootstrap that .col in the first place, from
+// Collection... is the way to bootstrap that .bnj in the first place, from
 // a real Book Collector .bkcp — see app/src-tauri/src/lib.rs).
 const DEV_COLLECTION_PATH = '/Users/serge/Developer/book_collector_export/project/sample-collection/MyCollection.bkcp';
 let currentCollectionPath = DEV_COLLECTION_PATH;
@@ -1250,7 +1250,7 @@ statsBtn.addEventListener('click', () => {
 // only makes sense inside the app.
 if (openCollectionBtn) {
   openCollectionBtn.addEventListener('click', () => {
-    // Fire-and-forget: opens the native picker (now .col-only, see
+    // Fire-and-forget: opens the native picker (now .bnj-only, see
     // app/src-tauri's open_import_dialog) — the chosen path arrives later
     // as the 'import-collection' event already listened for below.
     window.__TAURI__.core.invoke('pick_collection');
@@ -2396,7 +2396,7 @@ function bootWithErrorHandling() {
   });
 }
 
-// Header's "Open Collection…" (.col only): the native picker runs on the
+// Header's "Open Collection…" (.bnj only): the native picker runs on the
 // Rust side (app/src-tauri/src/lib.rs) and sends the chosen path as this
 // event, since picking a file is inherently async/callback-based there.
 // Switches the whole page over to the new collection and remembers it for
@@ -2409,7 +2409,7 @@ if (window.__TAURI__) {
   });
 
   // "File > Import Collection…" (étape 5 du plan "base persistante
-  // interne"): the Rust side already bootstrapped a brand-new .col on
+  // interne"): the Rust side already bootstrapped a brand-new .bnj on
   // disk (app/src-tauri's open_import_collection_dialog) before sending
   // this — unlike 'import-collection' above, this always means a *new*
   // database was just created, so it's worth a one-off confirmation

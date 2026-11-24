@@ -244,12 +244,12 @@ enum Command {
     /// jamais écrasée si la destination existe déjà : ne sert qu'une fois,
     /// pour amorcer une base qui vivra ensuite sa propre vie.
     Import {
-        /// Chemin vers la collection source (dossier .bkcp/.col, ou
+        /// Chemin vers la collection source (dossier .bkcp/.bnj, ou
         /// directement son fichier Book_data).
         #[arg(long)]
         source: PathBuf,
-        /// Dossier de destination (nouvelle extension .col). Par défaut :
-        /// "collection/<nom de la source>.col" dans le répertoire courant.
+        /// Dossier de destination (nouvelle extension .bnj). Par défaut :
+        /// "collection/<nom de la source>.bnj" dans le répertoire courant.
         #[arg(long)]
         dest: Option<PathBuf>,
     },
@@ -787,14 +787,16 @@ fn cmd_add(
 // --------------------------------------------------------------- Import
 
 /// Default destination when `--dest` is omitted: `collection/<source
-/// basename>.col` in the current directory — `.col` is the chosen
-/// extension for the new, independent "BookNojo" database going forward.
+/// basename>.bnj` in the current directory — `.bnj` is the chosen
+/// extension for the new, independent "BookNojo" database going forward
+/// (renamed from an initial `.col` pick on 24/11/2026, to free up that
+/// letter pattern for MusicNojo/VideoNojo's own `.mnj`/`.vnj`).
 fn default_import_dest(source: &std::path::Path) -> PathBuf {
     let name = source
         .file_stem()
         .map(|s| s.to_string_lossy().into_owned())
         .unwrap_or_else(|| "MyCollection".to_string());
-    PathBuf::from("collection").join(format!("{name}.col"))
+    PathBuf::from("collection").join(format!("{name}.bnj"))
 }
 
 fn cmd_import(source: PathBuf, dest: Option<PathBuf>, lang: Lang) -> Result<()> {
@@ -873,14 +875,14 @@ mod tests {
     use std::path::Path;
 
     #[test]
-    fn default_import_dest_uses_the_col_extension_under_collection() {
+    fn default_import_dest_uses_the_bnj_extension_under_collection() {
         assert_eq!(
             default_import_dest(Path::new("/Users/x/Documents/Collectorz/Book Collector/MyCollection.bkcp")),
-            PathBuf::from("collection/MyCollection.col")
+            PathBuf::from("collection/MyCollection.bnj")
         );
         assert_eq!(
-            default_import_dest(Path::new("Already.col")),
-            PathBuf::from("collection/Already.col")
+            default_import_dest(Path::new("Already.bnj")),
+            PathBuf::from("collection/Already.bnj")
         );
     }
 

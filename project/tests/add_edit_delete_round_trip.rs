@@ -357,7 +357,7 @@ fn temp_root(test_name: &str) -> PathBuf {
 fn import_collection_to_copies_the_whole_package_and_counts_books() {
     let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("testdata/MyCollection.bkcp");
     let root = temp_root("import_collection_to_copy");
-    let dest = root.join("Imported.col");
+    let dest = root.join("Imported.bnj");
 
     let outcome = import_collection_to(&source, &dest).expect("import_collection_to");
 
@@ -381,7 +381,7 @@ fn import_collection_to_copies_the_whole_package_and_counts_books() {
 fn import_collection_to_refuses_to_overwrite_an_existing_destination() {
     let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("testdata/MyCollection.bkcp");
     let root = temp_root("import_collection_to_no_overwrite");
-    let dest = root.join("AlreadyThere.col");
+    let dest = root.join("AlreadyThere.bnj");
     std::fs::create_dir_all(&dest).expect("pre-create destination");
 
     let err = import_collection_to(&source, &dest).expect_err("should refuse an existing destination");
