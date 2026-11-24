@@ -600,6 +600,65 @@ pub fn run() {
 mod tests {
     use super::*;
 
+    /// `default_col_destination` reads the global `HOME` env var — any test
+    /// mutating it must serialize against every other test doing the same,
+    /// in this crate's own test binary (the shared crate's `src/lib.rs` has
+    /// its own separate lock for its own test binary; a race here was
+    /// already caught and fixed there once, see that file's `HOME_ENV_LOCK`).
+    static HOME_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn testdata_bkcp() -> std::path::PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/MyCollection.bkcp")
+    }
+
+    #[test]
+    fn bkcp_version_reads_the_supported_version_from_the_real_fixture() {
+        assert_eq!(bkcp_version(&testdata_bkcp()), Some(SUPPORTED_BKCP_VERSION.to_string()));
+    }
+
+    #[test]
+    fn bkcp_version_returns_none_when_the_plist_is_missing() {
+        let dir = std::env::temp_dir().join("booknojo_bkcp_version_test_no_plist");
+        let _ = std::fs::create_dir_all(&dir);
+        assert_eq!(bkcp_version(&dir), None);
+    }
+
+    /// Replays, outside of any dialog callback, exactly the sequence "File >
+    /// Import Collection…" runs once a `.bkcp` has been picked
+    /// (`open_import_collection_dialog`'s body): version check, then
+    /// `default_col_destination`, then `import_collection_to`. The dialog
+    /// itself (native file picker) can't be driven from a test — this is
+    /// the first point since étape 1-5 where that whole chain is exercised
+    /// together in one test, against the real shared `testdata/` fixture
+    /// rather than each function in isolation.
+    #[test]
+    fn the_full_import_chain_bootstraps_a_col_at_the_fixed_destination_from_a_supported_bkcp() {
+        let _guard = HOME_ENV_LOCK.lock().unwrap();
+        let source = testdata_bkcp();
+        let fake_home = std::env::temp_dir().join("booknojo_full_import_chain_test_home");
+        let _ = std::fs::remove_dir_all(&fake_home);
+        std::fs::create_dir_all(&fake_home).unwrap();
+        let previous_home = std::env::var("HOME").ok();
+        unsafe { std::env::set_var("HOME", &fake_home) };
+
+        let version = bkcp_version(&source);
+        assert_eq!(version, Some(SUPPORTED_BKCP_VERSION.to_string()), "fixture must still match the supported version");
+
+        let dest = book_collector_export::default_col_destination(&source).expect("dest computation must succeed");
+        assert_eq!(dest, fake_home.join("Documents/BookNojo/MyCollection.col"));
+
+        let outcome = book_collector_export::import_collection_to(&source, &dest).expect("import must succeed");
+        assert_eq!(outcome.book_count, 2237);
+        assert!(dest.join("Book_data").is_file());
+        assert!(dest.join("Images").is_dir());
+
+        match previous_home {
+            Some(home) => unsafe { std::env::set_var("HOME", home) },
+            None => unsafe { std::env::remove_var("HOME") },
+        }
+        let _ = std::fs::remove_dir_all(&fake_home);
+    }
+
     #[test]
     fn grant_asset_scope_for_collection_allows_only_the_opened_collections_own_folder() {
         let app = tauri::test::mock_app();
