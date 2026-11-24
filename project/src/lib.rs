@@ -204,6 +204,27 @@ pub struct ImportOutcome {
     pub book_count: i64,
 }
 
+/// Computes the fixed destination for a new `.col` database bootstrapped
+/// from `source` via [`import_collection_to`]: always
+/// `~/Documents/BookNojo/<source file stem>.col` — a fixed, automatic
+/// location (no "Save As" dialog) is Serge's deliberate choice for
+/// BookNojo's "Import Collection…" menu. Pure path computation: it does not
+/// create any directory or touch the filesystem itself —
+/// `import_collection_to` creates `dest`'s parent directory when it runs.
+pub fn default_col_destination(source: &Path) -> Result<PathBuf> {
+    let home = std::env::var("HOME").context(
+        "variable d'environnement HOME introuvable — impossible de déterminer ~/Documents/BookNojo",
+    )?;
+    let name = source
+        .file_stem()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "MyCollection".to_string());
+    Ok(PathBuf::from(home)
+        .join("Documents")
+        .join("BookNojo")
+        .join(format!("{name}.col")))
+}
+
 /// Bootstraps a brand-new, independent collection at `dest` by copying the
 /// whole document package found at `source` (a `.bkcp`/`.col` path, or a
 /// directory already containing `Book_data`). Meant to run **once** per new
@@ -2870,8 +2891,16 @@ pub fn commit_update_book(db_path: &Path, backup_dir: &Path, book_pk: i64, input
 mod tests {
     use super::*;
 
+    // `HOME` is process-global; tests run on separate threads by default,
+    // so any test that mutates it (expand_tilde's, default_col_destination's)
+    // must hold this lock for its whole duration or they can race and read
+    // back each other's value mid-test (seen for real: a bare run of this
+    // file flaked on exactly that race before this lock was added).
+    static HOME_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn expand_tilde_rewrites_home_relative_paths_only() {
+        let _guard = HOME_ENV_LOCK.lock().unwrap();
         let original_home = std::env::var("HOME").ok();
         std::env::set_var("HOME", "/tmp/bc_export_test_home");
 
@@ -2891,6 +2920,47 @@ mod tests {
         match original_home {
             Some(home) => std::env::set_var("HOME", home),
             None => std::env::remove_var("HOME"),
+        }
+    }
+
+    #[test]
+    fn default_col_destination_uses_the_fixed_documents_booknojo_folder() {
+        let _guard = HOME_ENV_LOCK.lock().unwrap();
+        let original_home = std::env::var("HOME").ok();
+        std::env::set_var("HOME", "/tmp/bc_export_test_home");
+
+        assert_eq!(
+            default_col_destination(Path::new(
+                "/Users/x/Documents/Collectorz/Book Collector/MyCollection.bkcp"
+            ))
+            .unwrap(),
+            PathBuf::from("/tmp/bc_export_test_home/Documents/BookNojo/MyCollection.col")
+        );
+        // Re-importing an already-BookNojo .col (e.g. a different
+        // location's copy) resolves the same way — the destination only
+        // depends on the source's file stem, not its extension.
+        assert_eq!(
+            default_col_destination(Path::new("/Volumes/USB/Already.col")).unwrap(),
+            PathBuf::from("/tmp/bc_export_test_home/Documents/BookNojo/Already.col")
+        );
+
+        match original_home {
+            Some(home) => std::env::set_var("HOME", home),
+            None => std::env::remove_var("HOME"),
+        }
+    }
+
+    #[test]
+    fn default_col_destination_fails_clearly_without_home() {
+        let _guard = HOME_ENV_LOCK.lock().unwrap();
+        let original_home = std::env::var("HOME").ok();
+        std::env::remove_var("HOME");
+
+        let err = default_col_destination(Path::new("MyCollection.bkcp")).unwrap_err();
+        assert!(err.to_string().contains("HOME"));
+
+        if let Some(home) = original_home {
+            std::env::set_var("HOME", home);
         }
     }
 
