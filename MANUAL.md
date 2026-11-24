@@ -128,8 +128,6 @@ original Book Collector database — two separate actions:
 
 ## 6. What the application doesn't do yet
 
-- **Online lookup** to pre-fill a record from an ISBN (OpenLibrary/
-  Google Books/BnF) — deferred, not started.
 - Not yet code-signed/notarized with an Apple developer account — no
   consequence for personal use, but needed before distributing the
   application to anyone else.

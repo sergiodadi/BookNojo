@@ -140,8 +140,6 @@ votre base Book Collector d'origine — deux actions distinctes :
 
 ## 6. Ce que l'application ne fait pas encore
 
-- **Recherche en ligne** pour pré-remplir une fiche à partir d'un ISBN
-  (OpenLibrary/Google Books/BnF) — repoussé, pas commencé.
 - Pas encore signée/notariée par un compte développeur Apple — sans
   conséquence pour un usage personnel, mais à faire avant de distribuer
   l'application à quelqu'un d'autre.
