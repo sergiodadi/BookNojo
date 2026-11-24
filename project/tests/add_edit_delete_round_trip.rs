@@ -345,3 +345,50 @@ fn online_search_result_can_be_added_with_its_cover_through_the_real_pipeline() 
 
     cleanup(&db_path);
 }
+
+fn temp_root(test_name: &str) -> PathBuf {
+    let nanos = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
+    let dir = std::env::temp_dir().join(format!("bc_export_it_{test_name}_{}_{nanos}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("create temp root dir");
+    dir
+}
+
+#[test]
+fn import_collection_to_copies_the_whole_package_and_counts_books() {
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("testdata/MyCollection.bkcp");
+    let root = temp_root("import_collection_to_copy");
+    let dest = root.join("Imported.col");
+
+    let outcome = import_collection_to(&source, &dest).expect("import_collection_to");
+
+    assert_eq!(outcome.dest, dest);
+    assert_eq!(outcome.book_count, 2237);
+    assert!(dest.join("Book_data").is_file(), "Book_data should have been copied");
+    assert!(dest.join("Images").is_dir(), "Images/ should have been copied");
+
+    // The source package is read-only (chmod 444) in this repo; a real
+    // write attempt against it would already fail loudly on its own, but
+    // this double-checks import_collection_to never even tries to.
+    assert!(
+        std::fs::metadata(source.join("Book_data")).unwrap().permissions().readonly(),
+        "source fixture should remain untouched/read-only"
+    );
+
+    let _ = std::fs::remove_dir_all(&root);
+}
+
+#[test]
+fn import_collection_to_refuses_to_overwrite_an_existing_destination() {
+    let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("testdata/MyCollection.bkcp");
+    let root = temp_root("import_collection_to_no_overwrite");
+    let dest = root.join("AlreadyThere.col");
+    std::fs::create_dir_all(&dest).expect("pre-create destination");
+
+    let err = import_collection_to(&source, &dest).expect_err("should refuse an existing destination");
+    assert!(
+        err.to_string().contains("existe déjà"),
+        "unexpected error message: {err}"
+    );
+
+    let _ = std::fs::remove_dir_all(&root);
+}

@@ -195,6 +195,72 @@ impl<T> OptionalResult<T> for rusqlite::Result<T> {
     }
 }
 
+// ------------------------------------------------- Import (bootstrap a .col)
+
+/// Result of a successful [`import_collection_to`] call.
+#[derive(Debug)]
+pub struct ImportOutcome {
+    pub dest: PathBuf,
+    pub book_count: i64,
+}
+
+/// Bootstraps a brand-new, independent collection at `dest` by copying the
+/// whole document package found at `source` (a `.bkcp`/`.col` path, or a
+/// directory already containing `Book_data`). Meant to run **once** per new
+/// database: refuses outright if `dest` already exists, rather than ever
+/// overwriting one. `source` itself is only ever read, never modified —
+/// this is a plain recursive copy (`cp -R`), not a live link.
+///
+/// Shared by `bc_add import` (the CLI, which pre-checks `dest.exists()`
+/// itself first, to show its own bilingual message) and BookNojo's
+/// "File > Import Collection…" menu (which has no CLI-style bilingual
+/// message of its own to preserve, and relies on this function's own
+/// checks).
+pub fn import_collection_to(source: &Path, dest: &Path) -> Result<ImportOutcome> {
+    let source_db = resolve_db_path(source)?;
+    let source_pkg = source_db
+        .parent()
+        .context("dossier source introuvable (attendu : un .bkcp/.col contenant Book_data)")?;
+
+    if dest.exists() {
+        bail!(
+            "{} existe déjà — l'import ne sert qu'à amorcer une nouvelle base, une seule \
+             fois, pour ne jamais en écraser une existante.",
+            dest.display()
+        );
+    }
+    if let Some(parent) = dest.parent() {
+        std::fs::create_dir_all(parent).with_context(|| format!("création de {}", parent.display()))?;
+    }
+
+    let status = std::process::Command::new("cp")
+        .args(["-R", &source_pkg.to_string_lossy(), &dest.to_string_lossy()])
+        .status()
+        .context("exécution de cp -R")?;
+    if !status.success() {
+        bail!("échec de la copie (cp -R)");
+    }
+    std::process::Command::new("chmod")
+        .args(["-R", "u+w", &dest.to_string_lossy()])
+        .status()
+        .context("exécution de chmod -R u+w")?;
+
+    let dest_book_data = dest.join("Book_data");
+    let conn = Connection::open_with_flags(&dest_book_data, OpenFlags::SQLITE_OPEN_READ_ONLY)
+        .with_context(|| format!("ouverture de {}", dest_book_data.display()))?;
+    let book_ent = entity_ent_id(&conn, "Book")?;
+    let book_count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM ZCOLLECTIBLE WHERE Z_ENT = ?1",
+        [book_ent],
+        |row| row.get(0),
+    )?;
+
+    Ok(ImportOutcome {
+        dest: dest.to_path_buf(),
+        book_count,
+    })
+}
+
 // --------------------------------------------------------------------
 // Reading the collection (step 3 of the BookNojo app plan — shared between
 // `bc_export`'s CSV/JSON/HTML export and the BookNojo app's live Tauri command,

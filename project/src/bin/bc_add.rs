@@ -54,10 +54,10 @@
 
 use anyhow::{bail, Context, Result};
 use book_collector_export::{
-    backup_sqlite_store, entity_ent_id, is_book_collector_running, looks_like_real_collection,
-    plan_book_sql, plan_delete_book_sql, plan_update_book_sql, resolve_book, resolve_db_path,
-    resolved_book_summary, set_cover, strip_plan_wrapper, write_plan_sql, NewBookInput,
-    ResolvedBook, ResolvedLookup,
+    backup_sqlite_store, import_collection_to, is_book_collector_running,
+    looks_like_real_collection, plan_book_sql, plan_delete_book_sql, plan_update_book_sql,
+    resolve_book, resolve_db_path, resolved_book_summary, set_cover, strip_plan_wrapper,
+    write_plan_sql, NewBookInput, ResolvedBook, ResolvedLookup,
 };
 use clap::{Parser, Subcommand};
 use rusqlite::{Connection, OpenFlags};
@@ -798,12 +798,11 @@ fn default_import_dest(source: &std::path::Path) -> PathBuf {
 }
 
 fn cmd_import(source: PathBuf, dest: Option<PathBuf>, lang: Lang) -> Result<()> {
-    let source_db = resolve_db_path(&source)?;
-    let source_pkg = source_db
-        .parent()
-        .context("dossier source introuvable (attendu : un .bkcp/.col contenant Book_data)")?;
-
     let dest = dest.unwrap_or_else(|| default_import_dest(&source));
+    // Pre-checked here (not just inside import_collection_to) so this CLI
+    // keeps its own bilingual message with the --dest hint — the shared
+    // function's own check is a plain French safety net for callers (like
+    // BookNojo's GUI) that have no such message to preserve.
     if dest.exists() {
         bail!(match lang {
             Lang::Fr => format!(
@@ -820,38 +819,13 @@ fn cmd_import(source: PathBuf, dest: Option<PathBuf>, lang: Lang) -> Result<()> 
             ),
         });
     }
-    if let Some(parent) = dest.parent() {
-        std::fs::create_dir_all(parent).with_context(|| format!("création de {}", parent.display()))?;
-    }
 
     match lang {
-        Lang::Fr => println!("Import de {} vers {}...", source_pkg.display(), dest.display()),
-        Lang::En => println!("Importing {} to {}...", source_pkg.display(), dest.display()),
+        Lang::Fr => println!("Import de {} vers {}...", source.display(), dest.display()),
+        Lang::En => println!("Importing {} to {}...", source.display(), dest.display()),
     }
-    let status = std::process::Command::new("cp")
-        .args(["-R", &source_pkg.to_string_lossy(), &dest.to_string_lossy()])
-        .status()
-        .context("exécution de cp -R")?;
-    if !status.success() {
-        bail!(match lang {
-            Lang::Fr => "échec de la copie (cp -R)".to_string(),
-            Lang::En => "copy failed (cp -R)".to_string(),
-        });
-    }
-    std::process::Command::new("chmod")
-        .args(["-R", "u+w", &dest.to_string_lossy()])
-        .status()
-        .context("exécution de chmod -R u+w")?;
-
-    let dest_book_data = dest.join("Book_data");
-    let conn = Connection::open_with_flags(&dest_book_data, OpenFlags::SQLITE_OPEN_READ_ONLY)
-        .with_context(|| format!("ouverture de {}", dest_book_data.display()))?;
-    let book_ent = entity_ent_id(&conn, "Book")?;
-    let book_count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM ZCOLLECTIBLE WHERE Z_ENT = ?1",
-        [book_ent],
-        |row| row.get(0),
-    )?;
+    let outcome = import_collection_to(&source, &dest)?;
+    let book_count = outcome.book_count;
 
     println!();
     match lang {
