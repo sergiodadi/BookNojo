@@ -248,7 +248,10 @@ pub fn import_collection_to(source: &Path, dest: &Path) -> Result<ImportOutcome>
     if dest.exists() {
         bail!(
             "{} existe déjà — l'import ne sert qu'à amorcer une nouvelle base, une seule \
-             fois, pour ne jamais en écraser une existante.",
+             fois, pour ne jamais en écraser une existante. Pour refaire un import à cet \
+             emplacement : quittez BookNojo, renommez ou déplacez ce dossier, puis relancez \
+             File > Import Collection… (ou, pour une collection distincte en plus de celle-ci, \
+             choisissez un fichier source .bkcp portant un autre nom).",
             dest.display()
         );
     }
