@@ -5,6 +5,20 @@
 History of **versions published on GitHub** (`sergiodadi/BookNojo`),
 one entry per tag/release.
 
+## [v1.0.0] - 2026-11-26
+
+**First stable release** — BookNojo exits beta (previous releases were
+v1.0.0b1 through v1.0.0b10).
+
+- **Online search**: prefill a new book's fields and cover from
+  OpenLibrary, Google Books or the BnF, by title/author/ISBN.
+- **Import Collection** (File menu) now bootstraps an independent
+  `.bnj` database from a Book Collector `.bkcp`, kept separate from
+  the everyday **Open Collection…** button — the original `.bkcp` is
+  never modified, and an existing `.bnj` is never overwritten.
+- The "destination already exists" message now explains what to do
+  next.
+
 ## [v1.0.0b10] - 2026-11-23
 
 - The native **File** menu item was renamed from "Import a collection…"

@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "BookNojo",
-  "version": "1.0.0-b10",
+  "version": "1.0.0",
   "identifier": "com.booknojo.desktop",
   "build": {
     "frontendDist": "../src"

@@ -21,6 +21,11 @@ keeps working the day Book Collector no longer can.
 - **macOS application** (icon, window, native menus) to view, add, edit
   and delete books in a collection — with confirmation before any write
   and automatic backups.
+- Import once from Book Collector (File > Import Collection…) into
+  BookNojo's own independent database, then reopen it anytime (Open
+  Collection…) — the original file is never modified.
+- Online search (OpenLibrary, Google Books, BnF) to prefill a new
+  book's fields and cover.
 - Grouping by author/genre/publisher/format/language/country, search,
   full detail card (credits, characters, contents, links...).
 - Bilingual French/English interface.
@@ -61,6 +66,11 @@ To compile from source instead of using the `.dmg`, see
 
 See [`CHANGELOG.md`](CHANGELOG.md) — one entry per version published on
 GitHub.
+
+## To-do
+
+- Display native alert messages in the right language (currently
+  always French, regardless of the interface language toggle).
 
 ## License
 

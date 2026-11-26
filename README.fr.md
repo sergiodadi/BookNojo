@@ -23,6 +23,11 @@ fonctionner le jour où Book Collector ne le pourra plus.
 - **Application macOS** (icône, fenêtre, menus natifs) pour consulter,
   ajouter, modifier et supprimer des livres dans une collection — avec
   confirmation avant toute écriture et sauvegarde automatique.
+- Importer une fois depuis Book Collector (File > Import Collection…)
+  dans la propre base indépendante de BookNojo, puis la rouvrir à tout
+  moment (Open Collection…) — le fichier d'origine n'est jamais modifié.
+- Recherche en ligne (OpenLibrary, Google Books, BnF) pour pré-remplir
+  les champs et la couverture d'un nouveau livre.
 - Regroupement par auteur/genre/éditeur/format/langue/pays, recherche,
   statistiques, fiche détail complète (crédits, personnages, contenus,
   liens...).
@@ -66,6 +71,12 @@ Pour compiler depuis les sources plutôt que d'utiliser le `.dmg`, voir
 
 Voir [`CHANGELOG.fr.md`](CHANGELOG.fr.md) — une entrée par version publiée sur
 GitHub.
+
+## À faire
+
+- Afficher les messages des alertes natives dans la bonne langue
+  (actuellement toujours en français, quelle que soit la langue
+  choisie dans l'interface).
 
 ## Licence
 

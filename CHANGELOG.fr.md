@@ -5,6 +5,21 @@
 Historique des **versions publiées sur GitHub** (`sergiodadi/BookNojo`),
 une entrée par tag/release.
 
+## [v1.0.0] - 2026-11-26
+
+**Première version stable** — BookNojo sort de la bêta (les versions
+précédentes allaient de v1.0.0b1 à v1.0.0b10).
+
+- **Recherche en ligne** : pré-remplir les champs et la couverture d'un
+  nouveau livre à partir d'OpenLibrary, Google Books ou la BnF, par
+  titre/auteur/ISBN.
+- **Import Collection** (menu Fichier) amorce désormais une base
+  `.bnj` indépendante à partir d'un `.bkcp` Book Collector, séparée du
+  bouton **Open Collection…** du quotidien — le `.bkcp` d'origine n'est
+  jamais modifié, et un `.bnj` déjà existant n'est jamais écrasé.
+- Le message « la destination existe déjà » explique maintenant la
+  marche à suivre.
+
 ## [v1.0.0b10] - 2026-11-23
 
 - Le menu natif **Fichier** a été renommé de « Import a collection… » à
